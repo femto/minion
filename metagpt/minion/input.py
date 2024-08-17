@@ -44,6 +44,8 @@ class Input(BaseModel):
     question_type: str = ""  # a query sub type that determines the answer protocol
     answer_protocol: str = ""
 
+    ensemble_logic: dict = {}
+
     # metadata
     query_time: Any = None
     processed_minions: int = 0  # how many minions processed this

@@ -9,6 +9,7 @@ import json
 import os
 import re
 import uuid
+from collections import Counter
 from typing import List
 
 import networkx as nx
@@ -20,7 +21,6 @@ from metagpt.actions.action_node import ActionNode
 from metagpt.const import METAGPT_ROOT
 from metagpt.llm import LLM
 from metagpt.logs import logger
-from metagpt.minion.python_env import PythonEnv
 from metagpt.minion.save_plan import save_json_to_file
 from metagpt.minion.task_graph import convert_tasks_to_graph
 
@@ -44,10 +44,39 @@ def extract_json_from_string(text):
 
 
 def extract_final_answer(text):
-    match = re.search(r"<final_answer>\s*(.*?)\s*</final_answer>", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
+    # Match for <final_answer> tag
+    match_tag = re.search(r"<final_answer>\s*(.*?)\s*</final_answer>", text, re.DOTALL)
+    if match_tag:
+        return match_tag.group(1).strip()
+
     return None
+
+
+def extract_number_from_string(price_str):
+    if isinstance(price_str, int) or isinstance(price_str, float):
+        return price_str
+
+    price_str = price_str or ""
+    # Remove commas from the string
+    price_str = price_str.replace(",", "")
+
+    try:
+        # Regular expression to match all numeric values
+        matches = re.findall(r"\d+(?:\.\d+)?", price_str)
+
+        if len(matches) == 1:
+            # Only one number found, return it as int or float
+            number_str = matches[0]
+            return float(number_str) if "." in number_str else int(number_str)
+        elif len(matches) > 1:
+            # More than one number found, handle accordingly
+            logger.warning(f"Multiple numbers found in string: {matches}, str: {price_str}")
+            return None
+        else:
+            return None  # Return None if no number is found
+    except Exception as e:
+        logger.error("extract_number_from_string failed: " + str(e) + f", str: {price_str}")
+        return None  # Return None if there is an error
 
 
 class MetaPlan(BaseModel):
@@ -81,6 +110,15 @@ class MetaPlan(BaseModel):
     )
 
 
+class EnsembleLogic(BaseModel):
+    name: str = Field(default="sc", description="the name of the ensemble logic")
+
+    description: str = Field(
+        default="",
+        description="describe how to carry out the ensemble to make sure the answer is correct",
+    )
+
+
 class Plan(BaseModel):
     task_id: str = Field(
         default="some id",
@@ -105,7 +143,7 @@ class Plan(BaseModel):
 
 
 COT_PROBLEM_INSTRUCTION = """
-Let's approach this problem by breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it. Consider any underlying assumptions, explore potential alternative approaches, and evaluate the consequences of each decision. Once you have thoroughly analyzed all aspects, synthesize the findings to reach a well-supported conclusion. Finally, present your answer clearly within the tags <final_answer></final_answer>.
+Let's approach this problem by breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it. Consider any underlying assumptions, explore potential alternative approaches, and evaluate the consequences of each decision. Once you have thoroughly analyzed all aspects, synthesize the findings to reach a well-supported conclusion. Finally, ensure that your answer is directly accessible and requires no further interpretation by presenting it clearly and explicitly within the tags <final_answer></final_answer>.
 """
 ASK_PROMPT = """context:
 {input.short_context}
@@ -125,6 +163,34 @@ query_type:
 {{input.query_type}}
 query:
 {{input.query}}
+"""
+
+MERGE_PROMPT = (
+    """
+Task: Given the following question:
+"""
+    + ASK_PROMPT_JINJA
+    + """
+Problem Statement:
+The current answers are spread,. However, a single, coherent answer is required.
+Current Answer:
+{{answer}}
+
+Objective:
+
+Critically evaluate the information from all provided sources.
+Identify key elements that directly address the query.
+Synthesize these elements into a single, well-structured response.
+Ensure the response is comprehensive, accurately reflecting the nuances of the context.
+Final Answer:
+Produce the final result in <final_answer></final_answer>, ensuring it represents a unified and logically consistent answer to the question.
+"""
+)
+
+ASK_PROMPT_TASK_COMPLEXITY = """complexity:
+{{input.complexity}}
+query range:
+{{input.query_range}}
 """
 
 CHOOSE_WORKER_MINION_TEMPLATE = (
@@ -147,7 +213,66 @@ SMART_PROMPT_TEMPLATE = (
     """You are an advanced language model proficient in answering questions requiring world knowledge but facing challenges with math problems. When you encounter a math problem, you should employ a math strategy or python strategy to ensure a comprehensive and accurate solution.
 
 """
-    + CHOOSE_WORKER_MINION_TEMPLATE
+    + ASK_PROMPT_JINJA
+)
+ENSEMBLE_DESIGN_LOGIC_TEMPLATE = (
+    """You are tasked with designing a robust ensemble logic to dynamically select and combine multiple strategies for solving complex problems. The goal is to create an adaptive system that maximizes the likelihood of success across a variety of scenarios.
+
+Key Considerations:
+Strategy Selection:
+
+Complexity: Assess the problem's complexity (low, medium, high) and choose strategies accordingly. For high complexity and long query ranges, prioritize strategies that are designed to handle such challenges.
+Query Range: Determine whether the problem requires short-term or long-term focus, and select strategies that align with these needs.
+Score: Evaluate each strategy's effectiveness, prioritizing those with higher scores for immediate selection.
+Adaptive Trials:
+
+Optimization: Calculate the number of trials needed for each strategy. If a strategy shows potential but has a moderate success rate, increase the number of trials to improve the chances of success.
+Trial Adjustment: As the ensemble logic progresses, adjust the number of trials based on real-time performance data.
+Ensemble Logic:
+
+Combination of Strategies: Develop an algorithm that effectively combines strategies to balance strengths and weaknesses. For instance, pair a high-score, low-complexity strategy with a strategy designed for high-complexity, long-range tasks to ensure coverage across all aspects of the problem.
+Complementary Pairing: Consider how different strategies might complement each other, ensuring that the ensemble covers all possible scenarios.
+Iteration and Feedback:
+
+Monitoring Progress: Integrate a feedback loop that continuously monitors whether the problem has been solved (is_finished). If the problem remains unsolved, re-evaluate the current ensemble, adjust the combination of strategies, and optimize the number of trials.
+Adaptive Response: Use feedback to dynamically refine the ensemble, making it more efficient and effective over time.
+
+"""
+    + ASK_PROMPT_JINJA
+    + ASK_PROMPT_TASK_COMPLEXITY
+    + """
+JSON Output Specifications:
+Once you have developed the ensemble logic, provide the final output as a JSON object with the following structure:
+
+```json
+{
+    "name": "Ensemble Strategy Name",
+    "description": "Detailed explanation of how the ensemble logic ensures the correct solution.",
+    "params": {
+        "selected_strategies": [
+            {
+                "name": "Strategy 1 Name",
+                "score": "Strategy 1 Score",
+                "complexity": "low/medium/high",
+                "query_range": "short/long",
+                "num_trials": "Number of trials for Strategy 1"
+            },
+            {
+                "name": "Strategy 2 Name",
+                "score": "Strategy 2 Score",
+                "complexity": "low/medium/high",
+                "query_range": "short/long",
+                "num_trials": "Number of trials for Strategy 2"
+            }
+        ],
+        "combination_logic": "Explanation of how the strategies are combined.",
+        "adaptive_trials": "Method used to adjust the number of trials based on strategy performance.",
+        "feedback_loop": "Mechanism for monitoring the success of the ensemble and making adjustments."
+    }
+}
+```
+This output structure will ensure that the ensemble logic is clearly defined, with each component detailed for clarity and effectiveness. By following this approach, you will create a system capable of tackling a wide range of problems, from simple to highly complex, ensuring the final solution is both robust and accurate.
+"""
 )
 TASK_INPUT = """
 Current Task Input:
@@ -373,6 +498,17 @@ class CotMinion(Minion):
         )
         self.answer_node = node
         self.answer = self.input.answer = extract_final_answer(node.content)
+
+        for _ in range(3):  # try using llm 3 times to extract answer
+            if not self.answer:
+                # try using llm to extract answer
+                node = ActionNode(
+                    key="answer", expected_type=str, instruction="extract final answer from result", example=""
+                )
+                node = await node.fill(context=node.content, llm=self.brain.llm, schema="json")
+                self.answer = self.input.answer = node.instruct_content.answer
+            else:
+                break
         self.answer_raw = self.input.answer_raw = node.content
         return self.answer  # maybe also adds score?
 
@@ -519,10 +655,7 @@ Previous error:
             self.answer_code = code
             print(self.answer_code)
 
-            image_name = "intercode-python"
-            env = PythonEnv(image_name, verbose=False, is_agent=True)
-            # env = PythonEnv("metagpt/metagpt:latest", verbose=True)
-            result = env.step(code)
+            result = self.brain.python_env.step(code)
             obs = result[0]  # obs
 
             if obs["error"]:
@@ -531,6 +664,8 @@ Previous error:
             output, error = obs["output"], obs["error"]
             self.answer = self.input.answer = output
             return self.answer  # obs
+        self.answer = self.input.answer = ""
+        return self.answer
 
 
 # class WebMinion(PythonMinion):
@@ -581,7 +716,25 @@ class ScoreMinion(Minion):
 
 
 class RouteMinion(Minion):
-    async def choose_minion(self):
+    async def invoke_minion(self, klass):
+        if isinstance(klass, str):
+            klass = MINION_REGISTRY.get(klass, CotMinion)
+        minion = klass(input=self.input, brain=self.brain)
+        self.add_followers(minion)
+        await minion.execute()
+        self.answer = self.input.answer = minion.answer
+        return minion.answer
+
+    def majority_voting(self, results):
+        # Perform majority voting on the results
+        counter = Counter(results)
+        try:
+            most_common_result, _ = counter.most_common(1)[0]
+            return most_common_result
+        except:
+            return None
+
+    async def choose_minion_and_run(self):
         choose_template = Template(SMART_PROMPT_TEMPLATE)
 
         # filter out smart, since we don't want choose smart following smart again
@@ -589,41 +742,56 @@ class RouteMinion(Minion):
         filtered_registry = {key: value for key, value in MINION_REGISTRY.items() if key != "smart" and key != "score"}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
-        if self.input.route:
-            return filtered_registry[self.input.route]
-
         meta_plan = await ActionNode.from_pydantic(MetaPlan).fill(context=filled_template, llm=self.brain.llm)
-        self.num_trials = meta_plan.instruct_content.num_trials
-        if self.num_trials < 1 or not isinstance(self.num_trials, int):
-            self.num_trials = 1
 
-        name = meta_plan.instruct_content.name
-        if name in filtered_registry:
-            klass = filtered_registry[name]  # get the Minion
+        design_ensemble = Template(ENSEMBLE_DESIGN_LOGIC_TEMPLATE)
+        design_ensemble.render(input=self.input)
+        # ensemble = await ActionNode.from_pydantic(EnsembleLogic).fill(context=filled_design_ensemble, llm=self.brain.llm, schema="raw")
+        if self.input.ensemble_logic:
+            ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
+            ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
+
+            if ensemble_logic == "majority_voting":
+                results = []
+                for minion in ensemble_minions:
+                    minion_name = minion["name"]
+                    count = minion["count"]
+                    for _ in range(count):
+                        result = await self.invoke_minion(minion_name)
+                        if minion.get("post_processing", None) == "extract_number_from_string":
+                            result = extract_number_from_string(result)
+                        if result:
+                            results.append(result)
+
+                # Perform majority voting on the collected results
+                final_result = self.majority_voting(results)
+                return final_result
         else:
-            # print(f"Class {class_name} not found.")
-            klass = filtered_registry["cot"]  # default we use CoTMinion
-        return klass
+            if self.input.route:
+                return filtered_registry[self.input.route]
+
+            name = meta_plan.instruct_content.name
+            if name in filtered_registry:
+                klass = filtered_registry[name]  # get the Minion
+            else:
+                # print(f"Class {class_name} not found.")
+                klass = filtered_registry["cot"]  # default we use CoTMinion
+            return klass
+
+    async def merge_result(self, answer):
+        merge_prompt = Template(MERGE_PROMPT)
+        filled_merge_prompt = merge_prompt.render(input=self.input, answer=answer)
+
+        node = ActionNode(
+            key="answer",
+            expected_type=float,
+            instruction="merge the result according to question",
+            example="",
+            schema="raw",
+        )
+        node = await node.fill(context=filled_merge_prompt, llm=self.brain.llm)
+        return extract_final_answer(node.content)
 
     async def execute(self):
-        klass = await self.choose_minion()
-
-        scores = {}
-        for i in range(self.input.num_trials):  # generate a list of children
-            minion = klass(input=self.input, brain=self.brain)
-            self.add_followers(minion)
-            self.answer = self.input.answer = await minion.execute()
-            score = await minion.score()
-            scores[minion] = score
-
-        # if the score is too low, then maybe we add some more iterations?
-        sorted_items = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-
-        # Extract keys and values
-        sorted_keys = [item[0] for item in sorted_items]
-        sorted_values = [item[1] for item in sorted_items]
-        for i, minion in enumerate(sorted_keys):
-            # if await minion.is_finished():
-            self.answer = self.input.answer = minion.answer
-            self._score = sorted_values[i]
-            return minion.answer, self._score
+        await self.choose_minion_and_run()
+        return self.answer

@@ -17,6 +17,7 @@ from metagpt.actions.action_node import ActionNode
 from metagpt.llm import LLM
 from metagpt.minion.input import Input
 from metagpt.minion.minion import RouteMinion
+from metagpt.minion.python_env import PythonEnv
 
 
 class Mind(BaseModel):
@@ -29,8 +30,8 @@ class Mind(BaseModel):
         input.short_context = input.context  # first set digested context same as context
 
         smart = RouteMinion(input, brain=self.brain)
-        answer, score = await smart.execute()
-        return answer, score, False, False, {}  # terminated: false, truncated:false, info:{}
+        answer = await smart.execute()
+        return answer, 0.0, False, False, {}  # terminated: false, truncated:false, info:{}
 
 
 class Brain:
@@ -85,6 +86,10 @@ Supporting navigation and spatial memory""",
         memory = None
         self.mem = memory
         self.llm = llm
+
+        image_name = "intercode-python"
+        self.python_env = PythonEnv(image_name, verbose=False, is_agent=True)
+        # env = PythonEnv("metagpt/metagpt:latest", verbose=True)
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind
