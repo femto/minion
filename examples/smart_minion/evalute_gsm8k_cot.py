@@ -29,7 +29,7 @@ def extract_answer(answer_str):
 
 
 # Evaluate GSM8K task
-async def evaluate_gsm8k(data):
+async def evaluate_gsm8k(data, last_processed_id=0):
     correct = 0
     count = 0
     total_count = len(data)
@@ -37,7 +37,6 @@ async def evaluate_gsm8k(data):
     mismatch = []
     tasks = []
 
-    last_processed_id = 394
     skip = True if last_processed_id else False
 
     async def process_batch(tasks, correct):
@@ -140,10 +139,10 @@ async def solve_question(question, route=None):
 
 
 async def main():
-    # file_name = "gsm8k_train.json"
-    file_name = "gsm8k_test.json"
+    file_name = "gsm8k_train.json"
+    # file_name = "gsm8k_test.json"
     data = load_jsonl(file_name)
-    accuracy, matched_ids, mismatched_ids = await evaluate_gsm8k(data)
+    accuracy, matched_ids, mismatched_ids = await evaluate_gsm8k(data, last_processed_id=564)
 
     print(f"Accuracy: {accuracy:.2%}")
     print(f"Mismatched IDs: {mismatched_ids}")

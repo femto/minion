@@ -16,18 +16,50 @@ async def smart_brain():
     # obs, score, *_ = await brain.step(query="create a 2048 game")
     # print(obs)
 
+    # obs, score, *_ = await brain.step(
+    #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
+    #     query_type="code_problem",
+    # )
+    # print(obs)
+    #
+    # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 4 3 9 8")
+    # print(obs)
+    #
+    # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 5 11 8")
+    # print(obs)
+    # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
+    # print(obs)
+
+    # obs, score, *_ = await brain.step(
+    #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?"
+    #     , route="cot",cache_plan="plan_gpt4o"
+    # )
+    # print(obs)
+
     obs, score, *_ = await brain.step(
         query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
-        query_type="code_problem",
+        route="python",
+        cache_plan="plan_gpt4o",
     )
     print(obs)
 
-    obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 4 3 9 8")
+    obs, score, *_ = await brain.step(
+        query="""33 op 6 = 60
+        48 op 96 = 144
+        1234 op 234 = ?""",
+        route="python",
+    )
     print(obs)
 
-    obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 5 11 8")
-    print(obs)
-    obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
+    obs, score, *_ = await brain.step(
+        query="""I have 6 eggs
+
+I broke 2. I fried 2.
+
+I ate 2.
+
+How many are left?"""
+    )
     print(obs)
 
     obs, score, *_ = await brain.step(

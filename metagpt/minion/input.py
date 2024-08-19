@@ -46,6 +46,9 @@ class Input(BaseModel):
 
     ensemble_logic: dict = {}
 
+    # plan cache
+    cache_plan: str = ""
+
     # metadata
     query_time: Any = None
     processed_minions: int = 0  # how many minions processed this
