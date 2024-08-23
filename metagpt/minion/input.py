@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from metagpt.minion.symbol_table import SymbolTable
+
 
 class EnsembleStrategyType(Enum):
     EARLY_STOP = "early_stop"
@@ -23,6 +25,15 @@ class QuestionType(Enum):
     BLANK_FILLING_QUESTION = "blank filling question"
     TRUE_FALSE_QUESTION = "true-false question"
     MULTIPLE_CHOICE_QUESTION = "multiple-choice question"
+
+
+class Task(BaseModel):
+    route: Optional[str] = ""  # a tempory solution for routing
+    num_trials: int = 1  # how much times downstream node runs
+    ensemble_strategy: str = EnsembleStrategyType.EARLY_STOP
+    output: Any = None
+    parent: Any = None
+    # input : 'Input' = None
 
 
 class Input(BaseModel):
@@ -48,6 +59,8 @@ class Input(BaseModel):
 
     # plan cache
     cache_plan: str = ""
+    task: Task = None  # current task being executed
+    symbols: SymbolTable = Field(default_factory=SymbolTable)
 
     # metadata
     query_time: Any = None
@@ -67,3 +80,6 @@ class Input(BaseModel):
     @context.setter
     def context(self, context):
         self.long_context = context
+
+
+Task.update_forward_refs()

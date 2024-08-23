@@ -6,6 +6,7 @@
 @File    : brain.py
 """
 import asyncio
+import os
 
 from metagpt.minion.brain import Brain
 
@@ -36,20 +37,71 @@ async def smart_brain():
     # )
     # print(obs)
 
+    # Get the directory of the current file
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Construct the path relative to the current file's directory
+    cache_plan = os.path.join(current_file_dir, "dir", "aime", "plan_gpt4o.7.json")
+    # cache_plan = os.path.join(current_file_dir, 'dir', 'aime', 'plan_deepseek.json')
+
+    # obs, score, *_ = await brain.step(
+    #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
+    #     route="cot",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # obs, score, *_ = await brain.step(
+    #     query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",
+    #     route="cot",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # obs, score, *_ = await brain.step(
+    #     query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
+    #     route="python",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # obs, score, *_ = await brain.step(
+    #     query="Jen enters a lottery by picking $4$ distinct numbers from $S=\{1,2,3,\cdots,9,10\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+    #     route="cot",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # geometry, need vision
+    # obs, score, *_ = await brain.step(
+    #     query="Rectangles $ABCD$ and $EFGH$ are drawn such that $D,E,C,F$ are collinear. Also, $A,D,H,G$ all lie on a circle. If $BC=16,$ $AB=107,$ $FG=17,$ and $EF=184,$ what is the length of $CE$?",
+    #     route="cot",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # obs, score, *_ = await brain.step(
+    #     query="Consider the paths of length $16$ that follow the lines from the lower left corner to the upper right corner on an $8\times 8$ grid. Find the number of such paths that change direction exactly four times, like in the examples shown below.",
+    #     route="cot",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
     obs, score, *_ = await brain.step(
-        query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
-        route="python",
-        cache_plan="plan_gpt4o",
+        query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+        route="plan",
+        cache_plan=cache_plan,
     )
     print(obs)
 
-    obs, score, *_ = await brain.step(
-        query="""33 op 6 = 60
-        48 op 96 = 144
-        1234 op 234 = ?""",
-        route="python",
-    )
-    print(obs)
+    # obs, score, *_ = await brain.step(
+    #     query="""33 op 6 = 60
+    #     48 op 96 = 144
+    #     1234 op 234 = ?""",
+    #     route="cot",
+    # )
+    # print(obs)
 
     obs, score, *_ = await brain.step(
         query="""I have 6 eggs

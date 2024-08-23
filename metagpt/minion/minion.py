@@ -10,6 +10,7 @@ import os
 import re
 import uuid
 from collections import Counter
+from difflib import SequenceMatcher
 from typing import List
 
 import networkx as nx
@@ -18,10 +19,8 @@ from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_none
 
 from metagpt.actions.action_node import ActionNode
-from metagpt.const import METAGPT_ROOT
-from metagpt.llm import LLM
 from metagpt.logs import logger
-from metagpt.minion.save_plan import save_json_to_file
+from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
 
 
@@ -77,6 +76,20 @@ def extract_number_from_string(price_str):
     except Exception as e:
         logger.error("extract_number_from_string failed: " + str(e) + f", str: {price_str}")
         return None  # Return None if there is an error
+
+
+# Function to find the most similar minion
+def most_similar_minion(input_name, minions):
+    max_similarity = 0
+    best_match = None
+
+    for minion in minions:
+        similarity = SequenceMatcher(None, input_name, minion).ratio()
+        if similarity > max_similarity:
+            max_similarity = similarity
+            best_match = minion
+
+    return best_match
 
 
 class MetaPlan(BaseModel):
@@ -288,8 +301,19 @@ task parameters:
 {% endfor %}
 hint:
 {{task.hint}}
+dependent key output:
+{% for dependent in task.dependent %}
+1. key: {{ dependent['dependent_key'] }}  
+   key_type : {{dependent['dependent_type']}}
+   output value: {{ input.symbols[dependent['dependent_key']].output }}
+   output_type: {{ input.symbols[dependent['dependent_key']].output_type }}
+   output_description: {{ input.symbols[dependent['dependent_key']].output_description }}
+{% endfor %}
+**PLEASE USE** dependent key output in your code to reuse result from previous tasks to solve current task at hand**
 """
-TASK_PROMPT = (
+# TASK_PROMPT = """
+# """
+TASK_ROUTE_PROMPT = (
     """Given the task's context, instructions, parameters, and provided hints, analyze the situation and evaluate multiple worker strategies. Identify potential outcomes for each strategy and select the most effective approach. Justify your choice by considering both immediate and long-term implications, as well as any trade-offs or risks associated with your decision. Additionally, explore how alternative strategies might alter the task's outcome and what contingencies could be prepared to address unforeseen challenges.
 """
     + CHOOSE_WORKER_MINION_TEMPLATE
@@ -319,6 +343,13 @@ Given the context, create a detailed plan or refine an existing plan to achieve 
         instruction: A concise but clear description of the action required for this task.
         task_type: The type or category of the task.
         task_params: A JSON dictionary specifying the task's parameters and their corresponding values.
+        output_key: A unique identifier for storing the output of the task, which can be referenced by subsequent tasks.
+        output_type:  The type of the output, describe how subsequent task can use this output_key, can be str, number(int or float, fractions(if you require precision)), dict, file, url etc
+        output_description:  Description of the output, describe what it is, how it's relevant to whole task, how subsequent task can use it.
+        dependent: a list of dependent key produced by previous tasks and required by this task, containing a list of following subkeys:
+            dependent_key: A unique identifier of dependent key of the task, produced by previous tasks.
+            dependent_type: The type of dependent key, produced by previous tasks and required by this task, specify how this task can use this dependent_key, 
+              like str, number(int or float or fractions(if you require precision)) then you can direct use, if file or url then you need to read from the file or url.
         Hint: (Optional) Provide a hint or brief guidance for carrying out the task effectively, particularly if the task involves complexity or potential challenges. This could include tips, best practices, or a brief outline of steps to ensure successful completion.
 
     Contextual Precision: Return a plan that is as specific and precise as possible. Avoid vague or ambiguous instructions. Ensure that task descriptions and parameters are well-defined to facilitate smooth execution and alignment with the overall goal.
@@ -373,6 +404,61 @@ FINISH_PROMPT = (
 """
     + ASK_PROMPT
 )
+COMMON_ERROR = """
+please remember I may have not some package installed, like sympy or numpy, so please add in the code like
+```python
+import os
+os.system('python -m pip install sympy')
+os.system('python -m pip install numpy')
+```
+"""
+COMMON_SYMPY_ERROR = """
+When using SymPy's solve function to address systems of equations, the default behavior is to return a list of solutions, typically as a list of expressions. However, when the goal is to represent each solution as a mapping of variables to their corresponding values, the dict=True parameter should be included. This alters the output to a list of dictionaries, where each dictionary contains key-value pairs corresponding to the variables and their respective solutions.
+
+Consider a scenario where you are solving a system of equations, such as (equation1,equation2)(equation1,equation2), with respect to variables xx and yy. By using solve(equation1, equation2), (x, y), dict=True), the function will return a list of dictionaries, each representing a unique solution.
+
+Now, critically analyze the implications of using the dict=True parameter when dealing with complex systems of equations that involve multiple variables. Consider the following aspects:
+
+    Clarity in Solution Interpretation: How does the use of dictionaries enhance or hinder the understanding of the solution set, especially when dealing with a large number of variables? Discuss the advantages and potential drawbacks of this approach in interpreting the solutions.
+
+    Impact on Systems with Multiple or No Solutions: Evaluate how the output format changes when the system has an infinite number of solutions or no solutions at all. What specific patterns or anomalies might you observe in the list of dictionaries in these cases? How does this format help in identifying whether the system is underdetermined (infinite solutions) or inconsistent (no solutions)?
+
+    Strategies for Solution Validation: When the system yields multiple solutions, what strategies can be employed to effectively validate and interpret these solutions? Consider the role of additional constraints, such as requiring variables to be real, positive, integer, or natural numbers (using real=True, positive=True, etc., in the symbol declarations,
+    like ```x, y = symbols('x y', real=True, positive=True)```). How do these constraints refine the solution set, and what should be your approach when multiple valid solutions exist?
+
+    make sure symbols() constructor really contains real variables(symbols), DON'T put non-symbol like 'cos(theta)', 'sin(theta)' etc in symbols().
+    
+    some functions you may find useful:
+    
+    from sympy import S
+    
+    sympy.calculus.util.maximum(f, symbol, domain=S.Reals)
+    Returns the maximum value of a function in the given domain of Reals.
+    
+    sympy.calculus.util.minimum(f, symbol, domain=S.Reals)
+    Returns the minimum value of a function in the given domain of Reals.
+    
+    sympy.calculus.util.maximum(f, symbol, domain=S.Complexes)
+    Returns the maximum value of a function in the given domain of Complexes.
+    
+    sympy.calculus.util.minimum(f, symbol, domain=S.Complexes)
+    Returns the minimum value of a function in the given domain of Complexes.
+
+    Please remember to add result = sympy.simplify(result) to simplify the expression before return
+    
+    Handling Complex Systems: Reflect on the practical application of these strategies in solving real-world problems. How can the dict=True approach assist in managing and interpreting the solutions to more intricate systems, especially when some solutions might not be immediately obvious or when certain solutions need to be excluded based on problem-specific criteria?
+
+Finally, after solving the equations, ensure that any additional constraints or context-specific conditions are thoroughly considered. Discuss how examining each solution against these constraints can help in determining the most appropriate solution(s) for the given problem.
+"""
+PYTHON_PROMPT = (
+    """
+Write python code to solve the problem, also noted the python program must return a string print out answer and only answer,"""
+    + COMMON_ERROR
+    + COMMON_SYMPY_ERROR
+    + """Please ensure all the variables are defined, don't use variables before defining them
+                please ensure you correctly indent the code, and don't use // as comment
+                """
+)
 
 
 def extract_content(text):
@@ -416,10 +502,17 @@ class SubclassHookMeta(type):
 
 
 MINION_REGISTRY = {}
+MINION_ROUTE_DOWNSTREAM = {}
+
+
+def register_route_downstream(cls):
+    # Register the class in the dictionary with its name as the key
+    MINION_ROUTE_DOWNSTREAM[camel_case_to_snake_case(cls.__name__)] = cls
+    return cls
 
 
 class Minion(metaclass=SubclassHookMeta):
-    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None):
+    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None, task_execution=False):
         if brain is None:
             raise ValueError("The 'brain' parameter cannot be None.")
 
@@ -430,6 +523,7 @@ class Minion(metaclass=SubclassHookMeta):
         self.followers = []
         self.score_func = score_func
         self.task = task
+        self.task_execution = task_execution
 
     def propagate_information(self, other):
         other.input = self.input
@@ -484,6 +578,7 @@ class Minion(metaclass=SubclassHookMeta):
         return self.answer  # maybe also adds score?
 
 
+@register_route_downstream
 class CotMinion(Minion):
     """Chain of Thought (CoT) Strategy, Ask the LLM to think step-by-step, explaining each part of the problem to enhance the accuracy of the answer. Please noted you can't access web or user's local computer, so if you need information from the web or from user's local computer, DON'T USE THIS STRATEGY."""
 
@@ -513,21 +608,28 @@ class CotMinion(Minion):
         return self.answer  # maybe also adds score?
 
 
+@register_route_downstream
 class MultiPlanMinion(Minion):
     "This Strategy will first generate multiple plan, and then compare each plan, see which one is more promising to produce good result, first try most promising plan, then to less promising plan."
     pass
 
 
+@register_route_downstream
 class PlanMinion(Minion):
     "Divide and Conquer Strategy, Divide the problem into smaller subproblems, solve each subproblem independently, and then merge the results for the final solution."
 
+    def write_json_to_cache(self, file, data):
+        # Ensure that the data is serializable to JSON
+        try:
+            with open(file, "w") as file:
+                json.dump(data, file, indent=4)  # Write the JSON data to the file with indentation for readability
+            print(f"Data successfully written to {self.input.cache_plan}")
+        except (TypeError, IOError) as e:
+            print(f"An error occurred: {e}")
+
     @retry(stop=stop_after_attempt(3), wait=wait_none())  # Retries up to 3 times with a 2-second wait between attempts
     async def get_plan_with_retry(self, cache_filename=None):
-        if cache_filename:
-            cache_filename = (
-                "/Users/femtozheng/python-project/MetaGPT/logs/plan/json_plan_f2a8a06b-dffa-44bd-a0e8-3005e4e37c57.json"
-            )
-
+        if self.input.cache_plan:
             # Attempt to load the plan from the cache
             import json
 
@@ -535,12 +637,13 @@ class PlanMinion(Minion):
                 if os.path.exists(cache_filename):
                     with open(cache_filename, "r") as file:
                         plan = json.load(file)
-                        logger.info("Plan loaded from cache.")
+                        logger.info(f"loading cache plan from {cache_filename}")
                         return plan
                 else:
                     logger.info("Cache file not found. Fetching plan with retry.")
             except (IOError, json.JSONDecodeError) as e:
                 logger.info(f"Error loading plan from cache: {e}. Fetching plan with retry.")
+
         choose_template = Template(PLAN_PROMPT)
 
         # filter out smart, since we don't want to choose smart following smart again
@@ -555,17 +658,20 @@ class PlanMinion(Minion):
         plan = await ActionNode.from_pydantic(Plan).fill(context=filled_template, llm=self.brain.llm, schema="raw")
 
         json = extract_json_from_string(plan.content)
+        self.write_json_to_cache(self.input.cache_plan, json)
+
         return json
 
     async def execute(self):
-        log_dir = METAGPT_ROOT / "logs" / "plan"
+        # log_dir = METAGPT_ROOT / "logs" / "plan"
+        #
+        # # Create the directory, including any necessary parent directories
+        # log_dir.mkdir(parents=True, exist_ok=True)
+        # filename = log_dir / f"json_plan_{self.id}.json"
 
-        # Create the directory, including any necessary parent directories
-        log_dir.mkdir(parents=True, exist_ok=True)
-        filename = log_dir / f"json_plan_{self.id}.json"
-        self.plan = await self.get_plan_with_retry(cache_filename=filename)
+        self.plan = await self.get_plan_with_retry(cache_filename=self.input.cache_plan)
 
-        save_json_to_file(self.plan, filename)
+        # save_json_to_file(self.plan, filename)
 
         self.task_graph = convert_tasks_to_graph(self.plan)
         # plot_graph(self.task_graph)
@@ -581,18 +687,25 @@ class PlanMinion(Minion):
             for task in self.plan:
                 if task["task_id"] == task_id:
                     task_minion = TaskMinion(brain=self.brain, input=self.input, task=task)
-                    await task_minion.execute()
-
-            print(f"Executing task {task_id}: {task['label']}")
+                    result = await task_minion.execute()
+                    self.input.symbols[task["output_key"]] = Symbol(
+                        result, task["output_type"], task["output_description"]
+                    )
 
 
 class TaskMinion(Minion):
-    async def choose_minion(self):
-        choose_template = Template(TASK_PROMPT)
+    def __init__(self, task=None, **kwargs):
+        super().__init__(**kwargs)
+        self.input.task = task
+        self.task = task
+
+    async def choose_minion_and_run(self):
+        choose_template = Template(TASK_ROUTE_PROMPT)
 
         # filter out smart, since we don't want choose smart following smart again
         # also filter out ScoreMinion
-        filtered_registry = {key: value for key, value in MINION_REGISTRY.items() if key != "smart" and key != "score"}
+
+        filtered_registry = {key: value for key, value in MINION_ROUTE_DOWNSTREAM.items()}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input, task=self.task)
 
         # if self.input.route:
@@ -604,18 +717,29 @@ class TaskMinion(Minion):
             self.num_trials = 1
 
         name = meta_plan.instruct_content.name
-        if name in filtered_registry:
-            klass = filtered_registry[name]  # get the Minion
-        else:
-            # print(f"Class {class_name} not found.")
-            klass = filtered_registry["cot"]  # default we use CoTMinion
-        return klass
+
+        # do we need task route?
+        # if self.input.route:
+        #    klass = filtered_registry[self.input.route]
+        # else:
+        name = meta_plan.instruct_content.name
+
+        name = most_similar_minion(name, filtered_registry.keys())
+        klass = filtered_registry[name]
+        minion = klass(input=self.input, brain=self.brain, task=self.task, task_execution=True)
+        result = await minion.execute()
+        self.answer = self.task["answer"] = result
+        self.input.symbols[self.task["output_key"]] = result
+        print("#####OUTPUT#####")
+        print(f"{self.task['output_key']}:{result}")
+
+        return result
 
     async def execute(self):
-        klass = await self.choose_minion()
-        klass
+        return await self.choose_minion_and_run()
 
 
+@register_route_downstream
 class PythonMinion(Minion):
     "This problem requires writing code to solve it, write python code to solve it"
 
@@ -630,26 +754,37 @@ class PythonMinion(Minion):
             node = ActionNode(
                 key="code",
                 expected_type=str,
-                instruction="Write python code to solve the problem, also noted the python program must return a string print out answer and only answer,"
-                "please remember I may have not python pip installed, so please add in the code like"
-                """import os
-                            os.system('python -m pip install sympy')
-                            """
-                "Please ensure all the variables are defined, don't use variables before defining them,"
-                "please ensure you correctly indent the code, and don't use // as comment",
+                instruction="the solution code",
                 example="",
             )
-            node = await node.fill(
-                context=(
-                    ASK_PROMPT
+            if not self.task_execution:
+                prompt = Template(
+                    PYTHON_PROMPT
+                    + ASK_PROMPT_JINJA
                     + """
 
 also please check previous error, do the modification according to previous error if there's previous error.
 Previous error:
-{error}
+{{error}}
                 """
-                ).format(input=self.input, error=error),
-                llm=LLM(),
+                )
+                prompt = prompt.render(input=self.input, error=error)
+            else:
+                prompt = Template(
+                    PYTHON_PROMPT
+                    + ASK_PROMPT_JINJA
+                    + TASK_INPUT
+                    + """
+
+ also please check previous error, do the modification according to previous error if there's previous error.
+ Previous error:
+ {{error}}"""
+                )
+                prompt = prompt.render(input=self.input, task=self.task, error=error)
+
+            node = await node.fill(
+                context=prompt,
+                llm=self.brain.llm,
             )
             code = node.instruct_content.code
             self.answer_code = code
@@ -660,9 +795,12 @@ Previous error:
 
             if obs["error"]:
                 error = obs["error"]
+                logger.error(error)
                 continue  # try again?
             output, error = obs["output"], obs["error"]
             self.answer = self.input.answer = output
+            # print("#####OUTPUT#####")
+            # print(output)
             return self.answer  # obs
         self.answer = self.input.answer = ""
         return self.answer
@@ -678,6 +816,7 @@ Previous error:
 #         )
 
 
+@register_route_downstream
 class MathMinion(PythonMinion):
     "This is a problem involve math, you need to use math tool to solve it"
 
@@ -715,10 +854,80 @@ class ScoreMinion(Minion):
         return node.instruct_content.score
 
 
+class ModeratorMinion(Minion):
+    async def invoke_minion(self, klass):
+        if isinstance(klass, str):
+            klass = MINION_ROUTE_DOWNSTREAM.get(klass, CotMinion)
+        minion = klass(input=self.input, brain=self.brain)
+        self.add_followers(minion)
+        await minion.execute()
+        self.answer = self.input.answer = minion.answer
+        return minion.answer
+
+    def majority_voting(self, results):
+        # Perform majority voting on the results
+        counter = Counter(results)
+        try:
+            most_common_result, _ = counter.most_common(1)[0]
+            return most_common_result
+        except:
+            return None
+
+    async def choose_minion_and_run(self):
+        design_ensemble = Template(ENSEMBLE_DESIGN_LOGIC_TEMPLATE)
+        design_ensemble.render(input=self.input)
+
+        if self.input.ensemble_logic:
+            ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
+            ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
+
+            if ensemble_logic == "majority_voting":
+                results = []
+                for minion in ensemble_minions:
+                    minion_name = minion["name"]
+                    count = minion["count"]
+                    for _ in range(count):  # skip route
+                        result = await self.invoke_minion(minion_name)
+                        if minion.get("post_processing", None) == "extract_number_from_string":
+                            result = extract_number_from_string(result)
+                        if result:
+                            results.append(result)
+
+                # Perform majority voting on the collected results
+                final_result = self.majority_voting(results)
+                self.answer = self.input.answer = final_result
+                return final_result
+        else:
+            route_minion = RouteMinion(input=self.input, brain=self.brain)
+            result = await route_minion.execute()
+            # if self.input.post_processing == "extract_number_from_string":
+            #     result = extract_number_from_string(result)
+            self.answer = self.input.answer = result
+            return result
+
+    async def merge_result(self, answer):
+        merge_prompt = Template(MERGE_PROMPT)
+        filled_merge_prompt = merge_prompt.render(input=self.input, answer=answer)
+
+        node = ActionNode(
+            key="answer",
+            expected_type=float,
+            instruction="merge the result according to question",
+            example="",
+            schema="raw",
+        )
+        node = await node.fill(context=filled_merge_prompt, llm=self.brain.llm)
+        return extract_final_answer(node.content)
+
+    async def execute(self):
+        await self.choose_minion_and_run()
+        return self.answer
+
+
 class RouteMinion(Minion):
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
-            klass = MINION_REGISTRY.get(klass, CotMinion)
+            klass = MINION_ROUTE_DOWNSTREAM.get(klass, CotMinion)
         minion = klass(input=self.input, brain=self.brain)
         self.add_followers(minion)
         await minion.execute()
@@ -737,60 +946,24 @@ class RouteMinion(Minion):
     async def choose_minion_and_run(self):
         choose_template = Template(SMART_PROMPT_TEMPLATE)
 
-        # filter out smart, since we don't want choose smart following smart again
-        # also filter out ScoreMinion
-        filtered_registry = {key: value for key, value in MINION_REGISTRY.items() if key != "smart" and key != "score"}
+        filtered_registry = {key: value for key, value in MINION_ROUTE_DOWNSTREAM.items()}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
         meta_plan = await ActionNode.from_pydantic(MetaPlan).fill(context=filled_template, llm=self.brain.llm)
 
-        design_ensemble = Template(ENSEMBLE_DESIGN_LOGIC_TEMPLATE)
-        design_ensemble.render(input=self.input)
-        # ensemble = await ActionNode.from_pydantic(EnsembleLogic).fill(context=filled_design_ensemble, llm=self.brain.llm, schema="raw")
-        if self.input.ensemble_logic:
-            ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
-            ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
-
-            if ensemble_logic == "majority_voting":
-                results = []
-                for minion in ensemble_minions:
-                    minion_name = minion["name"]
-                    count = minion["count"]
-                    for _ in range(count):
-                        result = await self.invoke_minion(minion_name)
-                        if minion.get("post_processing", None) == "extract_number_from_string":
-                            result = extract_number_from_string(result)
-                        if result:
-                            results.append(result)
-
-                # Perform majority voting on the collected results
-                final_result = self.majority_voting(results)
-                return final_result
+        if self.input.route:
+            logger.info(f"Use enforced route: {self.input.route}")
+            klass = filtered_registry[self.input.route]
+            minion = klass(input=self.input, brain=self.brain)
         else:
-            if self.input.route:
-                return filtered_registry[self.input.route]
-
             name = meta_plan.instruct_content.name
-            if name in filtered_registry:
-                klass = filtered_registry[name]  # get the Minion
-            else:
-                # print(f"Class {class_name} not found.")
-                klass = filtered_registry["cot"]  # default we use CoTMinion
-            return klass
 
-    async def merge_result(self, answer):
-        merge_prompt = Template(MERGE_PROMPT)
-        filled_merge_prompt = merge_prompt.render(input=self.input, answer=answer)
-
-        node = ActionNode(
-            key="answer",
-            expected_type=float,
-            instruction="merge the result according to question",
-            example="",
-            schema="raw",
-        )
-        node = await node.fill(context=filled_merge_prompt, llm=self.brain.llm)
-        return extract_final_answer(node.content)
+            name = most_similar_minion(name, filtered_registry.keys())
+            klass = filtered_registry[name]
+            minion = klass(input=self.input, brain=self.brain)
+        result = await minion.execute()
+        self.answer = self.input.answer = result
+        return result
 
     async def execute(self):
         await self.choose_minion_and_run()

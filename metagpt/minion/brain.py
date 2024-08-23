@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from metagpt.actions.action_node import ActionNode
 from metagpt.llm import LLM
 from metagpt.minion.input import Input
-from metagpt.minion.minion import RouteMinion
+from metagpt.minion.minion import ModeratorMinion
 from metagpt.minion.python_env import PythonEnv
 
 
@@ -29,8 +29,8 @@ class Mind(BaseModel):
         input.run_id = run_id or uuid.uuid4()
         input.short_context = input.context  # first set digested context same as context
 
-        smart = RouteMinion(input, brain=self.brain)
-        answer = await smart.execute()
+        moderator = ModeratorMinion(input, brain=self.brain)
+        answer = await moderator.execute()
         return answer, 0.0, False, False, {}  # terminated: false, truncated:false, info:{}
 
 
