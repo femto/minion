@@ -7,12 +7,61 @@
 """
 import asyncio
 import os
+import re
 
+import yaml
+
+from metagpt.llm import LLM
 from metagpt.minion.brain import Brain
 
 
+def replace_placeholders_with_env(config):
+    # Define a regex pattern to match placeholders like "${ENV_VAR}"
+    pattern = re.compile(r"\$\{([^}]+)\}")
+
+    def replace_in_value(value):
+        if isinstance(value, str):
+            # Search for the placeholder pattern
+            match = pattern.search(value)
+            if match:
+                env_var = match.group(1)
+                return os.getenv(env_var, value)  # Replace with env var if available, otherwise keep the original value
+        return value
+
+    def recursive_replace(obj):
+        if isinstance(obj, dict):
+            return {key: recursive_replace(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [recursive_replace(item) for item in obj]
+        else:
+            return replace_in_value(obj)
+
+    return recursive_replace(config)
+
+
 async def smart_brain():
-    brain = Brain()
+    import os
+
+    from dotenv import load_dotenv
+
+    # Load the .env file
+    load_dotenv()
+
+    # Load the config file
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Construct the path to the memory_config.yml file relative to the current script's location
+    config_path = os.path.join(current_dir, "memory_config.yml")
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+
+    # Replace placeholders with environment variables
+    config = replace_placeholders_with_env(config)
+
+    # Use the updated config in your application
+    # print(config)
+
+    brain = Brain(memory_config=config)
 
     # obs, score, *_ = await brain.step(query="create a 2048 game")
     # print(obs)
@@ -28,6 +77,9 @@ async def smart_brain():
     #
     # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 5 11 8")
     # print(obs)
+
+    # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 4 5 5")
+    # print(obs)
     # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
     # print(obs)
 
@@ -40,57 +92,25 @@ async def smart_brain():
     # Get the directory of the current file
     current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Construct the path relative to the current file's directory
-    cache_plan = os.path.join(current_file_dir, "dir", "aime", "plan_gpt4o.7.json")
-    # cache_plan = os.path.join(current_file_dir, 'dir', 'aime', 'plan_deepseek.json')
+    llm1 = LLM()
+    LLM()
+    llm1.config.temperature = 0.7
 
-    # obs, score, *_ = await brain.step(
-    #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
-    #     route="cot",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
-
-    # obs, score, *_ = await brain.step(
-    #     query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",
-    #     route="cot",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
-
-    # obs, score, *_ = await brain.step(
-    #     query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
-    #     route="python",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
-
-    # obs, score, *_ = await brain.step(
-    #     query="Jen enters a lottery by picking $4$ distinct numbers from $S=\{1,2,3,\cdots,9,10\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
-    #     route="cot",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
-
-    # geometry, need vision
-    # obs, score, *_ = await brain.step(
-    #     query="Rectangles $ABCD$ and $EFGH$ are drawn such that $D,E,C,F$ are collinear. Also, $A,D,H,G$ all lie on a circle. If $BC=16,$ $AB=107,$ $FG=17,$ and $EF=184,$ what is the length of $CE$?",
-    #     route="cot",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
-
-    # obs, score, *_ = await brain.step(
-    #     query="Consider the paths of length $16$ that follow the lines from the lower left corner to the upper right corner on an $8\times 8$ grid. Find the number of such paths that change direction exactly four times, like in the examples shown below.",
-    #     route="cot",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
+    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.3.json")
+    obs, score, *_ = await brain.step(
+        query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
+        route="cot",
+        dataset="aime 2024",
+        cache_plan=cache_plan,
+    )
+    print(obs)
 
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
+
     obs, score, *_ = await brain.step(
         query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
-        route="plan",
+        route="cot",
+        dataset="aime 2024",
         cache_plan=cache_plan,
     )
     print(obs)

@@ -22,22 +22,25 @@ from metagpt.actions.action_node import ActionNode
 from metagpt.logs import logger
 from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
+from metagpt.utils.custom_decoder import CustomDecoder
 
 
 def extract_json_from_string(text):
-    # Regular expression pattern to match content between ```json and ```
+    # Regular expression pattern to match all content between ```json and ```
     pattern = r"```json\s*([\s\S]*?)\s*```"
 
-    # Search for the pattern in the input text
-    match = re.search(pattern, text)
+    # Find all matches in the input text
+    matches = re.findall(pattern, text)
 
-    if match:
-        json_content = match.group(1)  # Extract the JSON content
+    if matches:
+        # Heuristic: Select the longest JSON block, assuming it's the most comprehensive
+        longest_match = max(matches, key=len)
+
         try:
-            # Convert the JSON string to a Python object
-            return json.loads(json_content)
+            # Decode the longest JSON block
+            return CustomDecoder(strict=False).decode(longest_match)
         except json.JSONDecodeError as e:
-            raise ValueError("Invalid JSON content.") from e
+            raise ValueError("Invalid JSON content in the selected block.") from e
     else:
         raise ValueError("No JSON content found.")
 
@@ -100,6 +103,30 @@ class MetaPlan(BaseModel):
         "if we choose this stragety, we are most likely to solve this problem, 0.0 means a"
         "bad match, if we choose this stragety, we are most likely fail to solve this problem",
     )
+    # complexity: str = Field(
+    #     default="",
+    #     description="estimate this problem's difficulty, when the problem is simple,only required one or several steps to solve this problem,"
+    #     "return low, when the problem difficulty is medium and require more steps to solve it, return medium,"
+    #     "when the problem seemed quite difficult, generally should involve complex process and careful step planning to solve it,"
+    #     "return high",
+    # )
+    # query_range: str = Field(
+    #     default="",
+    #     description="if it's a short range query that only require few steps, few context memory to complete the query, return short, "
+    #     "otherwise multiple step, require long term range attention to store relevant long context memory,"
+    #     "return long",
+    # )  # short range query, or multiple step range like writing a very long novel
+    # num_trials: int = Field(
+    #     default=0,
+    #     description="number of trials to try using the strategy to solve this problem, sometimes one strategy may fail, but we retry this strategy"
+    #     "we'll succeed, so need need some number of trials",
+    # )
+    # is_finished: bool = Field(
+    #     default=False, description="Whether current question already been answered by current answer"
+    # )
+
+
+class Identification(BaseModel):
     complexity: str = Field(
         default="",
         description="estimate this problem's difficulty, when the problem is simple,only required one or several steps to solve this problem,"
@@ -113,13 +140,20 @@ class MetaPlan(BaseModel):
         "otherwise multiple step, require long term range attention to store relevant long context memory,"
         "return long",
     )  # short range query, or multiple step range like writing a very long novel
-    num_trials: int = Field(
-        default=0,
-        description="number of trials to try using the strategy to solve this problem, sometimes one strategy may fail, but we retry this strategy"
-        "we'll succeed, so need need some number of trials",
+    field: str = Field(
+        default="",
+        description="classify the problem within a relevant academic field such as Mathematics, Physics, Chemistry, Biology, Computer Science, Linguistics, Sociology, or Psychology. ",
     )
-    is_finished: bool = Field(
-        default=False, description="Whether current question already been answered by current answer"
+    subfield: str = Field(
+        default="",
+        description="Further refine the classification by identifying the appropriate subfield, such as Mathematical Analysis, Quantum Mechanics, Organic Chemistry, Molecular Biology, Artificial Intelligence, Semantics, or Social Psychology. ",
+    )
+
+
+class QuestionAndAnswer(BaseModel):
+    answer: str = Field(
+        default="",
+        description="the answer to the question",
     )
 
 
@@ -168,7 +202,9 @@ query:
 {input.query}
 """
 
-ASK_PROMPT_JINJA = """context:
+ASK_PROMPT_JINJA = """
+Current Problem:
+context:
 {{input.short_context}}
 instruction:
 {{input.instruction}}
@@ -176,6 +212,20 @@ query_type:
 {{input.query_type}}
 query:
 {{input.query}}
+"""
+ASK_PROMPT_META_JINJA = """
+complexity:
+{{input.complexity}}
+query_range:
+{{input.query_range}}
+field:
+{{input.field}}
+subfield:
+{{input.subfield}}
+dataset:
+{{input.dataset}}
+dataset_description:
+{{input.dataset_description}}
 """
 
 MERGE_PROMPT = (
@@ -227,7 +277,20 @@ SMART_PROMPT_TEMPLATE = (
 
 """
     + ASK_PROMPT_JINJA
+    + ASK_PROMPT_META_JINJA
 )
+IDENTIFY_PROMPT = (
+    """
+Given a specific problem, start by identifying and assessing its complexity level (low, medium, high). Based on this assessment, select strategies that are most effective for addressing the problem's complexity, particularly for those that require handling intricate challenges over extended query ranges. Next, determine whether the problem demands a short-term or long-term focus and choose strategies that are best suited to these temporal requirements. Afterward, classify the problem within a relevant academic field such as Mathematics, Physics, Chemistry, Biology, Computer Science, Linguistics, Sociology, or Psychology. Further refine the classification by identifying the appropriate subfield, such as Mathematical Analysis, Quantum Mechanics, Organic Chemistry, Molecular Biology, Artificial Intelligence, Semantics, or Social Psychology. Finally, consider how the problem's complexity and temporal focus may influence the selection of strategies within the chosen field and subfield, and explore potential interdisciplinary approaches that could enhance problem-solving effectiveness.
+"""
+    + ASK_PROMPT_JINJA
+)
+
+QA_PROMPT_JINJA = """
+Question:
+{{question}}
+"""
+
 ENSEMBLE_DESIGN_LOGIC_TEMPLATE = (
     """You are tasked with designing a robust ensemble logic to dynamically select and combine multiple strategies for solving complex problems. The goal is to create an adaptive system that maximizes the likelihood of success across a variety of scenarios.
 
@@ -252,7 +315,7 @@ Adaptive Response: Use feedback to dynamically refine the ensemble, making it mo
 
 """
     + ASK_PROMPT_JINJA
-    + ASK_PROMPT_TASK_COMPLEXITY
+    + ASK_PROMPT_META_JINJA
     + """
 JSON Output Specifications:
 Once you have developed the ensemble logic, provide the final output as a JSON object with the following structure:
@@ -293,12 +356,8 @@ instruction:
 {{task.instruction}}
 task type:
 {{task.task_type}}
-task parameters:
-{% for key,minion in task.task_params.items() %}
-1. **Name:** {{ key }}  
-   **Value:** 
-   "{{ minion }}"
-{% endfor %}
+task description:
+{{task_description}}
 hint:
 {{task.hint}}
 dependent key output:
@@ -318,6 +377,7 @@ TASK_ROUTE_PROMPT = (
 """
     + CHOOSE_WORKER_MINION_TEMPLATE
     + ASK_PROMPT_JINJA
+    + ASK_PROMPT_META_JINJA
     + TASK_INPUT
 )
 PLAN_PROMPT = (
@@ -337,26 +397,88 @@ Given the context, create a detailed plan or refine an existing plan to achieve 
 
     Error Handling and Adaptation: In case of errors or obstacles in executing a task, revise the specific task to address the issue effectively. The revision should include precise instructions on how to overcome the challenge, minimizing disruption to the plan's progress.
 
-    JSON Output Specifications: Provide the final plan as a list of JSON objects, ensuring each task includes the following attributes:
-        task_id: A unique identifier for each task, preferably ordinal or descriptive.
-        dependent_task_ids: A list of task IDs that are prerequisites for this task, indicating dependencies.
-        instruction: A concise but clear description of the action required for this task.
-        task_type: The type or category of the task.
-        task_params: A JSON dictionary specifying the task's parameters and their corresponding values.
-        output_key: A unique identifier for storing the output of the task, which can be referenced by subsequent tasks.
-        output_type:  The type of the output, describe how subsequent task can use this output_key, can be str, number(int or float, fractions(if you require precision)), dict, file, url etc
-        output_description:  Description of the output, describe what it is, how it's relevant to whole task, how subsequent task can use it.
-        dependent: a list of dependent key produced by previous tasks and required by this task, containing a list of following subkeys:
-            dependent_key: A unique identifier of dependent key of the task, produced by previous tasks.
-            dependent_type: The type of dependent key, produced by previous tasks and required by this task, specify how this task can use this dependent_key, 
-              like str, number(int or float or fractions(if you require precision)) then you can direct use, if file or url then you need to read from the file or url.
-        Hint: (Optional) Provide a hint or brief guidance for carrying out the task effectively, particularly if the task involves complexity or potential challenges. This could include tips, best practices, or a brief outline of steps to ensure successful completion.
+    JSON Output Specifications: Provide the final plan as a list of JSON objects, ensuring each task includes the following attributes,
+    Output a list of jsons following the format:
+    ```json
+        [
+    {
+        "task_id": "unique identifier for a task in plan, can be an ordinal",
+        "dependent_task_ids": ["ids of tasks prerequisite to this task"],
+        "instruction": "what you should do in this task, one short phrase or sentence",
+        "task_type": "type of this task, should be one of Available Task Types",
+        "task_description": "A detailed description of the task, including what the task entails, the specific steps to perform it, and how to approach it. Describe how the task should utilize the outputs from the prerequisite tasks (listed in dependent_task_ids), and how its own output will be structured and used in subsequent tasks.",
+        "output_key": "unique identifier for storing the output of the task",
+        "output_type": "type of the output, e.g., str, number, file, url, etc.",
+        "output_description": "description of the output, its relevance, and usage in subsequent tasks",
+        "output_example": "example of the output and how it can be used by subsequent tasks",
+        "dependent": [
+            {
+                "dependent_key": "unique identifier of the dependent key produced by previous tasks",
+                "dependent_type": "type of dependent key, specify how this task can use this dependent_key"
+            }
+        ],
+        "hint": "optional guidance or tips for completing the task effectively"
+    },
+    ...
+]
+```
+
 
     Contextual Precision: Return a plan that is as specific and precise as possible. Avoid vague or ambiguous instructions. Ensure that task descriptions and parameters are well-defined to facilitate smooth execution and alignment with the overall goal.
 
-By following these guidelines, ensure the plan is logical, thorough, and well-suited to achieving the desired outcome efficiently.
+Ensure the plan is concise, with each step being essential and logically connected, leading seamlessly from one task to the next for efficient achievement of the desired outcome. Please do not include any "check solution" tasks, as I will provide those later.
 """
 )
+MATH_PLAN_PROMPT = (
+    """
+    You are an expert in mathematical problem-solving, capable of developing and executing detailed solution strategies for complex math problems. When a user presents a math problem, your first step is to outline the problem-solving approach by breaking down the problem into manageable steps. Then, you implement these steps to derive the solution. Below is a list of steps to guide you in constructing a robust mathematical solution plan:
+
+Math Problem:
+
+Given the mathematical context, create a detailed solution plan or refine an existing approach to solve the specified problem. The comprehensive plan should consist of one to {max_steps} steps. The following points outline the necessary components:
+
+Detailed Problem Breakdown: Each step in the solution plan must be described with clarity, including the specific mathematical operations, theorems, or algorithms to be applied. Avoid generic descriptions; instead, ensure that each step is actionable and directly contributes to finding the solution. Explain the reasoning behind each step and how it progresses towards the final answer.
+
+Critical Analysis of Dependencies: When refining or modifying an existing solution approach, critically analyze the dependencies between steps. If revising a particular step, assess how it interacts with preceding or subsequent steps, ensuring alignment with the overall logical flow. Modify only what is necessary, maintaining the integrity of the original method unless fundamental changes are required for optimization.
+
+Error Handling and Strategy Adaptation: In case of errors or difficulties during a step, revise the approach to address the issue effectively. The revision should include precise instructions on how to adjust the method, whether by choosing an alternative mathematical technique or reconsidering the initial assumptions, minimizing disruption to the solution process.
+
+Mathematical Output Specifications: Provide the final solution plan as a series of JSON objects, ensuring each step includes the following attributes:
+JSON Output Specifications: Provide the final plan as a list of JSON objects, ensuring each task includes the following attributes,
+    Output a list of jsons following the format:
+    ```json
+        [
+    {
+        "task_id": "unique identifier for a task in plan, can be an ordinal",
+        "dependent_task_ids": ["ids of tasks prerequisite to this task"],
+        "instruction": "what you should do in this task, one short phrase or sentence",
+        "task_type": "type of this task, should be one of Available Task Types",
+        "task_description": "A detailed description of the task, including what the task entails, the specific steps to perform it, and how to approach it. Describe how the task should utilize the outputs from the prerequisite tasks (listed in dependent_task_ids), and how its own output will be structured and used in subsequent tasks.",
+        "output_key": "unique identifier for storing the output of the task",
+        "output_type": "type of the output, e.g., str, number, file, url, etc.",
+        "output_description": "description of the output, its relevance, and usage in subsequent tasks",
+        "output_example": "example of the output and how it can be used by subsequent tasks",
+        "dependent": [
+            {
+                "dependent_key": "unique identifier of the dependent key produced by previous tasks",
+                "dependent_type": "type of dependent key, specify how this task can use this dependent_key"
+            }
+        ],
+        "hint": "optional guidance or tips for completing the task effectively"
+    },
+    ...
+]
+```
+        
+Note: *PLEASE CORRECT* escape the json, say \(z\) is incorrect, you must say \\(z\\).
+
+Contextual Precision: Ensure the solution plan is as specific and precise as possible. Avoid vague or ambiguous instructions. Ensure that each step and its parameters are well-defined to facilitate smooth execution and alignment with the overall solution.
+
+Ensure the plan is concise, with each step being essential and logically connected, leading seamlessly from one task to the next for efficient achievement of the desired outcome. Please do not include any "check solution" tasks, as I will provide those later.
+    """
+    + ASK_PROMPT_JINJA
+)
+
 
 PLAN_PROMPT_BY_CHOOSING = (
     """You are a strategic planner capable of designing and executing complex plans. When a user presents a task, your first step is to outline how each strategy will be utilized. Then, you implement the strategies to accomplish the task. Below is a list of strategies available to you:
@@ -428,7 +550,7 @@ Now, critically analyze the implications of using the dict=True parameter when d
 
     make sure symbols() constructor really contains real variables(symbols), DON'T put non-symbol like 'cos(theta)', 'sin(theta)' etc in symbols().
     
-    some functions you may find useful:
+    some functions for find extreme value you may find useful:
     
     from sympy import S
     
@@ -438,12 +560,10 @@ Now, critically analyze the implications of using the dict=True parameter when d
     sympy.calculus.util.minimum(f, symbol, domain=S.Reals)
     Returns the minimum value of a function in the given domain of Reals.
     
-    sympy.calculus.util.maximum(f, symbol, domain=S.Complexes)
-    Returns the maximum value of a function in the given domain of Complexes.
+    when finding extreme value(maximum/minimum), better find it on the domain of S.Reals,
+    because it's harder to find maximum/minimum on complexes without constraint,
+    convert the extreme value finding problem to only rely on parameters of S.Reals.
     
-    sympy.calculus.util.minimum(f, symbol, domain=S.Complexes)
-    Returns the minimum value of a function in the given domain of Complexes.
-
     Please remember to add result = sympy.simplify(result) to simplify the expression before return
     
     Handling Complex Systems: Reflect on the practical application of these strategies in solving real-world problems. How can the dict=True approach assist in managing and interpreting the solutions to more intricate systems, especially when some solutions might not be immediately obvious or when certain solutions need to be excluded based on problem-specific criteria?
@@ -512,7 +632,7 @@ def register_route_downstream(cls):
 
 
 class Minion(metaclass=SubclassHookMeta):
-    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None, task_execution=False):
+    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None, task_execution=False, **kwargs):
         if brain is None:
             raise ValueError("The 'brain' parameter cannot be None.")
 
@@ -618,6 +738,10 @@ class MultiPlanMinion(Minion):
 class PlanMinion(Minion):
     "Divide and Conquer Strategy, Divide the problem into smaller subproblems, solve each subproblem independently, and then merge the results for the final solution."
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.plan_prompt = PLAN_PROMPT
+
     def write_json_to_cache(self, file, data):
         # Ensure that the data is serializable to JSON
         try:
@@ -627,7 +751,44 @@ class PlanMinion(Minion):
         except (TypeError, IOError) as e:
             print(f"An error occurred: {e}")
 
-    @retry(stop=stop_after_attempt(3), wait=wait_none())  # Retries up to 3 times with a 2-second wait between attempts
+    def validate_json_plan(self, json_plan):
+        # Convert tasks to a graph and perform a topological sort
+        G = convert_tasks_to_graph(json_plan)
+
+        try:
+            sorted_tasks = list(nx.topological_sort(G))
+        except nx.NetworkXUnfeasible:
+            raise ValueError("Error: The task graph contains cycles, which is not allowed.")
+
+        # Map task_id to the task dictionary for quick access
+        task_map = {task.get("task_id", None) or task["id"]: task for task in json_plan}
+
+        # Track the output keys
+        output_keys = set()
+        errors = []
+
+        for task_id in sorted_tasks:
+            task = task_map[task_id]
+            dependent_keys = task.get("dependent", [])
+
+            # Check if all dependent keys are present in previous output keys
+            for dependent in dependent_keys:
+                dependent_key = dependent.get("dependent_key")
+                if dependent_key not in output_keys:
+                    errors.append(
+                        f"Error in task '{task_id}': Dependent key '{dependent_key}' not found in previous tasks."
+                    )
+
+            # Add the current task's output_key to the set of output keys
+            output_key = task.get("output_key")
+            if output_key:
+                output_keys.add(output_key)
+        if errors:
+            raise ValueError("\n".join(errors))
+        self.task_graph = G
+        return "All tasks are valid!"
+
+    @retry(stop=stop_after_attempt(5), wait=wait_none())  # Retries up to 5 times
     async def get_plan_with_retry(self, cache_filename=None):
         if self.input.cache_plan:
             # Attempt to load the plan from the cache
@@ -644,23 +805,27 @@ class PlanMinion(Minion):
             except (IOError, json.JSONDecodeError) as e:
                 logger.info(f"Error loading plan from cache: {e}. Fetching plan with retry.")
 
-        choose_template = Template(PLAN_PROMPT)
+        for i in range(5):
+            error = ""
+            choose_template = Template(self.plan_prompt + f"Previous Error:{error}")
 
-        # filter out smart, since we don't want to choose smart following smart again
-        # also filter out ScoreMinion
-        filtered_registry = {
-            key: value
-            for key, value in MINION_REGISTRY.items()
-            if key != "smart" and key != "score" and key != "plan" and key != "multi_plan"
-        }
-        filled_template = choose_template.render(minions=filtered_registry, input=self.input)
+            # filter out smart, since we don't want to choose smart following smart again
+            # also filter out ScoreMinion
+            filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
+            filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
-        plan = await ActionNode.from_pydantic(Plan).fill(context=filled_template, llm=self.brain.llm, schema="raw")
+            plan = await ActionNode.from_pydantic(Plan).fill(context=filled_template, llm=self.brain.llm, schema="raw")
 
-        json = extract_json_from_string(plan.content)
-        self.write_json_to_cache(self.input.cache_plan, json)
+            json = extract_json_from_string(plan.content)
 
-        return json
+            try:
+                self.validate_json_plan(json)
+                self.write_json_to_cache(self.input.cache_plan, json)
+                return json
+            except ValueError as e:
+                error = str(e)
+                logger.error(f"Validation error: {error}. Retrying...")
+        raise ValueError(f"Failed to validate plan after 5 attempts. Last error: {error}")
 
     async def execute(self):
         # log_dir = METAGPT_ROOT / "logs" / "plan"
@@ -673,10 +838,10 @@ class PlanMinion(Minion):
 
         # save_json_to_file(self.plan, filename)
 
-        self.task_graph = convert_tasks_to_graph(self.plan)
+        # self.task_graph = convert_tasks_to_graph(self.plan)
         # plot_graph(self.task_graph)
         await self.execute_tasks_in_order(self.task_graph)
-        self.answer = self.input.answer = "task completed"
+        return self.answer
 
     async def execute_tasks_in_order(self, graph):
         # Perform topological sorting
@@ -691,6 +856,15 @@ class PlanMinion(Minion):
                     self.input.symbols[task["output_key"]] = Symbol(
                         result, task["output_type"], task["output_description"]
                     )
+        self.answer = self.input.answer = result
+        return self.answer
+
+
+@register_route_downstream
+class MathPlanMinion(PlanMinion):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.plan_prompt = MATH_PLAN_PROMPT
 
 
 class TaskMinion(Minion):
@@ -712,16 +886,7 @@ class TaskMinion(Minion):
         #     return filtered_registry[self.input.route]
 
         meta_plan = await ActionNode.from_pydantic(MetaPlan).fill(context=filled_template, llm=self.brain.llm)
-        self.num_trials = meta_plan.instruct_content.num_trials
-        if self.num_trials < 1 or not isinstance(self.num_trials, int):
-            self.num_trials = 1
 
-        name = meta_plan.instruct_content.name
-
-        # do we need task route?
-        # if self.input.route:
-        #    klass = filtered_registry[self.input.route]
-        # else:
         name = meta_plan.instruct_content.name
 
         name = most_similar_minion(name, filtered_registry.keys())
@@ -868,14 +1033,16 @@ class ModeratorMinion(Minion):
         # Perform majority voting on the results
         counter = Counter(results)
         try:
-            most_common_result, _ = counter.most_common(1)[0]
+            most_common_result, count = counter.most_common(1)[0]
             return most_common_result
         except:
             return None
 
     async def choose_minion_and_run(self):
-        design_ensemble = Template(ENSEMBLE_DESIGN_LOGIC_TEMPLATE)
-        design_ensemble.render(input=self.input)
+        # design_ensemble = Template(ENSEMBLE_DESIGN_LOGIC_TEMPLATE)
+        # design_ensemble.render(input=self.input)
+        identification = IdentifyMinion(input=self.input, brain=self.brain)
+        await identification.execute()
 
         if self.input.ensemble_logic:
             ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
@@ -921,6 +1088,41 @@ class ModeratorMinion(Minion):
 
     async def execute(self):
         await self.choose_minion_and_run()
+        return self.answer
+
+
+class IdentifyMinion(Minion):
+    async def execute(self):
+        prompt = Template(IDENTIFY_PROMPT)
+        prompt = prompt.render(input=self.input)
+
+        identification = await ActionNode.from_pydantic(Identification).fill(context=prompt, llm=self.brain.llm)
+
+        self.input.complexity = identification.instruct_content.complexity
+        self.input.query_range = identification.instruct_content.query_range
+        self.input.field = identification.instruct_content.field
+        self.input.subfield = identification.instruct_content.subfield
+
+        qa_minion = QaMinion(input=self.input, brain=self.brain)
+        await qa_minion.execute()
+
+        self.answer = "identified the input query"
+        return self.answer
+
+
+class QaMinion(Minion):
+    def __init__(self, hops=None, **kwargs):
+        super().__init__(hops=hops, **kwargs)
+        self.hops = hops
+
+    async def execute(self):
+        prompt = Template(QA_PROMPT_JINJA)
+        prompt = prompt.render(question=f"what's {self.input.dataset}")
+
+        qa = await ActionNode.from_pydantic(QuestionAndAnswer).fill(context=prompt, llm=self.brain.llm)
+
+        self.answer = self.input.dataset_description = qa.instruct_content.answer
+
         return self.answer
 
 

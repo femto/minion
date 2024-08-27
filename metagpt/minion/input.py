@@ -44,6 +44,7 @@ class Input(BaseModel):
     guidance: str = ""
     constraint: str = ""  # question or requirement
     instruction: str = ""  # instruction for each step, different step can have different instruction
+
     complexity: str = ""  # low,medium,high
     query_range: str = ""  # short range query, or multiple step range like writing a very long novel
     # plan:str = "" # current plan
@@ -71,7 +72,13 @@ class Input(BaseModel):
     num_trials: int = 1  # how much times downstream node runs
     ensemble_strategy: str = EnsembleStrategyType.EARLY_STOP
 
+    dataset: str = ""  # which dataset this is
+    dataset_description: str = ""  # the dataset description
+    query_id: str = Field(default_factory=uuid.uuid4)
     run_id: str = Field(default_factory=uuid.uuid4)
+
+    field: str = ""
+    subfield: str = ""
 
     @property
     def context(self):

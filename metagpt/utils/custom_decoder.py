@@ -249,7 +249,7 @@ def py_scanstring(s, end, strict=True, _b=BACKSLASH, _m=STRINGCHUNK.match, delim
         # If not a unicode escape sequence, must be in the lookup table
         if esc != "u":
             try:
-                char = _b[esc]
+                char = _b.get(esc, esc)
             except KeyError:
                 msg = "Invalid \\escape: {0!r}".format(esc)
                 raise JSONDecodeError(msg, s, end)

@@ -1,0 +1,37 @@
+[
+    {
+        "idx": 1,
+        "question": "What is the value of the sum of the series 1 + 2 + 3 + ... + 100?",
+        "answer": 5050
+    },
+    {
+        "idx": 2,
+        "question": "If the sum of the squares of the roots of the quadratic equation x^2 - 10x + k = 0 is 58, what is the value of k?",
+        "answer": 21
+    },
+    {
+        "idx": 3,
+        "question": "In how many different ways can the letters in the word 'AIME' be arranged?",
+        "answer": 24
+    },
+    {
+        "idx": 4,
+        "question": "What is the smallest positive integer n such that 2^n > 1000?",
+        "answer": 10
+    },
+    {
+        "idx": 5,
+        "question": "If the probability of an event happening is 1/4, what is the probability of it not happening?",
+        "answer": "3/4"
+    },
+    {
+        "idx": 6,
+        "question": "In a triangle ABC, if angle A = 60 degrees, angle B = 70 degrees, and the side opposite angle C is 10, find the length of the side opposite angle A.",
+        "answer": "7.66"
+    },
+    {
+        "idx": 7,
+        "question": "Find the largest possible real part of\\[(75+117i)z+\\frac{96+144i}{z}\\]where $z$ is a complex number with $|z|=4$.",
+        "answer": 540
+    }
+]

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from jinja2 import Template
+from mem0 import Memory
 from pydantic import BaseModel
 
 from metagpt.actions.action_node import ActionNode
@@ -35,7 +36,7 @@ class Mind(BaseModel):
 
 
 class Brain:
-    def __init__(self, id=None, memory=None, llm=LLM()):
+    def __init__(self, id=None, memory=None, memory_config=None, llm=LLM()):
         self.id = id or uuid.uuid4()
         self.minds = {}
         self.add_mind(
@@ -79,17 +80,15 @@ Supporting navigation and spatial memory""",
         )
 
         # self.add_mind(Mind(id="hypothalamus", description="..."))
-        if not memory:
-            pass
-
-        # memory = Memory.from_config(config)
-        memory = None
         self.mem = memory
+        if not memory:
+            if memory_config:
+                self.mem = memory = Memory.from_config(memory_config)
+
         self.llm = llm
 
         image_name = "intercode-python"
         self.python_env = PythonEnv(image_name, verbose=False, is_agent=True)
-        # env = PythonEnv("metagpt/metagpt:latest", verbose=True)
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind

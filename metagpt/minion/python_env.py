@@ -6,7 +6,8 @@ import re
 from typing import Dict, Tuple
 
 import rpyc
-from intercode.envs.ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
+
+from .ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
 
 HOST_PORT = 3006
 RESET_KEYWORD = "RESET_CONTAINER_SPECIAL_KEYWORD"

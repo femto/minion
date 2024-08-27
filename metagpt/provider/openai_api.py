@@ -128,7 +128,8 @@ class OpenAILLM(BaseLLM):
             "max_tokens": self._get_max_tokens(messages),
             # "n": 1,  # Some services do not provide this parameter, such as mistral
             # "stop": None,  # default it's None and gpt4-v can't have this one
-            "temperature": self.config.temperature,
+            # "temperature": self.config.temperature,
+            "temperature": 0.1,
             "model": self.model,
             "timeout": self.get_timeout(timeout),
         }
