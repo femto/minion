@@ -30,6 +30,26 @@ obs, score, *_ = await brain.step(
           "Since the novel is very long, you may need to divide it into subtasks."
 )
 print(obs)
+
+cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.3.json")
+obs, score, *_ = await brain.step(
+    query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
+    route="cot",
+    dataset="aime 2024",
+    cache_plan=cache_plan,
+)
+print(obs)
+
+cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
+
+obs, score, *_ = await brain.step(
+    query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+    route="cot",
+    dataset="aime 2024",
+    cache_plan=cache_plan,
+)
+print(obs)
+
 ```
 ## Get Started
 
