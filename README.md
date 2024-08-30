@@ -35,8 +35,7 @@ print(obs)
 
 ### Installation
 
-Minion current depends on metagpt to call llm and response format parsing, please follow metagpt's installation
-guide of [setup metagpt](https://github.com/geekan/MetaGPT#get-started), basically it's
+Minion current depends on metagpt to call llm and response format parsing, so the code resides together
 ```
 git clone https://github.com/femto/minion.git && cd minion && pip install -r requirements.txt
 cp config/config2.yaml ~/.metagpt/config2.yaml

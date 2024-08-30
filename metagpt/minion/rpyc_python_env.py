@@ -147,7 +147,6 @@ class RpycPythonEnv(IntercodeEnv):
         self.info = {}
 
         # Get function from `submit` action
-        # TODO: Assert that function name is given upon `submit` action
         last_action = self.trajectory[-1][0]
         func_name = last_action.split(" ")[1]
 
