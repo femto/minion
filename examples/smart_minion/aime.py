@@ -63,6 +63,21 @@ async def smart_brain():
     # )
     # print(obs)
 
+    cache_plan = os.path.join(current_file_dir, "math", "plan_gpt4o.1.json")
+    obs, score, *_ = await brain.step(
+        query="Compute $\\tan 210^\\circ$.",
+        route="cot",
+        cache_plan=cache_plan,
+    )
+    print(obs)
+    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.4.json")
+    obs, score, *_ = await brain.step(
+        query="Jen enters a lottery by picking $4$ distinct numbers from $S=\\{1,2,3,\\cdots,9,10\\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$.\n\n",
+        route="math_plan",
+        cache_plan=cache_plan,
+    )
+    print(obs)
+
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
     obs, score, *_ = await brain.step(
         query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",

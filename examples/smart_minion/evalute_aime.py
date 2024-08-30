@@ -35,15 +35,13 @@ def extract_answer(answer_str):
         return None  # Return None if no match is found
 
 
-async def evaluate_aime(data, last_processed_id=0):
+async def evaluate_aime(data, last_processed_id=0, to_processed_id=None, route="cot"):
     correct = 0
     count = 0
     total_count = len(data)
     matched_ids = []
     mismatch = []
     tasks = []
-
-    skip = True if last_processed_id else False
 
     async def process_batch(tasks, correct):
         results = await asyncio.gather(*tasks)
@@ -71,14 +69,13 @@ async def evaluate_aime(data, last_processed_id=0):
         for i, item in enumerate(data):
             item_id = item.get("idx", -1)
 
-            # Skip items until the last processed item
-            if skip:
-                if item_id == last_processed_id:
-                    skip = False
+            if item_id <= last_processed_id:
                 continue
+            if to_processed_id and item_id > to_processed_id:
+                break
 
             count += 1
-            tasks.append(solve_single_question(item))
+            tasks.append(solve_single_question(item, route=route))
 
             if len(tasks) == 6:
                 correct = await process_batch(tasks, correct)
@@ -101,7 +98,7 @@ async def evaluate_aime(data, last_processed_id=0):
     return correct, count, matched_ids, mismatch
 
 
-async def solve_single_question(item):
+async def solve_single_question(item, route="cot"):
     question = item["question"]
     correct_answer_str = item["answer"]
     item_id = item.get("idx", -1)  # Extract the ID or use a default value
@@ -111,7 +108,7 @@ async def solve_single_question(item):
     correct_answer = extract_answer(correct_answer_str)
 
     # Your solver logic
-    user_answer_str = await solve_question(question, route="cot")
+    user_answer_str = await solve_question(question, route=route)
     user_answer = extract_number_from_string(user_answer_str)
 
     if float(extract_number_from_string(user_answer) or "-10000") == float(extract_number_from_string(correct_answer)):
@@ -153,7 +150,7 @@ async def main():
     file_name = "aime.json"
     data = load_json(file_name)
 
-    correct, count, matched_ids, mismatched_ids = await evaluate_aime(data, last_processed_id=6)
+    correct, count, matched_ids, mismatched_ids = await evaluate_aime(data, last_processed_id=3, to_processed_id=4)
 
     print(f"Accuracy: {correct/count:.2%}")
     print(f"Mismatched IDs: {mismatched_ids}")

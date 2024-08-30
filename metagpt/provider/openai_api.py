@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Optional, Union
 
@@ -39,6 +40,19 @@ from metagpt.utils.token_counter import (
     get_max_completion_tokens,
     get_openrouter_tokens,
 )
+
+
+class StringWithMetrics:
+    def __init__(self, content, mean_logprob=None, perplexity_score=None):
+        self.content = content
+        self.mean_logprob = mean_logprob
+        self.perplexity_score = perplexity_score
+
+    def __str__(self):
+        return self.content
+
+    def __repr__(self):
+        return f"{self.content} (mean_logprob={self.mean_logprob}, perplexity_score={self.perplexity_score})"
 
 
 @register_provider(
@@ -92,13 +106,19 @@ class OpenAILLM(BaseLLM):
         )
         usage = None
         collected_messages = []
+        log_probs = []
+        log_probs0 = []
         async for chunk in response:
             chunk_message = chunk.choices[0].delta.content or "" if chunk.choices else ""  # extract the message
             finish_reason = (
                 chunk.choices[0].finish_reason if chunk.choices and hasattr(chunk.choices[0], "finish_reason") else None
             )
+            if chunk.choices[0].logprobs and chunk.choices[0].logprobs.content:
+                log_probs0.append(chunk.choices[0].logprobs)
+                log_probs.extend(chunk.choices[0].logprobs.content)
             log_llm_stream(chunk_message)
             collected_messages.append(chunk_message)
+
             if finish_reason:
                 if hasattr(chunk, "usage") and chunk.usage is not None:
                     # Some services have usage as an attribute of the chunk, such as Fireworks
@@ -120,6 +140,20 @@ class OpenAILLM(BaseLLM):
             usage = self._calc_usage(messages, full_reply_content)
 
         self._update_costs(usage)
+        logprobs = [token.logprob for token in log_probs]
+
+        # Calculate the mean of the collected logprobs
+        if logprobs:
+            mean_logprob = sum(logprobs) / len(logprobs)
+
+            perplexity_score = math.exp(-mean_logprob)
+            print(f"Mean logprob: {mean_logprob}")
+            print(f"perplexity_score: {perplexity_score}")
+        else:
+            mean_logprob = None
+            perplexity_score = None
+            print("No non-zero logprobs found.")
+        # wrapped_content = StringWithMetrics(full_reply_content, mean_logprob, perplexity_score)
         return full_reply_content
 
     def _cons_kwargs(self, messages: list[dict], timeout=USE_CONFIG_TIMEOUT, **extra_kwargs) -> dict:
@@ -129,7 +163,8 @@ class OpenAILLM(BaseLLM):
             # "n": 1,  # Some services do not provide this parameter, such as mistral
             # "stop": None,  # default it's None and gpt4-v can't have this one
             # "temperature": self.config.temperature,
-            "temperature": 0.1,
+            "temperature": self.config.temperature,
+            "logprobs": True,
             "model": self.model,
             "timeout": self.get_timeout(timeout),
         }

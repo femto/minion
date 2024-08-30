@@ -38,8 +38,8 @@ print(obs)
 Minion current depends on metagpt to call llm and response format parsing, please follow metagpt's installation
 guide of [setup metagpt](https://github.com/geekan/MetaGPT#get-started), basically it's
 ```
-pip install --upgrade metagpt
-metagpt --init-config # this will create ~/.metagpt/config2.yaml
+git clone https://github.com/femto/minion.git && cd minion && pip install -r requirements.txt
+cp config/config2.yaml ~/.metagpt/config2.yaml
 ```
 then edit ~/.metagpt/config2.yaml
 ```
@@ -51,26 +51,29 @@ llm:
 ```
 
 ### Other Dependencies
-#### install minion
-```
-git clone https://github.com/femto/MetaGPT.git && cd MetaGPT && pip install -r requirements.txt
-```
-#### buikd python docker env(which minion depends as virtual env to execute code)
+#### Using Brain with docker python env
 ```
 docker build -t intercode-python -f docker/python.Dockerfile .
 ```
+```
+brain = Brain() #default will use docker python env
+```
+
+#### Using Brain with rpyc env
+```
+python docker/utils/python_server.py --port 3007
+```
+```
+brain = Brain(python_env=RpycPythonEnv(port=3007))
+```
+#### Troubleshooting with docker python env
 #### stop existing container if necessary
 ```
 docker stop intercode-python_ic_ctr
 docker rm intercode-python_ic_ctr
-```
-make sure container name intercode-python_ic_ctr is listenning on 3006,
-the code in PythonEnv(from intercode) tries to automatically start intercode-python_ic_ctr,
-the PythonEnv seem can start the container, but can't map port. So if you can't connect
-to intercode-python_ic_ctr, stop the container and start it the following way:
-```
 docker run -d -p 3006:3006 --name intercode-python_ic_ctr intercode-python
 ```
+make sure container name intercode-python_ic_ctr is listening on 3006
 
 ## Enjoy Your Brain.Step() Journey
 

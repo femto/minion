@@ -22,6 +22,7 @@ from metagpt.actions.action_node import ActionNode
 from metagpt.logs import logger
 from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
+from metagpt.minion.utils import extract_number_from_string
 from metagpt.utils.custom_decoder import CustomDecoder
 
 
@@ -52,33 +53,6 @@ def extract_final_answer(text):
         return match_tag.group(1).strip()
 
     return None
-
-
-def extract_number_from_string(price_str):
-    if isinstance(price_str, int) or isinstance(price_str, float):
-        return price_str
-
-    price_str = price_str or ""
-    # Remove commas from the string
-    price_str = price_str.replace(",", "")
-
-    try:
-        # Regular expression to match all numeric values
-        matches = re.findall(r"\d+(?:\.\d+)?", price_str)
-
-        if len(matches) == 1:
-            # Only one number found, return it as int or float
-            number_str = matches[0]
-            return float(number_str) if "." in number_str else int(number_str)
-        elif len(matches) > 1:
-            # More than one number found, handle accordingly
-            logger.warning(f"Multiple numbers found in string: {matches}, str: {price_str}")
-            return None
-        else:
-            return None  # Return None if no number is found
-    except Exception as e:
-        logger.error("extract_number_from_string failed: " + str(e) + f", str: {price_str}")
-        return None  # Return None if there is an error
 
 
 # Function to find the most similar minion
@@ -134,6 +108,11 @@ class Identification(BaseModel):
         "when the problem seemed quite difficult, generally should involve complex process and careful step planning to solve it,"
         "return high",
     )
+    difficulty: str = Field(
+        default="",
+        description="Represents the educational difficulty level of the problem. Return elementary school/middle school/high school/undergraduate/graduate/postgraduate/olympiad etc.",
+    )
+
     query_range: str = Field(
         default="",
         description="if it's a short range query that only require few steps, few context memory to complete the query, return short, "
@@ -281,7 +260,13 @@ SMART_PROMPT_TEMPLATE = (
 )
 IDENTIFY_PROMPT = (
     """
-Given a specific problem, start by identifying and assessing its complexity level (low, medium, high). Based on this assessment, select strategies that are most effective for addressing the problem's complexity, particularly for those that require handling intricate challenges over extended query ranges. Next, determine whether the problem demands a short-term or long-term focus and choose strategies that are best suited to these temporal requirements. Afterward, classify the problem within a relevant academic field such as Mathematics, Physics, Chemistry, Biology, Computer Science, Linguistics, Sociology, or Psychology. Further refine the classification by identifying the appropriate subfield, such as Mathematical Analysis, Quantum Mechanics, Organic Chemistry, Molecular Biology, Artificial Intelligence, Semantics, or Social Psychology. Finally, consider how the problem's complexity and temporal focus may influence the selection of strategies within the chosen field and subfield, and explore potential interdisciplinary approaches that could enhance problem-solving effectiveness.
+Given a specific problem, start by identifying and assessing both its complexity (low, medium, high) and its difficulty (high school, undergraduate, graduate, Olympiad). The complexity addresses the overall intricacy of the problem, while the difficulty considers the challenge relative to different educational stages.
+
+Based on this dual assessment, select strategies that are most effective for addressing the problem's complexity and difficulty, particularly for those requiring handling intricate challenges over extended range (short-term or long-term). Next, determine whether the problem demands a short-term or long-term focus and choose strategies best suited to these temporal requirements.
+
+Afterward, classify the problem within a relevant field such as Mathematics, Physics, Chemistry, Biology, Computer Science, Linguistics, Sociology, or Psychology. Further refine the classification by identifying the appropriate subfield such as Mathematical Analysis, Quantum Mechanics, Organic Chemistry, Molecular Biology, Artificial Intelligence, Semantics, or Social Psychology.
+
+Finally, consider how the problem's complexity, difficulty, and range may influence the selection of strategies within the chosen field and subfield. Explore potential interdisciplinary approaches that could enhance problem-solving effectiveness, especially where integrating knowledge from various domains could provide innovative solutions.
 """
     + ASK_PROMPT_JINJA
 )
@@ -572,7 +557,7 @@ Finally, after solving the equations, ensure that any additional constraints or 
 """
 PYTHON_PROMPT = (
     """
-Write python code to solve the problem, also noted the python program must return a string print out answer and only answer,"""
+Write python code to solve the problem, also noted the python program must print out answer"""
     + COMMON_ERROR
     + COMMON_SYMPY_ERROR
     + """Please ensure all the variables are defined, don't use variables before defining them
@@ -799,6 +784,7 @@ class PlanMinion(Minion):
                     with open(cache_filename, "r") as file:
                         plan = json.load(file)
                         logger.info(f"loading cache plan from {cache_filename}")
+
                         return plan
                 else:
                     logger.info("Cache file not found. Fetching plan with retry.")
@@ -838,7 +824,7 @@ class PlanMinion(Minion):
 
         # save_json_to_file(self.plan, filename)
 
-        # self.task_graph = convert_tasks_to_graph(self.plan)
+        self.task_graph = convert_tasks_to_graph(self.plan)
         # plot_graph(self.task_graph)
         await self.execute_tasks_in_order(self.task_graph)
         return self.answer
@@ -955,7 +941,9 @@ Previous error:
             self.answer_code = code
             print(self.answer_code)
 
-            result = self.brain.python_env.step(code)
+            self.input.query_id = self.input.query_id or uuid.uuid4()
+            self.input.run_id = self.input.run_id or uuid.uuid4()
+            result = self.brain.python_env.step(f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}")
             obs = result[0]  # obs
 
             if obs["error"]:
@@ -1023,10 +1011,13 @@ class ModeratorMinion(Minion):
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
             klass = MINION_ROUTE_DOWNSTREAM.get(klass, CotMinion)
+        self.input.run_id = self.input.run_id or uuid.uuid4()
         minion = klass(input=self.input, brain=self.brain)
         self.add_followers(minion)
         await minion.execute()
         self.answer = self.input.answer = minion.answer
+        # clean up python env
+        self.brain.cleanup_python_env(input=self.input)
         return minion.answer
 
     def majority_voting(self, results):
@@ -1034,6 +1025,7 @@ class ModeratorMinion(Minion):
         counter = Counter(results)
         try:
             most_common_result, count = counter.most_common(1)[0]
+            logger.info(f"Ensemble Result: {counter}")
             return most_common_result
         except:
             return None
@@ -1047,23 +1039,56 @@ class ModeratorMinion(Minion):
         if self.input.ensemble_logic:
             ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
             ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
-
             if ensemble_logic == "majority_voting":
-                results = []
                 for minion in ensemble_minions:
                     minion_name = minion["name"]
                     count = minion["count"]
-                    for _ in range(count):  # skip route
+
+            if ensemble_logic == "majority_voting":
+                total = 0
+                for minion in ensemble_minions:
+                    minion_name = minion["name"]
+                    count = minion["count"]
+                    total += count
+                majority_count = total // 2 + 1
+                results = []
+                results = {}
+
+                for minion in ensemble_minions:
+                    minion_name = minion["name"]
+                    count = minion["count"]
+
+                    for _ in range(count):  # Skip route
                         result = await self.invoke_minion(minion_name)
+
                         if minion.get("post_processing", None) == "extract_number_from_string":
                             result = extract_number_from_string(result)
-                        if result:
-                            results.append(result)
 
-                # Perform majority voting on the collected results
-                final_result = self.majority_voting(results)
-                self.answer = self.input.answer = final_result
-                return final_result
+                        if result:
+                            # Update the results dictionary
+                            weight = minion.get("weight", 1)
+                            if result in results:
+                                results[result] += weight
+                            else:
+                                results[result] = weight
+
+                            # Check if this result has reached the majority count
+                            if results[result] >= majority_count:
+                                self.answer = self.input.answer = result
+                                return result  # Majority found, return it
+
+                # No result reached majority; find the result with the highest weight
+                most_weight = max(results.values())
+                most_weight_result = max(results, key=results.get)
+
+                if most_weight < majority_count:
+                    print(
+                        f"Warning: No result reached the majority count,most_weight is {most_weight}, most_weight_result is {most_weight_result}"
+                    )
+
+                # Return the result with the highest weight
+                self.answer = self.input.answer = most_weight_result
+                return self.answer
         else:
             route_minion = RouteMinion(input=self.input, brain=self.brain)
             result = await route_minion.execute()

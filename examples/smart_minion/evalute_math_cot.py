@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 
 import aiofiles
@@ -25,6 +26,20 @@ def load_jsonl(file_path):
     return data
 
 
+def load_json_files_from_dir(directory):
+    json_data_list = []
+    # Iterate over all files in the directory
+    for file_name in os.listdir(directory):
+        # Check if the file is a JSON file
+        if file_name.endswith(".json"):
+            file_path = os.path.join(directory, file_name)
+            # Open and load the JSON file
+            with open(file_path, "r") as json_file:
+                json_data = json.load(json_file)
+                json_data_list.append(json_data)
+    return json_data_list
+
+
 def extract_answer(answer_str):
     # Regular expression to find the answer after '####'
     match = re.search(r"####\s*(.*)", answer_str)
@@ -35,7 +50,14 @@ def extract_answer(answer_str):
 
 
 async def evaluate_dataset(
-    data, last_processed_id=0, start_id=None, to_processed_id=None, route="cot", run_filename=None
+    data,
+    last_processed_id=0,
+    start_id=None,
+    to_processed_id=None,
+    route="cot",
+    run_filename=None,
+    continue_process=False,
+    concurrency_count=1,
 ):
     correct = 0
     count = 0
@@ -54,6 +76,12 @@ async def evaluate_dataset(
                 mismatch.append(result)
         return correct
 
+    async def read_json_file(filename):
+        async with aiofiles.open(filename, "r") as f:
+            contents = await f.read()
+            data = json.loads(contents)
+        return data
+
     async def save_run_info(filename=None):
         if filename:
             run_info = {
@@ -66,6 +94,15 @@ async def evaluate_dataset(
             }
             async with aiofiles.open(filename, "w") as f:
                 await f.write(json.dumps(run_info, indent=4))
+
+    if continue_process:
+        run_info = await read_json_file(filename=run_filename)
+        last_processed_id = run_info["last_processed_id"]
+        matched_ids = run_info["matched_ids"]
+        run_info["mismatched_ids"]
+        correct = run_info["correct"]
+        count = run_info["count"]
+        # correct_percentage = run_info["correct_percentage"]
 
     with tqdm(total=total_count, desc="Evaluating") as pbar:
         for i, item in enumerate(data):
@@ -81,7 +118,7 @@ async def evaluate_dataset(
             count += 1
             tasks.append(solve_single_question(item, route=route))
 
-            if len(tasks) == 6:
+            if len(tasks) == concurrency_count:
                 correct = await process_batch(tasks, correct)
                 tasks = []  # Reset tasks after processing
                 pbar.set_postfix({"Correct": correct, "count": count})
@@ -149,11 +186,11 @@ async def solve_question(question, route=None):
 
 
 async def main():
-    file_name = "gsm8k_test.json"
-    data = load_jsonl(file_name)
+    file_name = "/Users/femtozheng/python-project/math/MATH/test/algebra"
+    data = load_json_files_from_dir(file_name)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_gsm8k.json", start_id=1, to_processed_id=1
+        data, run_filename="run_math.json", start_id=0, continue_process=True, concurrency_count=30
     )
 
     print(f"Accuracy: {correct/count:.2%}")

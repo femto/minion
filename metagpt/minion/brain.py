@@ -26,8 +26,7 @@ class Mind(BaseModel):
     description: str = ""
     brain: Any = None  # Brain
 
-    async def step(self, input, run_id=None):
-        input.run_id = run_id or uuid.uuid4()
+    async def step(self, input):
         input.short_context = input.context  # first set digested context same as context
 
         moderator = ModeratorMinion(input, brain=self.brain)
@@ -36,7 +35,7 @@ class Mind(BaseModel):
 
 
 class Brain:
-    def __init__(self, id=None, memory=None, memory_config=None, llm=LLM()):
+    def __init__(self, id=None, memory=None, memory_config=None, llm=LLM(), python_env=None):
         self.id = id or uuid.uuid4()
         self.minds = {}
         self.add_mind(
@@ -88,20 +87,26 @@ Supporting navigation and spatial memory""",
         self.llm = llm
 
         image_name = "intercode-python"
-        self.python_env = PythonEnv(image_name, verbose=False, is_agent=True)
+        self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind
         mind.brain = self
 
     async def step(self, input=None, query="", query_type="", **kwargs):
-        run_id = uuid.uuid4()
-
         input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
+        input.query_id = input.query_id or uuid.uuid4()
 
         mind_id = await self.choose_mind(input)
+        if mind_id == "left_mind":
+            self.llm.config.temperature = 0.1
+        elif mind_id == "right_mind":
+            self.llm.config.temperature = 0.7
         mind = self.minds[mind_id]
-        return await mind.step(input, run_id)
+        return await mind.step(input)
+
+    def cleanup_python_env(self, input):
+        self.python_env.step(f"<id>{input.query_id}</id>RESET_CONTAINER_SPECIAL_KEYWORD")
 
     async def choose_mind(self, input):
         mind_template = Template(

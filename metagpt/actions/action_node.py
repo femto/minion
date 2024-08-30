@@ -415,9 +415,10 @@ class ActionNode:
         system_msgs: Optional[list[str]] = None,
         schema="markdown",  # compatible to original format
         timeout=USE_CONFIG_TIMEOUT,
+        **kwargs,
     ) -> (str, BaseModel):
         """Use ActionOutput to wrap the output of aask"""
-        content = await self.llm.aask(prompt, system_msgs, images=images, timeout=timeout)
+        content = await self.llm.aask(prompt, system_msgs, images=images, timeout=timeout, **kwargs)
         logger.debug(f"llm raw output:\n{content}")
         output_class = self.create_model_class(output_class_name, output_data_mapping)
 
@@ -447,19 +448,25 @@ class ActionNode:
         self.set_recursive("context", context)
 
     async def simple_fill(
-        self, schema, mode, images: Optional[Union[str, list[str]]] = None, timeout=USE_CONFIG_TIMEOUT, exclude=None
+        self,
+        schema,
+        mode,
+        images: Optional[Union[str, list[str]]] = None,
+        timeout=USE_CONFIG_TIMEOUT,
+        exclude=None,
+        **kwargs,
     ):
         prompt = self.compile(context=self.context, schema=schema, mode=mode, exclude=exclude)
         if schema != "raw":
             mapping = self.get_mapping(mode, exclude=exclude)
             class_name = f"{self.key}_AN"
             content, scontent = await self._aask_v1(
-                prompt, class_name, mapping, images=images, schema=schema, timeout=timeout
+                prompt, class_name, mapping, images=images, schema=schema, timeout=timeout, **kwargs
             )
             self.content = content
             self.instruct_content = scontent
         else:
-            self.content = await self.llm.aask(prompt)
+            self.content = await self.llm.aask(prompt, **kwargs)
             self.instruct_content = None
 
         return self
@@ -474,6 +481,7 @@ class ActionNode:
         images: Optional[Union[str, list[str]]] = None,
         timeout=USE_CONFIG_TIMEOUT,
         exclude=[],
+        **kwargs,
     ):
         """Fill the node(s) with mode.
 
@@ -501,14 +509,18 @@ class ActionNode:
             schema = self.schema
 
         if strgy == "simple":
-            return await self.simple_fill(schema=schema, mode=mode, images=images, timeout=timeout, exclude=exclude)
+            return await self.simple_fill(
+                schema=schema, mode=mode, images=images, timeout=timeout, exclude=exclude, **kwargs
+            )
         elif strgy == "complex":
             # 这里隐式假设了拥有children
             tmp = {}
             for _, i in self.children.items():
                 if exclude and i.key in exclude:
                     continue
-                child = await i.simple_fill(schema=schema, mode=mode, images=images, timeout=timeout, exclude=exclude)
+                child = await i.simple_fill(
+                    schema=schema, mode=mode, images=images, timeout=timeout, exclude=exclude, **kwargs
+                )
                 tmp.update(child.instruct_content.model_dump())
             cls = self._create_children_class()
             self.instruct_content = cls(**tmp)

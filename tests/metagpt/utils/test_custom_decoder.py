@@ -115,3 +115,25 @@ def test_parse_triple_single_quote():
 
     parsed_data = decoder.decode(input_data)
     assert parsed_data["a"] == "b"
+
+
+def test_parse_invalid_escape():
+    decoder = CustomDecoder(strict=False)
+
+    input_data = """{
+        "task_id": "1",
+        "dependent_task_ids": [],
+        "instruction": "Express \(z\) in terms of its modulus and argument.",
+        "task_type": "expression",
+        "task_params": {
+            "modulus": 4,
+            "argument": "theta"
+        },
+        "output_key": "z_expr",
+        "output_type": "str",
+        "output_description": "Expression of \(z\) as \(4e^{i\\theta}\).",
+        "dependent": []
+    }
+"""
+    parsed_data = decoder.decode(input_data)
+    assert parsed_data["task_id"] == "1"

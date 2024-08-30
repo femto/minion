@@ -6,37 +6,13 @@
 @File    : brain.py
 """
 import asyncio
-import os
-import re
 
 import yaml
 
 from metagpt.llm import LLM
 from metagpt.minion.brain import Brain
-
-
-def replace_placeholders_with_env(config):
-    # Define a regex pattern to match placeholders like "${ENV_VAR}"
-    pattern = re.compile(r"\$\{([^}]+)\}")
-
-    def replace_in_value(value):
-        if isinstance(value, str):
-            # Search for the placeholder pattern
-            match = pattern.search(value)
-            if match:
-                env_var = match.group(1)
-                return os.getenv(env_var, value)  # Replace with env var if available, otherwise keep the original value
-        return value
-
-    def recursive_replace(obj):
-        if isinstance(obj, dict):
-            return {key: recursive_replace(value) for key, value in obj.items()}
-        elif isinstance(obj, list):
-            return [recursive_replace(item) for item in obj]
-        else:
-            return replace_in_value(obj)
-
-    return recursive_replace(config)
+from metagpt.minion.rpyc_python_env import RpycPythonEnv
+from metagpt.minion.utils import replace_placeholders_with_env
 
 
 async def smart_brain():
@@ -61,7 +37,9 @@ async def smart_brain():
     # Use the updated config in your application
     # print(config)
 
-    brain = Brain(memory_config=config)
+    # brain = Brain(memory_config=config)
+    brain = Brain(python_env=RpycPythonEnv(port=3007))
+    # brain = Brain()
 
     # obs, score, *_ = await brain.step(query="create a 2048 game")
     # print(obs)
@@ -71,17 +49,17 @@ async def smart_brain():
     #     query_type="code_problem",
     # )
     # print(obs)
-    #
+
     # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 4 3 9 8")
     # print(obs)
     #
     # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 5 11 8")
     # print(obs)
-
-    # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 4 5 5")
-    # print(obs)
-    # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
-    # print(obs)
+    #
+    obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 4 5 5")
+    print(obs)
+    obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
+    print(obs)
 
     # obs, score, *_ = await brain.step(
     #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?"
