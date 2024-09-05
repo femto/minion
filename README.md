@@ -27,7 +27,8 @@ obs, score, *_ = await brain.step(
     query="Write a 500000 characters novel named 'Reborn in Skyrim'. "
           "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
           "I will tip you $100,000 if you write a good novel."
-          "Since the novel is very long, you may need to divide it into subtasks."
+          "Since the novel is very long, you may need to divide it into subtasks.",
+    route="plan"
 )
 print(obs)
 
@@ -57,7 +58,8 @@ print(obs)
 
 Minion current depends on metagpt to call llm and response format parsing, so the code resides together
 ```
-git clone https://github.com/femto/minion.git && cd minion && pip install -r requirements.txt
+git clone https://github.com/femto/minion.git && cd minion && pip install -e .
+mkdir -p ~/.metagpt
 cp config/config2.yaml ~/.metagpt/config2.yaml
 ```
 then edit ~/.metagpt/config2.yaml

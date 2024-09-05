@@ -62,7 +62,6 @@ async def smart_brain():
     #     cache_plan=cache_plan,
     # )
     # print(obs)
-
     cache_plan = os.path.join(current_file_dir, "math", "plan_gpt4o.1.json")
     obs, score, *_ = await brain.step(
         query="Compute $\\tan 210^\\circ$.",

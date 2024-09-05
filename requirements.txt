@@ -80,3 +80,10 @@ intercode-bench
 rpyc
 mem0ai
 embedchain>=0.1.120
+nltk
+matplotlib
+
+SQLAlchemy
+aiosqlite
+asyncpg
+#psycopg2-binary

@@ -39,14 +39,21 @@ class Task(BaseModel):
 class Input(BaseModel):
     long_context: str = Field(default="")
     short_context: str = ""  # abstract/summarized version
+
     query: str = ""
     query_type: str = "question"  # question or requirement
+
     guidance: str = ""
     constraint: str = ""  # question or requirement
     instruction: str = ""  # instruction for each step, different step can have different instruction
 
-    complexity: str = ""  # low,medium,high
-    query_range: str = ""  # short range query, or multiple step range like writing a very long novel
+    # identification
+    complexity: str = None  # low,medium,high
+    query_range: str = None  # short range query, or multiple step range like writing a very long novel
+    difficulty: str = None
+    field: str = None
+    subfield: str = None
+
     # plan:str = "" # current plan
     score_func: Any = None
 
@@ -77,8 +84,11 @@ class Input(BaseModel):
     query_id: str = Field(default_factory=uuid.uuid4)
     run_id: str = Field(default_factory=uuid.uuid4)
 
-    field: str = ""
-    subfield: str = ""
+    # for training
+    item_id: Any = None
+    raw_correct_answer: str = None
+    correct_answer: Any = None
+    extract_correct_answer: Any = None
 
     @property
     def context(self):

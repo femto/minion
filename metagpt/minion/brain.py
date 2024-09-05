@@ -5,7 +5,6 @@
 @Author  : femto Zheng
 @File    : brain.py
 """
-
 import uuid
 from datetime import datetime
 from typing import Any
@@ -35,7 +34,15 @@ class Mind(BaseModel):
 
 
 class Brain:
-    def __init__(self, id=None, memory=None, memory_config=None, llm=LLM(), python_env=None):
+    def __init__(
+        self,
+        id=None,
+        memory=None,
+        memory_config=None,
+        llm=LLM(),
+        python_env=None,
+        stats_storer=None,
+    ):
         self.id = id or uuid.uuid4()
         self.minds = {}
         self.add_mind(
@@ -88,6 +95,8 @@ Supporting navigation and spatial memory""",
 
         image_name = "intercode-python"
         self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
+
+        self.stats_storer = stats_storer
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind

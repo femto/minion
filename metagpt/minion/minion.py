@@ -10,7 +10,6 @@ import os
 import re
 import uuid
 from collections import Counter
-from difflib import SequenceMatcher
 from typing import List
 
 import networkx as nx
@@ -22,7 +21,11 @@ from metagpt.actions.action_node import ActionNode
 from metagpt.logs import logger
 from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
-from metagpt.minion.utils import extract_number_from_string
+from metagpt.minion.utils import (
+    compare_number_result,
+    extract_number_from_string,
+    most_similar_minion,
+)
 from metagpt.utils.custom_decoder import CustomDecoder
 
 
@@ -53,20 +56,6 @@ def extract_final_answer(text):
         return match_tag.group(1).strip()
 
     return None
-
-
-# Function to find the most similar minion
-def most_similar_minion(input_name, minions):
-    max_similarity = 0
-    best_match = None
-
-    for minion in minions:
-        similarity = SequenceMatcher(None, input_name, minion).ratio()
-        if similarity > max_similarity:
-            max_similarity = similarity
-            best_match = minion
-
-    return best_match
 
 
 class MetaPlan(BaseModel):
@@ -115,9 +104,11 @@ class Identification(BaseModel):
 
     query_range: str = Field(
         default="",
-        description="if it's a short range query that only require few steps, few context memory to complete the query, return short, "
-        "otherwise multiple step, require long term range attention to store relevant long context memory,"
-        "return long",
+        description="Determine the required range of attention for processing the query based on its complexity and the extent of contextual memory required. "
+        "If the query can be completed in a few steps with minimal context, return 'short'. "
+        "For tasks that require a moderate amount of contextual memory and processing, return 'medium'. "
+        "For complex, multi-step queries necessitating extensive long-term contextual memory, return 'long'. "
+        "For highly intricate queries, such as writing an entire novel or solving problems with multiple interdependent variables, return 'super long'.",
     )  # short range query, or multiple step range like writing a very long novel
     field: str = Field(
         default="",
@@ -169,7 +160,7 @@ class Plan(BaseModel):
 
 
 COT_PROBLEM_INSTRUCTION = """
-Let's approach this problem by breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it. Consider any underlying assumptions, explore potential alternative approaches, and evaluate the consequences of each decision. Once you have thoroughly analyzed all aspects, synthesize the findings to reach a well-supported conclusion. Finally, ensure that your answer is directly accessible and requires no further interpretation by presenting it clearly and explicitly within the tags <final_answer></final_answer>.
+Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion. Clearly express your final conclusion, ensuring that it is directly accessible and requires no further interpretation by presenting it explicitly within the tags <final_answer></final_answer>. Finally, include a verbalized confidence level for your conclusion (e.g., “Confidence: 60% / Medium”) to convey your level of certainty in the analysis and decision-making process.
 """
 ASK_PROMPT = """context:
 {input.short_context}
@@ -670,6 +661,29 @@ class Minion(metaclass=SubclassHookMeta):
         is_finished = meta_planner.instruct_content.is_finished
         return is_finished
 
+    async def update_stats(self, minion_name, result, raw_answer):
+        if self.brain.stats_storer:
+            outcome = "correct" if compare_number_result(result, self.input.correct_answer) else "incorrect"
+            stats_data = {
+                "item_id": str(self.input.item_id),
+                "minion_name": minion_name,
+                "answer": str(result),
+                "raw_answer": raw_answer,
+                "raw_correct_answer": self.input.raw_correct_answer,
+                "correct_answer": self.input.correct_answer,
+                "complexity": self.input.complexity,
+                "query_range": self.input.query_range,
+                "difficulty": self.input.difficulty,
+                "field": self.input.field,
+                "subfield": self.input.subfield,
+                "outcome": outcome,
+            }
+
+            await self.brain.stats_storer.update_stats(stats_data)
+
+            # To retrieve stats
+            # stats = await stats_storer.get_stats(item_id)
+
     @property
     def clean_answer(self):
         answer = extract_content(self.answer_node.content)
@@ -729,12 +743,13 @@ class PlanMinion(Minion):
 
     def write_json_to_cache(self, file, data):
         # Ensure that the data is serializable to JSON
-        try:
-            with open(file, "w") as file:
-                json.dump(data, file, indent=4)  # Write the JSON data to the file with indentation for readability
-            print(f"Data successfully written to {self.input.cache_plan}")
-        except (TypeError, IOError) as e:
-            print(f"An error occurred: {e}")
+        if file:
+            try:
+                with open(file, "w") as file:
+                    json.dump(data, file, indent=4)  # Write the JSON data to the file with indentation for readability
+                print(f"Data successfully written to {self.input.cache_plan}")
+            except (TypeError, IOError) as e:
+                print(f"An error occurred: {e}")
 
     def validate_json_plan(self, json_plan):
         # Convert tasks to a graph and perform a topological sort
@@ -1039,19 +1054,16 @@ class ModeratorMinion(Minion):
         if self.input.ensemble_logic:
             ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
             ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
-            if ensemble_logic == "majority_voting":
-                for minion in ensemble_minions:
-                    minion_name = minion["name"]
-                    count = minion["count"]
 
-            if ensemble_logic == "majority_voting":
+            if ensemble_logic["type"] == "majority_voting":
                 total = 0
                 for minion in ensemble_minions:
                     minion_name = minion["name"]
                     count = minion["count"]
-                    total += count
+                    weight = minion.get("weight", 1)
+                    total += count * weight
                 majority_count = total // 2 + 1
-                results = []
+
                 results = {}
 
                 for minion in ensemble_minions:
@@ -1059,21 +1071,35 @@ class ModeratorMinion(Minion):
                     count = minion["count"]
 
                     for _ in range(count):  # Skip route
-                        result = await self.invoke_minion(minion_name)
+                        raw_answer = await self.invoke_minion(minion_name)
 
                         if minion.get("post_processing", None) == "extract_number_from_string":
-                            result = extract_number_from_string(result)
+                            try:
+                                result = extract_number_from_string(raw_answer)
+                            except ValueError as e:
+                                if str(e) == "Multiple numbers found":
+                                    result = self.merge_result(raw_answer)  # try to see if llm can handle this
+                                    logger.warning(
+                                        f"Multiple numbers found in string: {result}, using llm to handle as {raw_answer}"
+                                    )
+                                    result = extract_number_from_string(result)
 
-                        if result:
+                        weight = minion.get("weight", 1)
+
+                        await self.update_stats(minion_name, result, raw_answer)
+
+                        if True:  # result: todo: consider how to handle result is None case
                             # Update the results dictionary
-                            weight = minion.get("weight", 1)
                             if result in results:
                                 results[result] += weight
                             else:
                                 results[result] = weight
 
-                            # Check if this result has reached the majority count
-                            if results[result] >= majority_count:
+                            # short circuit logic, check if this result has reached the majority count
+                            if (
+                                self.input.ensemble_logic["ensemble_strategy"].get("short_circuit", True)
+                                and results[result] >= majority_count
+                            ):
                                 self.answer = self.input.answer = result
                                 return result  # Majority found, return it
 
@@ -1125,6 +1151,7 @@ class IdentifyMinion(Minion):
 
         self.input.complexity = identification.instruct_content.complexity
         self.input.query_range = identification.instruct_content.query_range
+        self.input.difficulty = identification.instruct_content.difficulty
         self.input.field = identification.instruct_content.field
         self.input.subfield = identification.instruct_content.subfield
 
@@ -1161,15 +1188,6 @@ class RouteMinion(Minion):
         self.answer = self.input.answer = minion.answer
         return minion.answer
 
-    def majority_voting(self, results):
-        # Perform majority voting on the results
-        counter = Counter(results)
-        try:
-            most_common_result, _ = counter.most_common(1)[0]
-            return most_common_result
-        except:
-            return None
-
     async def choose_minion_and_run(self):
         choose_template = Template(SMART_PROMPT_TEMPLATE)
 
@@ -1179,6 +1197,7 @@ class RouteMinion(Minion):
         meta_plan = await ActionNode.from_pydantic(MetaPlan).fill(context=filled_template, llm=self.brain.llm)
 
         if self.input.route:
+            name = self.input.route
             logger.info(f"Use enforced route: {self.input.route}")
             klass = filtered_registry[self.input.route]
             minion = klass(input=self.input, brain=self.brain)
@@ -1186,10 +1205,12 @@ class RouteMinion(Minion):
             name = meta_plan.instruct_content.name
 
             name = most_similar_minion(name, filtered_registry.keys())
+            logger.info(f"Choosing Route: {name}")
             klass = filtered_registry[name]
             minion = klass(input=self.input, brain=self.brain)
         result = await minion.execute()
         self.answer = self.input.answer = result
+        await self.update_stats(name, result, result)
         return result
 
     async def execute(self):
