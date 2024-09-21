@@ -6,8 +6,6 @@ from difflib import SequenceMatcher
 import aiofiles
 from nltk.corpus import wordnet
 
-from metagpt.logs import logger
-
 
 def extract_id_and_command(full_command):
     # Extract the ID using regex
@@ -44,32 +42,58 @@ def replace_placeholders_with_env(config):
     return recursive_replace(config)
 
 
+def extract_last_number(text: str):
+    """Clean text and extract a single number"""
+    matches = re.findall(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?|\d+\.\d+", text)
+    if matches:
+        last_number = matches[-1].replace(",", "")
+        try:
+            return float(last_number)
+        except ValueError:
+            return None
+    else:
+        return None
+
+
 def extract_number_from_string(price_str):
-    if isinstance(price_str, int) or isinstance(price_str, float):
-        return price_str
+    # use deepseek eval logic, only looks last number
+    return extract_last_number(price_str)
+    # if isinstance(price_str, int) or isinstance(price_str, float):
+    #     return price_str
+    #
+    # price_str = price_str or ""
+    # # Remove commas from the string
+    # price_str = price_str.replace(",", "")
+    #
+    # try:
+    #     # Regular expression to match all numeric values
+    #     matches = re.findall(r"\d+(?:\.\d+)?", price_str)
+    #
+    #     if len(matches) == 1:
+    #         # Only one number found, return it as int or float
+    #         number_str = matches[0]
+    #         return float(number_str) if "." in number_str else int(number_str)
+    #     elif len(matches) > 1:
+    #         # More than one number found, handle accordingly
+    #         logger.warning(f"Multiple numbers found in string: {matches}, str: {price_str}")
+    #         raise ValueError("Multiple numbers found")
+    #         # return None
+    #     else:
+    #         return None  # Return None if no number is found
+    # except Exception as e:
+    #     logger.error("extract_number_from_string failed: " + str(e) + f", str: {price_str}")
+    #     return None  # Return None if there is an error
 
-    price_str = price_str or ""
-    # Remove commas from the string
-    price_str = price_str.replace(",", "")
 
-    try:
-        # Regular expression to match all numeric values
-        matches = re.findall(r"\d+(?:\.\d+)?", price_str)
+def extract_math_answer(text: str) -> str:
+    # Look for the answer within \boxed{...}
+    boxed_match = re.search(r"\\boxed{(.*?)}", text)
+    if boxed_match:
+        return boxed_match.group(1)
 
-        if len(matches) == 1:
-            # Only one number found, return it as int or float
-            number_str = matches[0]
-            return float(number_str) if "." in number_str else int(number_str)
-        elif len(matches) > 1:
-            # More than one number found, handle accordingly
-            logger.warning(f"Multiple numbers found in string: {matches}, str: {price_str}")
-            raise ValueError("Multiple numbers found")
-            # return None
-        else:
-            return None  # Return None if no number is found
-    except Exception as e:
-        logger.error("extract_number_from_string failed: " + str(e) + f", str: {price_str}")
-        return None  # Return None if there is an error
+    # If no \boxed{...}, return the last sentence
+    sentences = text.split(".")
+    return sentences[-1].strip() if sentences else ""
 
 
 def compare_number_result(result, correct_answer, tolerance=0.0):
@@ -153,6 +177,35 @@ def most_similar_minion(input_name, minions):
             best_match = minion
 
     return best_match
+
+
+# minion part
+def extract_content(text):
+    pattern = r"\[CONTENT\](.*?)\[/CONTENT\]"
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return text
+
+
+def snake_case_to_camel_case(snake_str: str, suffix: str = "Minion") -> str:
+    # Split the snake case string by underscores and capitalize each word
+    components = snake_str.split("_")
+    # Capitalize each component and join them
+    camel_case_str = "".join(x.capitalize() for x in components)
+    # Add the suffix
+    camel_case_with_suffix = camel_case_str + suffix
+    return camel_case_with_suffix
+
+
+def camel_case_to_snake_case(camel_str: str, suffix: str = "Minion") -> str:
+    # Remove the suffix
+    if camel_str.endswith(suffix):
+        camel_str = camel_str[: -len(suffix)]
+
+    # Find all places where a lowercase letter is followed by an uppercase letter
+    snake_case_str = re.sub(r"(?<!^)(?=[A-Z])", "_", camel_str).lower()
+    return snake_case_str
 
 
 def main():

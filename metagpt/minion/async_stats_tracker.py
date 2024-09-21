@@ -1,6 +1,7 @@
 import asyncio
 
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, Float, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.future import select
 from sqlalchemy.orm import declarative_base, relationship, selectinload, sessionmaker
@@ -20,6 +21,7 @@ class Item(Base):
     difficulty = Column(String)
     field = Column(String)
     subfield = Column(String)
+    additional_attributes = Column(JSON, nullable=True)
     experiments = relationship("Experiment", back_populates="item")
 
 
@@ -36,6 +38,7 @@ class Experiment(Base):
     correct_answer = Column(String)
     raw_correct_answer = Column(String)
     outcome = Column(String)
+    score = Column(Float)
     item = relationship("Item", back_populates="experiments")
 
 
@@ -67,6 +70,7 @@ class AsyncStatsTracker:
         difficulty,
         field,
         subfield,
+        additional_attributes=None,  # Optional dictionary for extra fields
     ):
         try:
             async with self.async_session() as session:
@@ -83,8 +87,13 @@ class AsyncStatsTracker:
                         difficulty=difficulty,
                         field=field,
                         subfield=subfield,
+                        additional_attributes=additional_attributes or {},
                     )
                     session.add(item)
+                else:
+                    # Update existing item with new fields if needed
+                    if additional_attributes:  # or assume the attributes is the same?
+                        item.additional_attributes.update(additional_attributes)
 
                 # Create new experiment
                 experiment = Experiment(
@@ -140,21 +149,21 @@ async def main():
     await tracker.init_db()
 
     # In your update_stats method
-    await tracker.update_stats(
-        item_id=self.input.item_id,
-        minion_name=minion_name,
-        result=result,
-        raw_answer=raw_answer,
-        correct_answer=self.input.correct_answer,
-        complexity=self.input.complexity,
-        query_range=self.input.query_range,
-        difficulty=self.input.difficulty,
-        field=self.input.field,
-        subfield=self.input.subfield,
-    )
-
-    # To retrieve stats
-    await tracker.get_stats(item_id)
+    # await tracker.update_stats(
+    #     item_id=self.input.item_id,
+    #     minion_name=minion_name,
+    #     result=result,
+    #     raw_answer=raw_answer,
+    #     correct_answer=self.input.correct_answer,
+    #     complexity=self.input.complexity,
+    #     query_range=self.input.query_range,
+    #     difficulty=self.input.difficulty,
+    #     field=self.input.field,
+    #     subfield=self.input.subfield,
+    # )
+    #
+    # # To retrieve stats
+    # await tracker.get_stats(item_id)
 
 
 if __name__ == "__main__":

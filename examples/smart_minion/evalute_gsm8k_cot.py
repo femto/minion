@@ -1,8 +1,11 @@
 import asyncio
 import json
+import os
 import re
+from typing import List
 
 import aiofiles
+import numpy as np
 from tqdm.asyncio import tqdm
 
 from metagpt.minion.brain import Brain
@@ -77,10 +80,13 @@ async def evaluate_dataset(
                 "count": count,
                 "correct_percentage": correct / count if count > 0 else 0,
             }
-            async with aiofiles.open(filename, "w") as f:
-                await f.write(json.dumps(run_info, indent=4))
+            try:
+                async with aiofiles.open(filename, "w") as f:
+                    await f.write(json.dumps(run_info, indent=4))
+            except:
+                pass
 
-    if continue_process:
+    if continue_process and os.path.exists(run_filename):
         run_info = await read_json_file(filename=run_filename)
         last_processed_id = run_info["last_processed_id"]
         matched_ids = run_info["matched_ids"]
@@ -170,12 +176,40 @@ async def solve_question(question, route=None):
     return obs
 
 
+def generate_random_indices(n, n_samples, test=False):
+    """
+    生成随机索引
+    """
+
+    def _set_seed(seed=42):
+        np.random.seed(seed)
+
+    _set_seed()
+    indices = np.arange(n)
+    np.random.shuffle(indices)
+    if test:
+        return indices[n_samples:]
+    else:
+        return indices[:n_samples]
+
+
+async def load_data(file_path: str, samples=1) -> List[dict]:
+    data = []
+    async with aiofiles.open(file_path, mode="r") as file:
+        async for line in file:
+            data.append(json.loads(line))
+    random_indices = generate_random_indices(len(data), samples)
+    data = [data[i] for i in random_indices]
+    return data
+
+
 async def main():
     file_name = "gsm8k_test.json"
-    data = load_jsonl(file_name)
+    # data = load_jsonl(file_name)
+    data = await load_data(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_gsm8k.json", start_id=174, continue_process=True, concurrency_count=30
+        data, run_filename="run_gsm8kss.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

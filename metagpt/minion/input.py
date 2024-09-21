@@ -58,7 +58,9 @@ class Input(BaseModel):
     score_func: Any = None
 
     answer: str = ""  # the extracted final answer
-    answer_raw: str = ""  # the complete answer with cot thought
+    solution: str = ""
+    raw_answer: str = ""  # the complete answer with cot thought
+    feedback: str = ""  # the feedback for improvement
 
     question_type: str = ""  # a query sub type that determines the answer protocol
     answer_protocol: str = ""
@@ -86,9 +88,10 @@ class Input(BaseModel):
 
     # for training
     item_id: Any = None
-    raw_correct_answer: str = None
+    raw_correct_answer: Optional[str] = None
     correct_answer: Any = None
     extract_correct_answer: Any = None
+    compare_answer: Any = None
 
     @property
     def context(self):

@@ -76,16 +76,16 @@ class RpycPythonEnv(IntercodeEnv):
         raise NotImplementedError
 
     def step(self, action: str) -> None:
-        full_id, action = extract_id_and_command(action)
+        full_id, code = extract_id_and_command(action)
         try:
-            if action.strip().startswith("def "):
+            if code.strip().startswith("def "):
                 if not self.is_agent:  # interactive input multiline
                     function_definition = self.input_multiline_function()
-                    action = action + "\n" + function_definition
+                    code = code + "\n" + function_definition
             else:
-                action = self.wrap_with_print(action)
+                code = self.wrap_with_print(code)
             self.logger.info(f"Command run: {action}")
-            self.observation = self.conn.root.execute(action)
+            self.observation = self.conn.root.execute(f"<id>{full_id}</id>{code}")
             self.info[ACTION_EXEC] = "error" in self.observation and len(self.observation["error"]) > 0
         except Exception as e:
             stack_trace = traceback.format_exc()

@@ -2,9 +2,9 @@
     "ensemble_strategy": {
         "ensemble_minions": [
             {
-                "name": "cot",
-                "count": 5,
-                "post_processing": "extract_number_from_string",
+                "name": "python",
+                "count": 1,
+
                 "short_circuit": false
             }
         ],

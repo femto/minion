@@ -16,8 +16,8 @@ from pydantic import BaseModel
 from metagpt.actions.action_node import ActionNode
 from metagpt.llm import LLM
 from metagpt.minion.input import Input
-from metagpt.minion.minion import ModeratorMinion
 from metagpt.minion.python_env import PythonEnv
+from metagpt.minion.worker import ModeratorMinion
 
 
 class Mind(BaseModel):

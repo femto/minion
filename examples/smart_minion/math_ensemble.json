@@ -4,7 +4,7 @@
             {
                 "name": "cot",
                 "count": 5,
-                "post_processing": "extract_number_from_string",
+                "post_processing": "extract_math_answer",
                 "short_circuit": false
             }
         ],

@@ -164,7 +164,7 @@ class OpenAILLM(BaseLLM):
             # "stop": None,  # default it's None and gpt4-v can't have this one
             # "temperature": self.config.temperature,
             "temperature": self.config.temperature,
-            "logprobs": True,
+            # "logprobs": True,
             "model": self.model,
             "timeout": self.get_timeout(timeout),
         }

@@ -49,14 +49,22 @@ async def smart_brain():
     # )
     # print(obs)
 
-    # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 4 3 9 8")
+    # obs, score, *_ = await brain.step(query="Which one is larger, 9.11 or 9.8?", route="dot")
     # print(obs)
+
+    obs, score, *_ = await brain.step(query="How many 'r's in the word 'strawberry'?", route="dot")
+    print(obs)
+
+    obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 4 3 9 8", route="dot")
+    print(obs)
     #
     # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 5 11 8")
     # print(obs)
     #
     # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 4 5 5")
     # print(obs)
+    obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 3 5 7 13")
+    print(obs)
     # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
     # print(obs)
 

@@ -7,6 +7,9 @@
                 "post_processing": "extract_number_from_string"
             }
         ],
-        "ensemble_logic": "majority_voting"
+        "ensemble_logic": {
+            "type": "majority_voting"
+
+        }
     }
 }
