@@ -8,8 +8,12 @@ import aiofiles
 import numpy as np
 from tqdm.asyncio import tqdm
 
+from metagpt.llm import LLM
+from metagpt.minion.answer_extraction import math_equal
 from metagpt.minion.brain import Brain
-from metagpt.minion.minion import extract_number_from_string
+from metagpt.minion.rpyc_python_env import RpycPythonEnv
+from metagpt.minion.utils import extract_number_from_string
+from metagpt.utils.cost_manager import CostManager
 
 
 # Load JSONL file
@@ -37,6 +41,11 @@ def extract_answer(answer_str):
         return None  # Return None if no match is found
 
 
+cost_manager = CostManager()
+llm = LLM()
+llm.cost_manager = cost_manager
+
+
 async def evaluate_dataset(
     data,
     last_processed_id=0,
@@ -62,7 +71,8 @@ async def evaluate_dataset(
                 matched_ids.append(result["item_id"])
             else:
                 mismatch.append(result)
-        return correct
+        last_processed_item = results[-1]  # Get the last processed item
+        return correct, last_processed_item
 
     async def read_json_file(filename):
         async with aiofiles.open(filename, "r") as f:
@@ -70,30 +80,32 @@ async def evaluate_dataset(
             data = json.loads(contents)
         return data
 
-    async def save_run_info(filename=None):
-        if filename:
-            run_info = {
-                "last_processed_id": last_processed_id,
-                "matched_ids": matched_ids,
-                "mismatched_ids": mismatch,
-                "correct": correct,
-                "count": count,
-                "correct_percentage": correct / count if count > 0 else 0,
-            }
-            try:
-                async with aiofiles.open(filename, "w") as f:
-                    await f.write(json.dumps(run_info, indent=4))
-            except:
-                pass
+    async def save_run_info(filename, last_processed_id):
+        run_info = {
+            "last_processed_id": last_processed_id,
+            "matched_ids": matched_ids,
+            "mismatched_ids": mismatch,
+            "correct": correct,
+            "count": count,
+            "correct_percentage": correct / count if count > 0 else 0,
+            "total_prompt_tokens": cost_manager.total_prompt_tokens,
+            "total_completion_tokens": cost_manager.total_completion_tokens,
+            "total_cost": cost_manager.total_cost,
+        }
+        async with aiofiles.open(filename, "w") as f:
+            await f.write(json.dumps(run_info, indent=4))
 
     if continue_process and os.path.exists(run_filename):
-        run_info = await read_json_file(filename=run_filename)
+        async with aiofiles.open(run_filename, "r") as f:
+            run_info = json.loads(await f.read())
         last_processed_id = run_info["last_processed_id"]
         matched_ids = run_info["matched_ids"]
-        run_info["mismatched_ids"]
+        mismatch = run_info["mismatched_ids"]
         correct = run_info["correct"]
         count = run_info["count"]
-        # correct_percentage = run_info["correct_percentage"]
+        cost_manager.total_prompt_tokens = run_info.get("total_prompt_tokens", 0)
+        cost_manager.total_completion_tokens = run_info.get("total_completion_tokens", 0)
+        cost_manager.total_cost = run_info.get("total_cost", 0)
 
     with tqdm(total=total_count, desc="Evaluating") as pbar:
         for i, item in enumerate(data):
@@ -110,22 +122,24 @@ async def evaluate_dataset(
             tasks.append(solve_single_question(item, route=route))
 
             if len(tasks) == concurrency_count:
-                correct = await process_batch(tasks, correct)
+                correct, last_processed_item = await process_batch(tasks, correct)
+                last_processed_id = last_processed_item["item_id"]
                 tasks = []  # Reset tasks after processing
                 pbar.set_postfix({"Correct": correct, "count": count})
                 pbar.update(6)
 
                 # Save running information after each batch
-                await save_run_info(filename=run_filename)
+                await save_run_info(filename=run_filename, last_processed_id=last_processed_id)
 
         # Process remaining tasks
         if tasks:
-            correct = await process_batch(tasks, correct)
+            correct, last_processed_item = await process_batch(tasks, correct)
+            last_processed_id = last_processed_item["item_id"]
             pbar.set_postfix({"Correct": correct})
             pbar.update(len(tasks))
 
-            # Save running information after the final batch
-            await save_run_info(filename=run_filename)
+            # Save running information after each batch
+            await save_run_info(filename=run_filename, last_processed_id=last_processed_id)
 
     return correct, count, matched_ids, mismatch
 
@@ -143,7 +157,7 @@ async def solve_single_question(item, route="cot"):
     user_answer_str = await solve_question(question, route=route)
     user_answer = extract_number_from_string(user_answer_str)
 
-    if float(extract_number_from_string(user_answer) or "-10000") == float(extract_number_from_string(correct_answer)):
+    if math_equal(user_answer, correct_answer):
         return {"result": 1, "item_id": item_id, "question": question, "user_answer": user_answer, "idx": item_id}
 
     else:
@@ -169,7 +183,7 @@ def load_ensemble_logic(file_path):
 async def solve_question(question, route=None):
     # Implement your problem-solving logic here
     # For example, this could be a math solver or text parser
-    brain = Brain()
+    brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
     obs, score, *_ = await brain.step(query=question, ensemble_logic=load_ensemble_logic("gsm8k_ensemble.json"))
     # print(obs)
@@ -193,7 +207,7 @@ def generate_random_indices(n, n_samples, test=False):
         return indices[:n_samples]
 
 
-async def load_data(file_path: str, samples=1) -> List[dict]:
+async def load_data_sample(file_path: str, samples=1) -> List[dict]:
     data = []
     async with aiofiles.open(file_path, mode="r") as file:
         async for line in file:
@@ -205,11 +219,11 @@ async def load_data(file_path: str, samples=1) -> List[dict]:
 
 async def main():
     file_name = "gsm8k_test.json"
-    # data = load_jsonl(file_name)
-    data = await load_data(file_name, samples=1055)
+    data = load_jsonl(file_name)
+    # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_gsm8kss.json", continue_process=True, concurrency_count=60
+        data, run_filename="run_gsm8k_deepseek_check_true.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

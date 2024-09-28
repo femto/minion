@@ -66,6 +66,7 @@ class Input(BaseModel):
     answer_protocol: str = ""
 
     ensemble_logic: dict = {}
+    check: bool = True
 
     # plan cache
     cache_plan: str = ""

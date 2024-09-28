@@ -460,12 +460,9 @@ Previous error:
                 )
                 prompt = prompt.render(input=self.input, task=self.task, error=error)
 
-            node = await node.fill(
-                context=prompt,
-                llm=self.brain.llm,
-            )
-            code = node.instruct_content.code
-            print(code)
+            node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
+            # code = node.instruct_content.code
+            # print(code)
 
             def extract_code(text):
                 # Regex pattern to extract code inside ```python ``` blocks
@@ -477,7 +474,7 @@ Previous error:
                 return text
 
             # deepseek may still put ```python...``` in the returned json
-            code = extract_code(code)
+            code = extract_code(node.content)
             self.answer_code = self.input.solution = code
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
@@ -734,18 +731,24 @@ class RouteMinion(Minion):
             klass = filtered_registry[name]
             minion = klass(input=self.input, brain=self.brain)
 
-        result = await self.invoke_minion_and_improve(minion, name, 3)
+        result = await self.invoke_minion_and_improve(minion, name)
         return result
 
-    async def invoke_minion_and_improve(self, minion, name, count=3):
-        if count:
+    async def invoke_minion_and_improve(self, minion, name, max_iterations=3):
+        for _ in range(max_iterations):
             result = await minion.execute()
             self.answer = self.input.answer = result
             await self.update_stats(name, result, result)
+
+            if not self.input.check:
+                break  # Exit the loop if checking is not required
+
             check_minion = CheckMinion(input=self.input, brain=self.brain)
-            result = await check_minion.execute()
-            if not result["correct"]:
-                return await self.invoke_minion_and_improve(minion, name, count - 1)
+            check_result = await check_minion.execute()
+
+            if check_result and check_result["correct"]:
+                break  # Exit the loop if the result is correct
+
         return self.answer
 
     async def execute(self):

@@ -36,7 +36,7 @@ class PythonEnv(IntercodeEnv):
                     function_definition = self.input_multiline_function()
                     action = action + "\n" + function_definition
             else:
-                action = self.wrap_with_print(action)
+                pass
             self.logger.info(f"Command run: {action}")
             self.observation = self.conn.root.execute(action)
             self.info[ACTION_EXEC] = "error" in self.observation and len(self.observation["error"]) > 0

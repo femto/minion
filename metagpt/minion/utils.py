@@ -57,7 +57,7 @@ def extract_last_number(text: str):
 
 def extract_number_from_string(price_str):
     # use deepseek eval logic, only looks last number
-    return extract_last_number(price_str)
+    return extract_last_number(str(price_str))
     # if isinstance(price_str, int) or isinstance(price_str, float):
     #     return price_str
     #

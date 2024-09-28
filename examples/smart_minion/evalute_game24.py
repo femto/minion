@@ -187,55 +187,49 @@ async def evaluate_dataset(
     return correct, count, matched_ids, mismatch
 
 
+def find_expression_end(s):
+    paren_count = 0
+    num_count = 0
+    op_count = 0
+    start = -1
+
+    for i, char in enumerate(s):
+        if start == -1:
+            if char.isdigit() or char == "(":
+                start = i
+            elif char not in " \n":  # Skip leading spaces and newlines
+                paren_count = 0
+                num_count = 0
+                op_count = 0
+                start = -1
+
+        if start != -1:
+            if char == "(":
+                paren_count += 1
+            elif char == ")":
+                paren_count -= 1
+            elif char.isdigit() and (i == len(s) - 1 or not s[i + 1].isdigit()):
+                num_count += 1
+            elif char in "+-*/":
+                op_count += 1
+            elif char not in " ()+-*/0123456789":
+                paren_count = 0
+                num_count = 0
+                op_count = 0
+                start = -1
+
+            if paren_count == 0 and num_count == 4 and op_count == 3:
+                return start, i + 1
+
+    return None, None
+
+
 def extract_solution(solution_str):
-    def find_expression_end(s):
-        paren_count = 0
-        num_count = 0
-        op_count = 0
-        start = -1
-
-        for i, char in enumerate(s):
-            if start == -1:
-                if char.isdigit() or char == "(":
-                    start = i
-                elif char not in " \n":  # Skip leading spaces and newlines
-                    paren_count = 0
-                    num_count = 0
-                    op_count = 0
-                    start = -1
-
-            if start != -1:
-                if char == "(":
-                    paren_count += 1
-                elif char == ")":
-                    paren_count -= 1
-                elif char.isdigit() and (i == len(s) - 1 or not s[i + 1].isdigit()):
-                    num_count += 1
-                elif char in "+-*/":
-                    op_count += 1
-                elif char not in " ()+-*/0123456789":
-                    paren_count = 0
-                    num_count = 0
-                    op_count = 0
-                    start = -1
-
-                if paren_count == 0 and num_count == 4 and op_count == 3:
-                    return start, i + 1
-
-        return None, None
-
-    start = re.search(r"[\d(]", solution_str)
-    if not start:
-        return None
-    start = start.start()
-
-    # Find the end of the expression
-    end = find_expression_end(solution_str, start)
-    if end == -1:
+    start, end = find_expression_end(solution_str)
+    if start is None or end is None:
         return None
 
-    # Extract the expression, including the last character
-    expr = solution_str[start : end + 1].strip()
+    expr = solution_str[start:end].strip()
 
     # Ensure we have 4 numbers and 3 operators
     numbers = re.findall(r"\d+", expr)
