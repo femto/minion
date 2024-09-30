@@ -32,12 +32,15 @@ from metagpt.minion.prompt import (
     COT_PROBLEM_INSTRUCTION,
     DOT_PROMPT,
     IDENTIFY_PROMPT,
+    MATH_PLAN_PROMPT,
     MERGE_PROMPT,
+    PLAN_PROMPT,
     PYTHON_PROMPT,
     QA_PROMPT_JINJA,
     SCORE_PROMPT,
     SMART_PROMPT_TEMPLATE,
     TASK_INPUT,
+    TASK_ROUTE_PROMPT,
 )
 from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
@@ -180,6 +183,34 @@ class Plan(BaseModel):
 
 
 @register_route_downstream
+class NativeMinion(Minion):
+    """native minion, directly asks llm for answer"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.input.instruction = ""
+
+    async def execute(self):
+        node = ActionNode(key="answer", expected_type=str, instruction="", example="")
+        node = await node.fill(context=(ASK_PROMPT).format(input=self.input), llm=self.brain.llm, schema="raw")
+        self.answer_node = node
+        self.answer = self.input.answer = extract_final_answer(node.content)
+
+        for _ in range(3):  # try using llm 3 times to extract answer
+            if not self.answer:
+                # try using llm to extract answer
+                node = ActionNode(
+                    key="answer", expected_type=str, instruction="extract final answer from result", example=""
+                )
+                node = await node.fill(context=node.content, llm=self.brain.llm, schema="json")
+                self.answer = self.input.answer = node.instruct_content.answer
+            else:
+                break
+        self.raw_answer = self.input.raw_answer = node.content
+        return self.answer  # maybe also adds score?
+
+
+@register_route_downstream
 class CotMinion(Minion):
     """Chain of Thought (CoT) Strategy, Ask the LLM to think step-by-step, explaining each part of the problem to enhance the accuracy of the answer. Please noted you can't access web or user's local computer, so if you need information from the web or from user's local computer, DON'T USE THIS STRATEGY."""
 
@@ -190,7 +221,10 @@ class CotMinion(Minion):
     async def execute(self):
         node = ActionNode(key="answer", expected_type=str, instruction="let's think step by step", example="")
         node = await node.fill(
-            context=(COT_PROBLEM_INSTRUCTION + ASK_PROMPT).format(input=self.input), llm=self.brain.llm, schema="raw"
+            context=(COT_PROBLEM_INSTRUCTION + ASK_PROMPT).format(input=self.input),
+            llm=self.brain.llm,
+            schema="raw",
+            images=self.input.images,
         )
         self.answer_node = node
         self.answer = self.input.answer = extract_final_answer(node.content)

@@ -8,7 +8,7 @@
 
 import uuid
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,7 @@ class Input(BaseModel):
 
     query: str = ""
     query_type: str = "question"  # question or requirement
+    images: Optional[Union[str, list[str]]] = (None,)
 
     guidance: str = ""
     constraint: str = ""  # question or requirement

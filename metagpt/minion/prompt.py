@@ -1,3 +1,6 @@
+NATIVE_PROBLEM_INSTRUCTION = """
+respond to the following query within the tags <final_answer></final_answer>.
+"""
 COT_PROBLEM_INSTRUCTION = """
 Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion. Clearly express your final conclusion, ensuring that it is directly accessible and requires no further interpretation by presenting it explicitly within the tags <final_answer></final_answer>. Finally, include a verbalized confidence level for your conclusion (e.g., “Confidence: 60% / Medium”) to convey your level of certainty in the analysis and decision-making process.
 """

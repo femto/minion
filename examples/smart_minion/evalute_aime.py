@@ -2,20 +2,22 @@ import asyncio
 import json
 import os
 import re
+from collections import Counter
 
 import aiofiles
 from datasets import load_dataset
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm
 
+from metagpt.llm import LLM
 from metagpt.minion.brain import Brain
-from metagpt.minion.minion import extract_number_from_string
+from metagpt.minion.rpyc_python_env import RpycPythonEnv
 from metagpt.minion.stats_storer import (
     JsonStatsStorer,
     MultipleStatsStorer,
     SqlStatsStorer,
 )
-from metagpt.minion.utils import compare_number_result
+from metagpt.utils.cost_manager import CostManager
 
 
 # Load JSONL file
@@ -67,6 +69,7 @@ class Item(BaseModel):
     arr: list[int] = None
 
     def __init__(self, **data):
+        data["id"] = str(data["id"])
         super().__init__(**data)
         # Split the id into parts
         parts = self.id.split("-")
@@ -86,11 +89,16 @@ class Item(BaseModel):
         return self.arr <= other.arr
 
 
-async def evaluate_aime(
+cost_manager = CostManager()
+llm = LLM()
+llm.cost_manager = cost_manager
+
+
+async def evaluate_dataset(
     data,
     last_processed_id=0,
     to_processed_id=None,
-    route="cot",
+    route=None,
     concurrency_count=1,
     start_id=None,
     continue_process=False,
@@ -123,6 +131,9 @@ async def evaluate_aime(
             "correct": correct,
             "count": count,
             "correct_percentage": correct / count if count > 0 else 0,
+            "total_prompt_tokens": cost_manager.total_prompt_tokens,
+            "total_completion_tokens": cost_manager.total_completion_tokens,
+            "total_cost": cost_manager.total_cost,
         }
         async with aiofiles.open(filename, "w") as f:
             await f.write(json.dumps(run_info, indent=4))
@@ -135,10 +146,13 @@ async def evaluate_aime(
         mismatch = run_info["mismatched_ids"]
         correct = run_info["correct"]
         count = run_info["count"]
+        cost_manager.total_prompt_tokens = run_info.get("total_prompt_tokens", 0)
+        cost_manager.total_completion_tokens = run_info.get("total_completion_tokens", 0)
+        cost_manager.total_cost = run_info.get("total_cost", 0)
 
     with tqdm(total=total_count, desc="Evaluating") as pbar:
-        for item in data:
-            item_id = Item(id=item.get("ID", -1))
+        for index, item in enumerate(data):
+            item_id = Item(id=index)
 
             if last_processed_id and item_id <= Item(id=last_processed_id):
                 continue
@@ -173,8 +187,96 @@ async def evaluate_aime(
     return correct, count, matched_ids, mismatch
 
 
-# Note: The solve_single_question function is not defined here.
-# Make sure it's implemented elsewhere in your code.
+def find_expression_end(s):
+    paren_count = 0
+    num_count = 0
+    op_count = 0
+    start = -1
+
+    for i, char in enumerate(s):
+        if start == -1:
+            if char.isdigit() or char == "(":
+                start = i
+            elif char not in " \n":  # Skip leading spaces and newlines
+                paren_count = 0
+                num_count = 0
+                op_count = 0
+                start = -1
+
+        if start != -1:
+            if char == "(":
+                paren_count += 1
+            elif char == ")":
+                paren_count -= 1
+            elif char.isdigit() and (i == len(s) - 1 or not s[i + 1].isdigit()):
+                num_count += 1
+            elif char in "+-*/":
+                op_count += 1
+            elif char not in " ()+-*/0123456789":
+                paren_count = 0
+                num_count = 0
+                op_count = 0
+                start = -1
+
+            if paren_count == 0 and num_count == 4 and op_count == 3:
+                return start, i + 1
+
+    return None, None
+
+
+def extract_solution(solution_str):
+    start, end = find_expression_end(solution_str)
+    if start is None or end is None:
+        return None
+
+    expr = solution_str[start:end].strip()
+
+    # Ensure we have 4 numbers and 3 operators
+    numbers = re.findall(r"\d+", expr)
+    operators = re.findall(r"[\+\-\*\/]", expr)
+    if len(numbers) != 4 or len(operators) != 3:
+        return None
+
+    return expr
+
+
+def evaluate_expression(expr, numbers):
+    # Convert all numbers to integers
+    numbers = [int(num) for num in numbers]
+
+    # Remove all whitespace and parentheses for number checking
+    expr_clean = re.sub(r"[\s\(\)]", "", expr)
+
+    # Extract all numbers from the expression
+    expr_numbers = [int(num) for num in re.findall(r"\d+", expr_clean)]
+
+    # Check if the numbers in the expression match the given numbers
+    if Counter(expr_numbers) != Counter(numbers):
+        return False
+
+    # Evaluate the expression
+    try:
+        result = eval(expr)
+        return abs(result - 24) < 1e-6  # Allow for small floating-point errors
+    except:
+        return False
+
+
+def verify_game24_solution(question, user_answer):
+    # Extract numbers from the question
+    numbers = re.findall(r"\d+", question)
+
+    # Ensure we have exactly 4 numbers
+    if len(numbers) != 4:
+        return False
+
+    # Extract the solution from the user_answer
+    solution = extract_solution(user_answer)
+    if not solution:
+        return False
+
+    # Verify the solution
+    return evaluate_expression(solution, numbers)
 
 
 async def solve_single_question(
@@ -184,11 +286,11 @@ async def solve_single_question(
 ):
     question = item["Question"]
     correct_answer_str = item["Answer"]
-    item_id = item.get("ID", -1)  # Extract the ID or use a default value
+    item_id = item["ID"]  # the item_id for update_stats
 
     # Extract the correct answer after '####'
 
-    correct_answer = extract_answer(correct_answer_str)
+    correct_answer = correct_answer_str  # extract_answer(correct_answer_str)
 
     # Your solver logic
     user_answer_str = await solve_question(
@@ -199,9 +301,12 @@ async def solve_single_question(
         item_id=item_id,
         stats_storer=stats_storer,
     )
-    user_answer = extract_number_from_string(user_answer_str)
+    user_answer = user_answer_str
 
-    if compare_number_result(extract_number_from_string(user_answer), extract_number_from_string(correct_answer)):
+    if verify_game24_solution(
+        question,
+        user_answer,
+    ):
         return {"result": 1, "item_id": item_id, "question": question, "user_answer": user_answer, "idx": item_id}
 
     else:
@@ -227,9 +332,7 @@ def load_ensemble_logic(file_path):
 async def solve_question(question, route=None, stats_storer=None, **kwargs):
     # Implement your problem-solving logic here
     # For example, this could be a math solver or text parser
-    brain = Brain(
-        stats_storer=stats_storer,
-    )
+    brain = Brain(stats_storer=stats_storer, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
     obs, score, *_ = await brain.step(
         query=question,
@@ -244,9 +347,6 @@ async def solve_question(question, route=None, stats_storer=None, **kwargs):
 
 
 async def main():
-    # file_name = "aime.json"
-    # data = load_json(file_name)
-
     data = load_dataset("qq8933/AIME_1983_2024", split="train")
 
     #
@@ -260,9 +360,8 @@ async def main():
 
     stats_storer = MultipleStatsStorer([json_storer, sql_storer])
 
-    correct, count, matched_ids, mismatched_ids = await evaluate_aime(
+    correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
         data,
-        last_processed_id="1981-0",
         to_processed_id=None,
         concurrency_count=1,
         stats_storer=stats_storer,
@@ -271,7 +370,7 @@ async def main():
         run_filename="run_aime.json",
     )
 
-    print(f"Accuracy: {correct/count:.2%}")
+    print(f"Accuracy: {correct / count:.2%}")
     print(f"Mismatched IDs: {mismatched_ids}")
 
 

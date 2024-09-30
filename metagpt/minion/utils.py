@@ -1,10 +1,14 @@
+import base64
+import io
 import json
 import os
 import re
 from difflib import SequenceMatcher
+from pathlib import Path
 
 import aiofiles
 from nltk.corpus import wordnet
+from PIL import Image
 
 
 def extract_id_and_command(full_command):
@@ -206,6 +210,34 @@ def camel_case_to_snake_case(camel_str: str, suffix: str = "Minion") -> str:
     # Find all places where a lowercase letter is followed by an uppercase letter
     snake_case_str = re.sub(r"(?<!^)(?=[A-Z])", "_", camel_str).lower()
     return snake_case_str
+
+
+def process_image(image_input):
+    # Check if it's already a base64 string
+    try:
+        base64.b64decode(image_input)
+        return image_input  # It's already base64, return as is
+    except:
+        pass  # Not base64, continue to other checks
+
+    # Check if it's a file path
+    if isinstance(image_input, str):
+        try:
+            path = Path(image_input)
+            if path.is_file():
+                with open(path, "rb") as image_file:
+                    return base64.b64encode(image_file.read()).decode("utf-8")
+        except:
+            pass  # Not a valid file path, continue to other checks
+
+    # Check if it's a PIL Image
+    if isinstance(image_input, Image.Image):
+        buffered = io.BytesIO()
+        image_input.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+    # If we've reached here, the input is not in a recognized format
+    raise ValueError("Input is not a recognized image format (base64 string, file path, or PIL Image)")
 
 
 def main():

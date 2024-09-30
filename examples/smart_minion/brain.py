@@ -6,9 +6,11 @@
 @File    : brain.py
 """
 import asyncio
+import base64
 
 import yaml
 
+from metagpt.llm import LLM
 from metagpt.minion.brain import Brain
 from metagpt.minion.rpyc_python_env import RpycPythonEnv
 from metagpt.minion.utils import replace_placeholders_with_env
@@ -21,7 +23,7 @@ async def smart_brain():
 
     # Load the .env file
     load_dotenv()
-
+    llm = LLM()
     # Load the config file
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -36,9 +38,9 @@ async def smart_brain():
     # Use the updated config in your application
     # print(config)
 
-    # brain = Brain(memory_config=config)
-    brain = Brain(python_env=RpycPythonEnv(port=3007))
-    # brain = Brain()
+    # brain = Brain(memory_config=config, llm=llm)
+    brain = Brain(python_env=RpycPythonEnv(port=3007), llm=llm)
+    # brain = Brain( llm=llm)
 
     # obs, score, *_ = await brain.step(query="create a 2048 game")
     # print(obs)
@@ -66,11 +68,11 @@ async def smart_brain():
     # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 3 5 7 13")
     # print(obs)
 
-    obs, score, *_ = await brain.step(query="create a 2048 game")
-    print(obs)
+    # obs, score, *_ = await brain.step(query="create a 2048 game")
+    # print(obs)
 
-    obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 3 8 13")
-    print(obs)
+    # obs, score, *_ = await brain.step(query="what's the solution for  game of 24 for 2 3 8 13")
+    # print(obs)
     # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
     # print(obs)
 
@@ -87,9 +89,34 @@ async def smart_brain():
     #     LLM()
     #     llm1.config.temperature = 0.7
     #
-    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.3.json")
+    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.3.json")
+    # obs, score, *_ = await brain.step(
+    #     query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
+    #     route="native",
+    #     dataset="aime 2024",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # llm.model = "z3-" + llm.model
+    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
+
+    # obs, score, *_ = await brain.step(
+    #     query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+    #     route="cot",
+    #     dataset="aime 2024",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
+
+    # llm.model = "z3-" + llm.model
+    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.11.json")
+    with open("aime_problem8.png", "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+        print(encoded_string)
     obs, score, *_ = await brain.step(
-        query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
+        query="Eight circles of radius $34$ can be placed tangent to $\overline{BC}$ of $\triangle ABC$ so that the circles are sequentially tangent to each other, with the first circle being tangent to $\overline{AB}$ and the last circle being tangent to $\overline{AC}$, as shown. Similarly, $2024$ circles of radius $1$ can be placed tangent to $\overline{BC}$ in the same manner. The inradius of $\triangle ABC$ can be expressed as $\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+        images="aime_problem8.png",
         route="cot",
         dataset="aime 2024",
         cache_plan=cache_plan,
@@ -97,16 +124,6 @@ async def smart_brain():
     print(obs)
 
 
-#
-#     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
-#
-#     obs, score, *_ = await brain.step(
-#         query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
-#         route="cot",
-#         dataset="aime 2024",
-#         cache_plan=cache_plan,
-#     )
-#     print(obs)
 #
 #     # obs, score, *_ = await brain.step(
 #     #     query="""33 op 6 = 60

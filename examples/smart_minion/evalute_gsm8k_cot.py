@@ -223,7 +223,7 @@ async def main():
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_gsm8k_deepseek_check_true.json", continue_process=True, concurrency_count=60
+        data, run_filename="run_gsm8k_deepseek_check_true1.json", continue_process=True, concurrency_count=1
     )
 
     print(f"Accuracy: {correct/count:.2%}")

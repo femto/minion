@@ -17,6 +17,7 @@ from metagpt.actions.action_node import ActionNode
 from metagpt.llm import LLM
 from metagpt.minion.input import Input
 from metagpt.minion.python_env import PythonEnv
+from metagpt.minion.utils import process_image
 from metagpt.minion.worker import ModeratorMinion
 
 
@@ -102,9 +103,20 @@ Supporting navigation and spatial memory""",
         self.minds[mind.id] = mind
         mind.brain = self
 
+    def process_image_input(self, input):
+        if input.images:
+            if isinstance(input.images, str):
+                input.images = process_image(input.images)
+            elif isinstance(input.images, list):
+                input.images = [process_image(img) for img in input.images]
+            else:
+                raise ValueError("input.images should be either a string or a list of strings/images")
+        return input.images
+
     async def step(self, input=None, query="", query_type="", **kwargs):
         input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
         input.query_id = input.query_id or uuid.uuid4()
+        input.images = self.process_image_input(input)  # normalize image format to base64
 
         mind_id = await self.choose_mind(input)
         if mind_id == "left_mind":
