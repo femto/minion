@@ -6,7 +6,6 @@
 @File    : brain.py
 """
 import asyncio
-import base64
 
 import yaml
 
@@ -109,14 +108,17 @@ async def smart_brain():
     # )
     # print(obs)
 
+    # obs, score, *_ = await brain.step(
+    #     query="Kylar went to the store to buy glasses for his new apartment. One glass costs $5, but every second glass costs only 60% of the price. Kylar wants to buy 16 glasses. How much does he need to pay for them",
+    #     route="cot",
+    #     dataset="gsm8k",
+    # )
+    # print(obs)
     # llm.model = "z3-" + llm.model
-    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.11.json")
-    with open("aime_problem8.png", "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-        print(encoded_string)
+    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.12.json")
+
     obs, score, *_ = await brain.step(
-        query="Eight circles of radius $34$ can be placed tangent to $\overline{BC}$ of $\triangle ABC$ so that the circles are sequentially tangent to each other, with the first circle being tangent to $\overline{AB}$ and the last circle being tangent to $\overline{AC}$, as shown. Similarly, $2024$ circles of radius $1$ can be placed tangent to $\overline{BC}$ in the same manner. The inradius of $\triangle ABC$ can be expressed as $\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
-        images="aime_problem8.png",
+        query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]",
         route="cot",
         dataset="aime 2024",
         cache_plan=cache_plan,

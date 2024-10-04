@@ -41,8 +41,9 @@ class Input(BaseModel):
     short_context: str = ""  # abstract/summarized version
 
     query: str = ""
-    query_type: str = "question"  # question or requirement
-    images: Optional[Union[str, list[str]]] = (None,)
+    query_type: str = ""  # generate,question(solve) or execution, requirement
+    query_sub_type: str = ""
+    images: Optional[Union[str, list[str]]] = None
 
     guidance: str = ""
     constraint: str = ""  # question or requirement

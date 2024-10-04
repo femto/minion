@@ -89,6 +89,7 @@ class MetaPlan(BaseModel):
         "if we choose this stragety, we are most likely to solve this problem, 0.0 means a"
         "bad match, if we choose this stragety, we are most likely fail to solve this problem",
     )
+    recommended_llm: str = Field(default="", description="The recommended LLM for this task based on its capabilities.")
     # complexity: str = Field(
     #     default="",
     #     description="estimate this problem's difficulty, when the problem is simple,only required one or several steps to solve this problem,"

@@ -84,6 +84,7 @@ nltk
 matplotlib
 
 SQLAlchemy
+sqlmodel
 aiosqlite
 asyncpg
 #psycopg2-binary
