@@ -87,6 +87,7 @@ SQLAlchemy
 sqlmodel
 aiosqlite
 asyncpg
+dill
 #psycopg2-binary
 #ell-ai
 #ell-ai[anthropic]

@@ -98,15 +98,24 @@ async def smart_brain():
     # print(obs)
 
     # llm.model = "z3-" + llm.model
+
+    # llm.model = "re2-" + llm.model
+    obs, score, *_ = await brain.step(
+        query="一架飞机降落在水面发现漏水时，已经进了一些水，水匀速进入飞机内.如果10人淘水，3小时淘完；如5人淘水8小时淘完.如果要求2小时淘完，要安排多少人淘水？",
+        route="dot",
+    )
+    print(obs)
+
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
 
-    # obs, score, *_ = await brain.step(
-    #     query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
-    #     route="cot",
-    #     dataset="aime 2024",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
+    llm.model = "re2-" + llm.model
+    obs, score, *_ = await brain.step(
+        query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+        route="cot",
+        dataset="aime 2024",
+        cache_plan=cache_plan,
+    )
+    print(obs)
 
     # obs, score, *_ = await brain.step(
     #     query="Kylar went to the store to buy glasses for his new apartment. One glass costs $5, but every second glass costs only 60% of the price. Kylar wants to buy 16 glasses. How much does he need to pay for them",
@@ -119,6 +128,32 @@ async def smart_brain():
 
     obs, score, *_ = await brain.step(
         query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]",
+        route="cot",
+        dataset="aime 2024",
+        cache_plan=cache_plan,
+    )
+    print(obs)
+
+    obs, score, *_ = await brain.step(
+        query='''
+from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
+        route="cot",
+        dataset="aime 2024",
+        cache_plan=cache_plan,
+    )
+    print(obs)
+
+    obs, score, *_ = await brain.step(
+        query="""'''
+    Given list of integers, return list in strange order.
+    Strange sorting, is when you start with the minimum value,
+    then maximum of the remaining integers, then minimum and so on.
+
+    Examples:
+    strange_sort_list([1, 2, 3, 4]) == [1, 4, 2, 3]
+    strange_sort_list([5, 5, 5, 5]) == [5, 5, 5, 5]
+    strange_sort_list([]) == []
+    '''""",
         route="cot",
         dataset="aime 2024",
         cache_plan=cache_plan,

@@ -8,7 +8,7 @@
 
 import uuid
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,15 @@ class Task(BaseModel):
     output: Any = None
     parent: Any = None
     # input : 'Input' = None
+
+
+class ExecutionState(BaseModel):
+    current_minion: Optional[str] = None
+    current_iteration: int = 0
+    current_task_index: int = 0
+    last_completed_task: Optional[str] = None
+    chosen_minion: Optional[str] = None
+    check_result: Optional[Dict[str, Any]] = None
 
 
 class Input(BaseModel):
@@ -86,8 +95,8 @@ class Input(BaseModel):
 
     dataset: str = ""  # which dataset this is
     dataset_description: str = ""  # the dataset description
-    query_id: str = Field(default_factory=uuid.uuid4)
-    run_id: str = Field(default_factory=uuid.uuid4)
+    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     # for training
     item_id: Any = None
@@ -95,6 +104,36 @@ class Input(BaseModel):
     correct_answer: Any = None
     extract_correct_answer: Any = None
     compare_answer: Any = None
+
+    # 新增字段
+    execution_state: ExecutionState = Field(default_factory=ExecutionState)
+
+    def save_state(self, file_path: str):
+        """将当前状态保存到文件"""
+        import os
+
+        import dill
+
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            dill.dump(self, f)
+
+    @classmethod
+    def load_state(cls, file_path: str) -> "Input":
+        """从文件加载状态"""
+        import os
+
+        import dill
+
+        if os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                return dill.load(f)
+
+    def update_execution_state(self, **kwargs):
+        """更新执行状态"""
+        for key, value in kwargs.items():
+            setattr(self.execution_state, key, value)
 
     @property
     def context(self):

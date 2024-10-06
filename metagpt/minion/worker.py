@@ -10,8 +10,9 @@ import os
 import re
 import uuid
 from collections import Counter
-from typing import List
+from typing import Any, Callable, Dict, List
 
+import dill
 import networkx as nx
 from jinja2 import Template
 from pydantic import BaseModel, Field
@@ -20,12 +21,14 @@ from tenacity import retry, stop_after_attempt, wait_none
 from metagpt.actions.action_node import ActionNode
 from metagpt.logs import logger
 from metagpt.minion.check import CheckMinion
+from metagpt.minion.input import Input
 from metagpt.minion.minion import (
     MINION_REGISTRY,
     MINION_ROUTE_DOWNSTREAM,
     Minion,
     register_route_downstream,
 )
+from metagpt.minion.preprocessing import PreprocessingMinion
 from metagpt.minion.prompt import (
     ASK_PROMPT,
     ASK_PROMPT_JINJA,
@@ -287,6 +290,7 @@ class PlanMinion(Minion):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plan_prompt = PLAN_PROMPT
+        self.execution_state: Dict[str, Any] = {}
 
     def write_json_to_cache(self, file, data):
         # Ensure that the data is serializable to JSON
@@ -375,28 +379,11 @@ class PlanMinion(Minion):
                 logger.error(f"Validation error: {error}. Retrying...")
         raise ValueError(f"Failed to validate plan after 5 attempts. Last error: {error}")
 
-    async def execute(self):
-        # log_dir = METAGPT_ROOT / "logs" / "plan"
-        #
-        # # Create the directory, including any necessary parent directories
-        # log_dir.mkdir(parents=True, exist_ok=True)
-        # filename = log_dir / f"json_plan_{self.id}.json"
-
-        self.plan = await self.get_plan_with_retry(cache_filename=self.input.cache_plan)
-
-        # save_json_to_file(self.plan, filename)
-
-        self.task_graph = convert_tasks_to_graph(self.plan)
-        # plot_graph(self.task_graph)
-        await self.execute_tasks_in_order(self.task_graph)
-        return self.answer
-
     async def execute_tasks_in_order(self, graph):
-        # Perform topological sorting
         sorted_tasks = list(nx.topological_sort(graph))
+        start_index = self.input.execution_state.current_task_index
 
-        for task_id in sorted_tasks:
-            # Execute the task (replace this with your actual task execution logic)
+        for index, task_id in enumerate(sorted_tasks[start_index:], start=start_index):
             for task in self.plan:
                 if task["task_id"] == task_id:
                     task_minion = TaskMinion(brain=self.brain, input=self.input, task=task)
@@ -404,8 +391,37 @@ class PlanMinion(Minion):
                     self.input.symbols[task["output_key"]] = Symbol(
                         result, task["output_type"], task["output_description"]
                     )
+
+                    self.input.update_execution_state(current_task_index=index + 1, last_completed_task=task_id)
+                    self.save_execution_state()
+
         self.answer = self.input.answer = result
         return self.answer
+
+    async def execute(self):
+        self.load_execution_state()
+        if not self.plan:
+            self.plan = await self.get_plan_with_retry(cache_filename=self.input.cache_plan)
+            self.task_graph = convert_tasks_to_graph(self.plan)
+        await self.execute_tasks_in_order(self.task_graph)
+        return self.answer
+
+    def save_execution_state(self):
+        """保存执行状态"""
+        # self.input.save_state(f"state_{self.input.query_id}.pkl")
+
+    def load_execution_state(self):
+        """加载执行状态"""
+        # self.input = Input.load_state(f"state_{self.input.query_id}.pkl")
+
+    def pause(self):
+        """暂停执行并保存当前状态"""
+        self.save_execution_state()
+
+    async def resume(self):
+        """从上次保存的状态恢复执行"""
+        self.load_execution_state()
+        await self.execute()
 
 
 @register_route_downstream
@@ -440,13 +456,18 @@ class TaskMinion(Minion):
         name = most_similar_minion(name, filtered_registry.keys())
         klass = filtered_registry[name]
         minion = klass(input=self.input, brain=self.brain, task=self.task, task_execution=True)
-        result = await minion.execute()
-        self.answer = self.task["answer"] = result
-        self.input.symbols[self.task["output_key"]] = result
-        print("#####OUTPUT#####")
-        print(f"{self.task['output_key']}:{result}")
 
-        return result
+        print("using task level check")
+        for _ in range(3):
+            result = await minion.execute()
+            self.answer = self.task["answer"] = result
+            self.input.symbols[self.task["output_key"]] = result
+            print("#####OUTPUT#####")
+            print(f"{self.task['output_key']}:{result}")
+            check_minion = CheckMinion(input=self.input, brain=self.brain)
+            check_result = await check_minion.execute()
+            if check_result and check_result["correct"]:
+                return self.answer
 
     async def execute(self):
         return await self.choose_minion_and_run()
@@ -579,14 +600,16 @@ class ScoreMinion(Minion):
 
 
 class ModeratorMinion(Minion):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.execution_state: Dict[str, Any] = {}
+
     async def invoke_minion(self, minion_name):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
 
         route_minion = RouteMinion(input=self.input, brain=self.brain)
         result = await route_minion.execute()
-        # if self.input.post_processing == "extract_number_from_string":
-        #     result = extract_number_from_string(result)
         self.answer = self.input.answer = result
         return result
 
@@ -601,79 +624,17 @@ class ModeratorMinion(Minion):
             return None
 
     async def choose_minion_and_run(self):
-        # choose golden ensemble
-        # design_ensemble = Template(ENSEMBLE_DESIGN_LOGIC_TEMPLATE)
-        # design_ensemble.render(input=self.input)
         identification = IdentifyMinion(input=self.input, brain=self.brain)
         await identification.execute()
 
+        # preprocessing
+        preprocessing_minion = PreprocessingMinion(input=self.input, brain=self.brain)
+        self.input = await preprocessing_minion.execute()
+
         if self.input.ensemble_logic:
-            ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
-            ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
-
-            if ensemble_logic["type"] == "majority_voting":
-                # calculate majority_count
-                total = 0
-                for minion in ensemble_minions:
-                    count = minion["count"]
-                    weight = minion.get("weight", 1)
-                    total += count * weight
-                majority_count = total // 2 + 1
-
-                results = {}
-
-                for minion in ensemble_minions:
-                    minion_name = minion["name"]
-                    count = minion["count"]
-
-                    for _ in range(count):
-                        raw_answer = await self.invoke_minion(minion_name)
-
-                        if minion.get("post_processing", None) == "extract_number_from_string":
-                            result = extract_number_from_string(raw_answer)
-                        elif minion.get("post_processing", None) == "extract_math_answer":
-                            result = extract_math_answer(raw_answer)
-                        else:
-                            result = raw_answer
-
-                        weight = minion.get("weight", 1)
-
-                        await self.update_stats(minion_name, result, raw_answer)
-
-                        if True:  # result: todo: consider how to handle result is None case
-                            # Update the results dictionary
-                            if result in results:
-                                results[result] += weight
-                            else:
-                                results[result] = weight
-
-                            # short circuit logic, check if this result has reached the majority count
-                            if (
-                                self.input.ensemble_logic["ensemble_strategy"].get("short_circuit", True)
-                                and results[result] >= majority_count
-                            ):
-                                self.answer = self.input.answer = result
-                                return result  # Majority found, return it
-
-                # No result reached majority; find the result with the highest weight
-                most_weight = max(results.values())
-                most_weight_result = max(results, key=results.get)
-
-                if most_weight < majority_count:
-                    print(
-                        f"Warning: No result reached the majority count,most_weight is {most_weight}, most_weight_result is {most_weight_result}"
-                    )
-
-                # Return the result with the highest weight
-                self.answer = self.input.answer = most_weight_result
-                return self.answer
+            return await self.execute_ensemble()
         else:
-            route_minion = RouteMinion(input=self.input, brain=self.brain)
-            result = await route_minion.execute()
-            # if self.input.post_processing == "extract_number_from_string":
-            #     result = extract_number_from_string(result)
-            self.answer = self.input.answer = result
-            return result
+            return await self.execute_single()
 
     async def merge_result(self, answer):
         merge_prompt = Template(MERGE_PROMPT)
@@ -689,13 +650,108 @@ class ModeratorMinion(Minion):
         node = await node.fill(context=filled_merge_prompt, llm=self.brain.llm)
         return extract_final_answer(node.content)
 
+    async def execute_ensemble(self):
+        ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
+        ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
+
+        if ensemble_logic["type"] == "majority_voting":
+            # calculate majority_count
+            total = 0
+            for minion in ensemble_minions:
+                count = minion["count"]
+                weight = minion.get("weight", 1)
+                total += count * weight
+            majority_count = total // 2 + 1
+
+            results = {}
+
+            for minion in ensemble_minions:
+                minion_name = minion["name"]
+                count = minion["count"]
+
+                for i in range(count):
+                    self.execution_state["current_minion"] = minion_name
+                    self.execution_state["current_iteration"] = i
+                    self.save_execution_state()
+
+                    raw_answer = await self.invoke_minion(minion_name)
+
+                    if minion.get("post_processing", None) == "extract_number_from_string":
+                        result = extract_number_from_string(raw_answer)
+                    elif minion.get("post_processing", None) == "extract_math_answer":
+                        result = extract_math_answer(raw_answer)
+                    else:
+                        result = raw_answer
+
+                    weight = minion.get("weight", 1)
+
+                    await self.update_stats(minion_name, result, raw_answer)
+
+                    if True:  # result: todo: consider how to handle result is None case
+                        # Update the results dictionary
+                        if result in results:
+                            results[result] += weight
+                        else:
+                            results[result] = weight
+
+                        # short circuit logic, check if this result has reached the majority count
+                        if (
+                            self.input.ensemble_logic["ensemble_strategy"].get("short_circuit", True)
+                            and results[result] >= majority_count
+                        ):
+                            self.answer = self.input.answer = result
+                            return result  # Majority found, return it
+
+            # No result reached majority; find the result with the highest weight
+            most_weight = max(results.values())
+            most_weight_result = max(results, key=results.get)
+
+            if most_weight < majority_count:
+                print(
+                    f"Warning: No result reached the majority count,most_weight is {most_weight}, most_weight_result is {most_weight_result}"
+                )
+
+            # Return the result with the highest weight
+            self.answer = self.input.answer = most_weight_result
+            return self.answer
+
+    async def execute_single(self):
+        return await self.invoke_minion(self.input.route)
+
     async def execute(self):
-        self.input.query_id = self.input.query_id or uuid.uuid4()
-        await self.choose_minion_and_run()
+        self.load_execution_state()
+
+        if self.input.execution_state.current_minion:
+            # 从上次状态恢复
+            minion_name = self.input.execution_state.current_minion
+            if self.input.ensemble_logic:
+                await self.execute_ensemble()
+            else:
+                await self.invoke_minion(minion_name)
+        else:
+            # 开始新的执行
+            await self.choose_minion_and_run()
 
         # clean up python env
         self.brain.cleanup_python_env(input=self.input)
         return self.answer
+
+    def save_execution_state(self):
+        """保存执行状态"""
+        self.input.save_state(f"state_{self.input.query_id}.pkl")
+
+    def load_execution_state(self):
+        """加载执行状态"""
+        self.input = Input.load_state(f"state_{self.input.query_id}.pkl") or self.input
+
+    def pause(self):
+        """暂停执行并保存当前状态"""
+        self.save_execution_state()
+
+    async def resume(self):
+        """从上次保存的状态恢复执行"""
+        self.load_execution_state()
+        await self.execute()
 
 
 class IdentifyMinion(Minion):
@@ -724,7 +780,7 @@ class QaMinion(Minion):
         self.hops = hops
 
     async def execute(self):
-        if self.input.dataset:
+        if self.input.dataset and not self.input.dataset_description:
             prompt = Template(QA_PROMPT_JINJA)
             prompt = prompt.render(question=f"what's {self.input.dataset}")
 
@@ -736,14 +792,19 @@ class QaMinion(Minion):
 
 
 class RouteMinion(Minion):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.execution_state: Dict[str, Any] = {}
+        self.current_minion = None
+
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
             klass = MINION_ROUTE_DOWNSTREAM.get(klass, CotMinion)
-        minion = klass(input=self.input, brain=self.brain)
-        self.add_followers(minion)
-        await minion.execute()
-        self.answer = self.input.answer = minion.answer
-        return minion.answer
+        self.current_minion = klass(input=self.input, brain=self.brain)
+        self.add_followers(self.current_minion)
+        await self.current_minion.execute()
+        self.answer = self.input.answer = self.current_minion.answer
+        return self.current_minion.answer
 
     async def choose_minion_and_run(self):
         choose_template = Template(SMART_PROMPT_TEMPLATE)
@@ -757,21 +818,24 @@ class RouteMinion(Minion):
             name = self.input.route
             logger.info(f"Use enforced route: {self.input.route}")
             klass = filtered_registry[self.input.route]
-            minion = klass(input=self.input, brain=self.brain)
         else:
             name = meta_plan.instruct_content.name
-
             name = most_similar_minion(name, filtered_registry.keys())
             logger.info(f"Choosing Route: {name}")
             klass = filtered_registry[name]
-            minion = klass(input=self.input, brain=self.brain)
 
-        result = await self.invoke_minion_and_improve(minion, name)
+        self.input.update_execution_state(chosen_minion=name)
+        self.save_execution_state()
+
+        result = await self.invoke_minion_and_improve(klass, name)
         return result
 
-    async def invoke_minion_and_improve(self, minion, name, max_iterations=3):
-        for _ in range(max_iterations):
-            result = await minion.execute()
+    async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
+        for iteration in range(max_iterations):
+            self.input.update_execution_state(current_iteration=iteration)
+            self.save_execution_state()
+
+            result = await self.invoke_minion(klass)
             self.answer = self.input.answer = result
             await self.update_stats(name, result, result)
 
@@ -781,13 +845,52 @@ class RouteMinion(Minion):
             check_minion = CheckMinion(input=self.input, brain=self.brain)
             check_result = await check_minion.execute()
 
+            self.input.update_execution_state(check_result=check_result)
+            self.save_execution_state()
+
             if check_result and check_result["correct"]:
                 break  # Exit the loop if the result is correct
 
         return self.answer
 
     async def execute(self):
-        self.input.query_id = self.input.query_id or uuid.uuid4()
-        self.input.run_id = self.input.run_id or uuid.uuid4()
-        await self.choose_minion_and_run()
+        self.load_execution_state()
+
+        if self.input.execution_state.chosen_minion:
+            # 从上次状态恢复
+            name = self.input.execution_state.chosen_minion
+            klass = MINION_ROUTE_DOWNSTREAM.get(name, CotMinion)
+            iteration = self.input.execution_state.current_iteration
+            await self.invoke_minion_and_improve(klass, name, max_iterations=3 - iteration)
+        else:
+            # 开始新的执行
+            await self.choose_minion_and_run()
+
         return self.answer
+
+    def save_execution_state(self):
+        """保存执行状态"""
+        # self.input.save_state(f"state_{self.input.query_id}.pkl")
+
+    def load_execution_state(self):
+        """加载执行状态"""
+        # self.input = Input.load_state(f"state_{self.input.query_id}.pkl")
+
+    def pause(self):
+        """暂停执行并保存当前状态"""
+        self.save_execution_state()
+
+    async def resume(self):
+        """从上次保存的状态恢复执行"""
+        self.load_execution_state()
+        await self.execute()
+
+    @staticmethod
+    def serialize_function(func: Callable) -> str:
+        """Serialize a function to a string."""
+        return dill.dumps(func).hex()
+
+    @staticmethod
+    def deserialize_function(func_str: str) -> Callable:
+        """Deserialize a function from a string."""
+        return dill.loads(bytes.fromhex(func_str))

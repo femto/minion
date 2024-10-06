@@ -29,7 +29,7 @@ class Mind(BaseModel):
     async def step(self, input):
         input.short_context = input.context  # first set digested context same as context
 
-        moderator = ModeratorMinion(input, brain=self.brain)
+        moderator = ModeratorMinion(input=input, brain=self.brain)
         answer = await moderator.execute()
         return answer, 0.0, False, False, {}  # terminated: false, truncated:false, info:{}
 
