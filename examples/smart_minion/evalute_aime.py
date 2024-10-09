@@ -240,7 +240,19 @@ def extract_solution(solution_str):
     return expr
 
 
-def evaluate_expression(expr, numbers):
+import re
+from collections import Counter
+
+# Function to safely evaluate simple arithmetic expressions
+def evaluate_safe_expression(expr, numbers):
+    def safe_eval(expr):
+        # Allowed operators
+        allowed_operators = {'+', '-', '*', '/'}
+        for character in expr:
+            if not (character.isdigit() or character in allowed_operators):
+                raise ValueError("Unsafe character detected")
+        return eval(expr)
+
     # Convert all numbers to integers
     numbers = [int(num) for num in numbers]
 
@@ -254,13 +266,12 @@ def evaluate_expression(expr, numbers):
     if Counter(expr_numbers) != Counter(numbers):
         return False
 
-    # Evaluate the expression
+    # Evaluate the expression safely
     try:
-        result = eval(expr)
+        result = safe_eval(expr)  # Safe expression evaluation
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
     except:
         return False
-
 
 def verify_game24_solution(question, user_answer):
     # Extract numbers from the question
