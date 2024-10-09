@@ -14,6 +14,14 @@ OriginalLLM = OpenAILLM if config.llm.api_type == LLMType.OPENAI else AzureOpenA
 
 class MockLLM(OriginalLLM):
     def __init__(self, allow_open_api_call):
+        """Initialize the LLMTestAdapter object.
+        
+        Args:
+            allow_open_api_call (bool): Flag to allow or disallow open API calls.
+        
+        Returns:
+            None: This method initializes the object and doesn't return anything.
+        """
         original_llm_config = (
             config.get_openai_llm() if config.llm.api_type == LLMType.OPENAI else config.get_azure_llm()
         )
@@ -32,7 +40,19 @@ class MockLLM(OriginalLLM):
         return self.get_choice_text(rsp)
 
     async def original_aask(
-        self,
+        """Asynchronously generates a response based on the given message and optional parameters.
+        
+        Args:
+            msg Union[str, list[dict[str, str]]]: The main message or list of message dictionaries to process.
+            system_msgs Optional[list[str]]: Optional list of system messages to include.
+            format_msgs Optional[list[dict[str, str]]]: Optional list of formatting message dictionaries.
+            images Optional[Union[str, list[str]]]: Optional image(s) to include with the message.
+            timeout int: The timeout duration for the request in seconds. Defaults to 3.
+            stream bool: Whether to stream the response. Defaults to True.
+        
+        Returns:
+            str: The generated response text.
+        """        self,
         msg: Union[str, list[dict[str, str]]],
         system_msgs: Optional[list[str]] = None,
         format_msgs: Optional[list[dict[str, str]]] = None,
@@ -67,6 +87,19 @@ class MockLLM(OriginalLLM):
         return self._extract_assistant_rsp(context)
 
     async def original_aask_code(self, messages: Union[str, Message, list[dict]], **kwargs) -> dict:
+        """Asynchronously asks a question and returns the response.
+        
+        Args:
+            msg Union[str, list[dict[str, str]]]: The message to be sent, either as a string or a list of dictionaries.
+            system_msgs Optional[list[str]]: Optional list of system messages to be prepended to the conversation.
+            format_msgs Optional[list[dict[str, str]]]: Optional list of formatting messages.
+            images Optional[Union[str, list[str]]]: Optional image(s) to be included in the message.
+            timeout int: The timeout for the request in seconds. Defaults to 3.
+            stream bool: Whether to stream the response. Defaults to True.
+        
+        Returns:
+            str: The response from the model.
+        """
         """
         A copy of metagpt.provider.openai_api.OpenAILLM.aask_code, we can't use super().aask because it will be mocked.
         Since openai_api.OpenAILLM.aask_code is different from base_llm.BaseLLM.aask_code, we use the former.
@@ -91,6 +124,38 @@ class MockLLM(OriginalLLM):
             msg_key = "#MSG_SEP#".join([m["content"] for m in msg])
         else:
             msg_key = msg
+"""Asynchronously process a batch of messages and return a response.
+
+Args:
+    msgs (list): A list of messages to process. Each message can be a string or an object with a 'content' attribute.
+    timeout (int, optional): The maximum time to wait for a response, in seconds. Defaults to 3.
+"""Asynchronously asks for code generation based on given messages.
+
+Args:
+    messages (Union[str, Message, list[dict]]): The input messages for code generation. Can be a string, Message object, or a list of dictionaries.
+    **kwargs: Additional keyword arguments to be passed to the original ask_code method.
+"""Mocks the response for a given message key.
+
+Args:
+    msg_key (str): The key to identify the message in the response cache.
+    ask_func (callable): The original function to call if the message key is not in the cache.
+    *args: Variable length argument list to pass to ask_func.
+    **kwargs: Arbitrary keyword arguments to pass to ask_func.
+
+Returns:
+    Any: The mocked or actual response.
+
+Raises:
+    ValueError: If api call is not allowed and the message key is not in the cache.
+"""
+
+Returns:
+    dict: The response containing the generated code.
+"""
+
+Returns:
+    str: The response generated from processing the batch of messages.
+"""
 
         if system_msgs:
             joined_system_msg = "#MSG_SEP#".join(system_msgs) + "#SYSTEM_MSG_END#"
