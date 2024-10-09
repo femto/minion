@@ -14,6 +14,15 @@ from metagpt.utils.redis import Redis
 
 @pytest.mark.asyncio
 async def test_redis(mocker):
+    """
+    Asynchronous test function for Redis operations using mocked objects.
+    
+    Args:
+        mocker (pytest.MockFixture): Pytest fixture for mocking.
+    
+    Returns:
+        None: This function doesn't return anything, it uses assertions for testing.
+    """
     async def async_mock_from_url(*args, **kwargs):
         mock_client = AsyncMock()
         mock_client.set.return_value = None
