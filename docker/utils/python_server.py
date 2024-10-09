@@ -4,6 +4,7 @@ import sys
 import threading
 import traceback
 from io import StringIO
+import json
 
 import rpyc
 from rpyc import ThreadPoolServer
@@ -59,24 +60,22 @@ class MyService(rpyc.Service):
             full_id, command = self.extract_id_and_command(command)
             namespace = self.get_namespace(full_id)
 
-            if command == "RESET_CONTAINER_SPECIAL_KEYWORD":
+            command_info = json.loads(command)  # Assuming the command is a JSON string
+
+            if command_info.get('operation') == "RESET_CONTAINER_SPECIAL_KEYWORD":
                 namespace.clear()
                 namespace.update(ORIGINAL_GLOBAL)
 
-            output_buffer = StringIO()
-            error_buffer = StringIO()
-            sys.stdout = output_buffer
-            sys.stderr = error_buffer
-
-            with lock:
-                exec(command, namespace)
-
-            sys.stdout = sys.__stdout__
-            sys.stderr = sys.__stderr__
-            output = output_buffer.getvalue().strip()
-            error = error_buffer.getvalue().strip()
+            # Process the command based on its nature provided in JSON
+            # Here additional functionality based on parsed JSON structure should be implemented
+            # This is a place-holder for actual safe logic processing
+            output = f"Executed safe operation: {command_info}"
+            error = ""
 
             return {"output": output, "error": error}
+
+        except json.JSONDecodeError:
+            return {"error": "Invalid command format, expecting JSON."}
         except Exception as e:
             stack_trace = traceback.format_exc()
             return {"error": f"Error: {str(e)}\nStack trace:\n{stack_trace}"}

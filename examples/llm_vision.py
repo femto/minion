@@ -16,7 +16,8 @@ async def main():
     invoice_path = Path(__file__).parent.joinpath("..", "tests", "data", "invoices", "invoice-2.png")
     img_base64 = encode_image(invoice_path)
     res = await llm.aask(msg="if this is a invoice, just return True else return False", images=[img_base64])
-    assert "true" in res.lower()
+    if "true" not in res.lower():
+        raise ValueError("Assertion failed: Expected response to contain 'true'.")
 
 
 if __name__ == "__main__":
