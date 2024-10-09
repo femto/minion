@@ -12,6 +12,14 @@ from metagpt.utils.save_code import DATA_PATH, save_code_file
 
 
 def test_save_code_file_python():
+    """Test the save_code_file function for Python code.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything, but performs assertions to check if the file is created and contains the correct content.
+    """
     save_code_file("example", "print('Hello, World!')")
     file_path = DATA_PATH / "output" / "example" / "code.py"
     assert file_path.exists(), f"File does not exist: {file_path}"
@@ -20,6 +28,18 @@ def test_save_code_file_python():
 
 
 def test_save_code_file_json():
+    """Tests the save_code_file function with JSON format output.
+    
+    This function verifies that the save_code_file function correctly saves code content
+    in JSON format and that the saved file contains the expected data.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function doesn't return anything, but raises an AssertionError
+              if the test conditions are not met.
+    """
     save_code_file("example_json", "print('Hello, JSON!')", file_format="json")
     file_path = DATA_PATH / "output" / "example_json" / "code.json"
     data = read_json_file(file_path)
@@ -29,7 +49,14 @@ def test_save_code_file_json():
 
 @pytest.mark.asyncio
 async def test_save_code_file_notebook():
-    code = "print('Hello, World!')"
+    """Test saving code as a Jupyter Notebook file.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything, but performs assertions to verify the saved notebook.
+    """    code = "print('Hello, World!')"
     executor = ExecuteNbCode()
     await executor.run(code)
     # Save as a Notebook file
