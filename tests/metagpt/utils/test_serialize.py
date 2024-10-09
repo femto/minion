@@ -17,6 +17,14 @@ from metagpt.utils.serialize import (
 
 
 def test_actionoutout_schema_to_mapping():
+    """Tests the actionoutout_schema_to_mapping function with various schema inputs.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function uses assertions to verify the correct behavior of actionoutout_schema_to_mapping.
+    """
     schema = {"title": "test", "type": "object", "properties": {"field": {"title": "field", "type": "string"}}}
     mapping = actionoutout_schema_to_mapping(schema)
     assert mapping["field"] == (str, ...)
@@ -44,6 +52,21 @@ def test_actionoutout_schema_to_mapping():
                 },
             }
         },
+    """
+    Test the serialization and deserialization of a Message object.
+    
+    This function creates a Message object with custom fields, serializes it,
+    then deserializes it back into a new Message object. It then verifies that
+    the deserialized object matches the original in terms of content, cause,
+    and custom fields.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything, but uses assertions
+        to verify the correctness of the serialization and deserialization process.
+    """
     }
     mapping = actionoutout_schema_to_mapping(schema)
     assert mapping["field"] == (list[list[str]], ...)
