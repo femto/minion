@@ -240,6 +240,37 @@ def extract_solution(solution_str):
     return expr
 
 
+import re
+from collections import Counter
+import operator
+
+ALLOWED_OPERATORS = {
+    '+': operator.add,
+    '-': operator.sub,
+    '*': operator.mul,
+    '/': operator.truediv
+}
+
+
+def safe_eval(expr, operators=ALLOWED_OPERATORS):
+    """ Safely evaluate a math expression consisting of numbers and basic operators. """
+    stack = []
+    # Tokenize the input expression
+    tokens = re.findall(r"\d+|[%s]" % ''.join(ALLOWED_OPERATORS.keys()), expr)
+    for token in tokens:
+        if token.isdigit():
+            stack.append(float(token))
+        elif token in operators:
+            # Ensure there are at least two numbers in the stack
+            if len(stack) >= 2:
+                b = stack.pop()
+                a = stack.pop()
+                stack.append(operators[token](a, b))
+            else:
+                raise ValueError("Invalid Expression")
+    return stack[0] if stack else None
+
+
 def evaluate_expression(expr, numbers):
     # Convert all numbers to integers
     numbers = [int(num) for num in numbers]
@@ -254,9 +285,9 @@ def evaluate_expression(expr, numbers):
     if Counter(expr_numbers) != Counter(numbers):
         return False
 
-    # Evaluate the expression
+    # Evaluate the expression using the safe_eval method
     try:
-        result = eval(expr)
+        result = safe_eval(expr_clean)
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
     except:
         return False
