@@ -12,6 +12,18 @@ class MockCurlCffiResponse(requests.Response):
     name = "curl-cffi"
 
     def __init__(self, session, method, url, **kwargs) -> None:
+        """
+        Initializes a custom request object with caching functionality.
+        
+        Args:
+            session: The session object used for making requests.
+            method (str): The HTTP method for the request (e.g., GET, POST).
+            url (str): The URL for the request.
+            **kwargs: Additional keyword arguments for the request.
+        
+        Returns:
+            None: This method initializes the object and doesn't return anything.
+        """
         super().__init__()
         fn = self.check_funcs.get((method, url))
         self.key = f"{self.name}-{method}-{url}-{fn(kwargs) if fn else json.dumps(kwargs, sort_keys=True)}"

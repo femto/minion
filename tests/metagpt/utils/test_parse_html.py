@@ -60,11 +60,31 @@ CONTENT = (
 
 
 def test_web_page():
+    """Tests the WebPage class functionality.
+    
+    This function creates a WebPage instance with predefined content, HTML, and URL,
+    then asserts that the title and links are correctly parsed and retrieved.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything, it uses assertions to verify the behavior.
+    """
     page = parse_html.WebPage(inner_text=CONTENT, html=PAGE, url="http://example.com")
     assert page.title == "Random HTML Example"
     assert list(page.get_links()) == ["http://example.com/test", "https://metagpt.com"]
 
 
 def test_get_page_content():
+    """
+    Test the get_html_content function from the parse_html module.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function doesn't return anything, but uses assertions to verify the behavior of get_html_content.
+    """
     ret = parse_html.get_html_content(PAGE, "http://example.com")
     assert ret == CONTENT

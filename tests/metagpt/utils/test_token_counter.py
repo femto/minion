@@ -11,6 +11,23 @@ from metagpt.utils.token_counter import count_input_tokens, count_output_tokens
 
 
 def test_count_message_tokens():
+    """
+    Test the count_input_tokens function for message token counting.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function uses assertions to verify the behavior of count_input_tokens.
+    """Tests the count_input_tokens function with messages including a 'name' field.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function uses assertions to verify the behavior of count_input_tokens.
+    """
+    """
     messages = [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
@@ -25,6 +42,18 @@ def test_count_message_tokens_with_name():
     ]
     assert count_input_tokens(messages) == 17
 
+"""
+Test the count_input_tokens function for GPT-4 model.
+
+This function verifies that the count_input_tokens function correctly calculates
+the number of tokens in a given list of messages for the GPT-4 model.
+
+Args:
+    None
+
+Returns:
+    None: This test function uses assertions and does not return a value.
+"""
 
 def test_count_message_tokens_empty_input():
     """Empty input should return 3 tokens"""

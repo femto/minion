@@ -14,6 +14,13 @@ from metagpt.utils.read_document import read_docx
 @pytest.mark.skip  # https://copyprogramming.com/howto/python-docx-error-opening-file-bad-magic-number-for-file-header-eoferror
 class TestReadDocx:
     def test_read_docx(self):
-        docx_sample = METAGPT_ROOT / "tests/data/docx_for_test.docx"
+        """Tests the read_docx function with a sample DOCX file.
+        
+        Args:
+            self: TestCase object for the unit test.
+        
+        Returns:
+            None: This method doesn't return anything, but asserts the expected behavior.
+        """        docx_sample = METAGPT_ROOT / "tests/data/docx_for_test.docx"
         docx = read_docx(docx_sample)
         assert len(docx) == 6

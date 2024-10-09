@@ -20,7 +20,15 @@ from metagpt.utils.s3 import S3
 @pytest.mark.asyncio
 async def test_s3(mocker):
     # Set up the mock response
-    data = await aread(__file__, "utf-8")
+    """
+    Asynchronous test function for S3 operations using mocked responses and configurations.
+    
+    Args:
+        mocker (pytest.MockFixture): Pytest fixture for mocking.
+    
+    Returns:
+        None: This function doesn't return anything explicitly, but performs assertions to validate S3 operations.
+    """    data = await aread(__file__, "utf-8")
     reader_mock = mocker.AsyncMock()
     reader_mock.read.side_effect = [data.encode("utf-8"), b"", data.encode("utf-8")]
     type(reader_mock).url = mocker.PropertyMock(return_value="https://mock")

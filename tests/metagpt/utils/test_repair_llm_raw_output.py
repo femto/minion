@@ -12,6 +12,17 @@ config.repair_llm_output = True
 
 
 def test_repair_case_sensitivity():
+    """Test the repair_llm_raw_output function for case sensitivity correction
+    
+    This function tests the repair_llm_raw_output function to ensure it correctly repairs
+    case sensitivity issues in the keys of a JSON-like string output from an LLM.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function uses assertions to validate the behavior
+    """
     from metagpt.utils.repair_llm_raw_output import repair_llm_raw_output
 
     raw_output = """{
@@ -23,6 +34,17 @@ def test_repair_case_sensitivity():
 }"""
     target_output = """{
     "Original Requirements": "Write a 2048 game",
+    """Tests the repair_llm_raw_output function for handling missing special characters.
+    
+    This function tests the repair_llm_raw_output utility function from the metagpt.utils module.
+    It checks if the function correctly adds missing closing tags or special characters in various scenarios.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function doesn't return anything but uses assertions to check the correctness of the repair_llm_raw_output function.
+    """
     "Search Information": "",
     "Competitive Quadrant Chart": "quadrantChart
                 Campaign A: [0.3, 0.6]",
@@ -70,6 +92,18 @@ def test_repair_special_character_missing():
 
 
 def test_required_key_pair_missing():
+    """Tests the repair_llm_raw_output function for handling missing required key pairs.
+    
+    This function tests various scenarios where the repair_llm_raw_output function is used to
+    fix raw output that is missing required key pairs, specifically the '[/CONTENT]' tag.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This test function uses assertions to verify the correct behavior of
+        repair_llm_raw_output and does not return any value.
+    """
     from metagpt.utils.repair_llm_raw_output import repair_llm_raw_output
 
     raw_output = '[CONTENT] {"a": "b"}'
@@ -108,6 +142,20 @@ xxx
 
 
 def test_repair_json_format():
+    """Tests the repair_llm_raw_output function for JSON format repair.
+    
+    This function tests various scenarios of repairing malformed JSON strings using the repair_llm_raw_output function with RepairType.JSON. It covers cases such as:
+    - Removing extra brackets
+    - Adding missing brackets
+    - Removing comments (both # and // style)
+    - Handling special characters within strings
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function uses assertions to verify the correct behavior of repair_llm_raw_output.
+    """
     from metagpt.utils.repair_llm_raw_output import RepairType, repair_llm_raw_output
 
     raw_output = "{ xxx }]"
@@ -169,7 +217,21 @@ def test_repair_json_format():
 
 
 def test_repair_invalid_json():
-    from metagpt.utils.repair_llm_raw_output import repair_invalid_json
+    ```
+    """Tests the repair_invalid_json function for various invalid JSON inputs.
+    
+    This function tests the repair_invalid_json function from the metagpt.utils.repair_llm_raw_output module
+    with different scenarios of invalid JSON strings. It verifies that the function correctly repairs
+    the JSON structure based on the provided error messages.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything but uses assertions to verify the correctness
+              of the repair_invalid_json function.
+    """
+    ```    from metagpt.utils.repair_llm_raw_output import repair_invalid_json
 
     raw_output = """{
     "key": "value"
@@ -218,7 +280,15 @@ value
 
 
 def test_retry_parse_json_text():
-    from metagpt.utils.repair_llm_raw_output import retry_parse_json_text
+    """Tests the retry_parse_json_text function from metagpt.utils.repair_llm_raw_output module.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function uses assertions to verify the behavior of retry_parse_json_text.
+    
+    """    from metagpt.utils.repair_llm_raw_output import retry_parse_json_text
 
     invalid_json_text = """{
 "Original Requirements": "Create a 2048 game",

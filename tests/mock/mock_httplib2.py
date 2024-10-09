@@ -13,7 +13,20 @@ class MockHttplib2Response(httplib2.Response):
     name = "httplib2"
 
     def __init__(self, http, uri, method="GET", **kwargs) -> None:
-        url = uri.split("?")[0]
+        ```
+        """Initialize the class instance with HTTP request details and caching mechanism.
+        
+        Args:
+            http: The HTTP client object used for making requests.
+            uri (str): The URI of the request, including query parameters.
+            method (str): The HTTP method for the request, defaults to "GET".
+            **kwargs: Additional keyword arguments for the request.
+        
+        Returns:
+            None: This method initializes the instance and doesn't return anything.
+        """
+        
+        ```        url = uri.split("?")[0]
         result = urlparse(uri)
         params = dict(parse_qsl(result.query))
         fn = self.check_funcs.get((method, uri))
@@ -25,5 +38,13 @@ class MockHttplib2Response(httplib2.Response):
         self.content = self.rsp_cache[key]
 
     def __iter__(self):
+        """Returns an iterator for the HTTPResponse object.
+        
+        Args:
+            self: The instance of the HTTPResponse class.
+        
+        Returns:
+            iterator: An iterator that yields the HTTPResponse object itself and then its content encoded as bytes.
+        """
         yield self
         yield self.content.encode()

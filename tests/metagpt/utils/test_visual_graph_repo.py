@@ -18,7 +18,19 @@ from metagpt.utils.visual_graph_repo import VisualDiGraphRepo
 
 @pytest.mark.asyncio
 async def test_visual_di_graph_repo(context, mocker):
-    filename = Path(__file__).parent / "../../data/graph_db/networkx.sequence_view.json"
+    """Test the VisualDiGraphRepo class functionality
+    
+    This asynchronous function tests various methods of the VisualDiGraphRepo class,
+    including loading from a file, generating Mermaid class and sequence views,
+    and saving the generated diagrams.
+    
+    Args:
+        context (object): The test context object containing repository information
+        mocker (object): A pytest mocker object for mocking dependencies
+    
+    Returns:
+        None: This function doesn't return a value, but performs assertions
+    """    filename = Path(__file__).parent / "../../data/graph_db/networkx.sequence_view.json"
     repo = await VisualDiGraphRepo.load_from(filename=filename)
 
     class_view = await repo.get_mermaid_class_view()

@@ -120,7 +120,15 @@ def test_extract_struct(
 
 
 def test_parse_with_markdown_mapping():
-    OUTPUT_MAPPING = {
+    """Tests the parse_data_with_mapping method of the OutputParser class with a markdown-formatted input.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything, but performs assertions to verify the correct parsing of the input data.
+    
+    """    OUTPUT_MAPPING = {
         "Original Requirements": (str, ...),
         "Product Goals": (List[str], ...),
         "User Stories": (List[str], ...),
