@@ -131,6 +131,17 @@ class Person:
 
 
 def test_merge_docstring():
+    """Test the merge_docstring function of pycst module.
+    
+    This function tests the behavior of the merge_docstring function by comparing its output
+    with an expected merged code result.
+    
+    Args:
+        None
+    
+    Returns:
+        None: This function doesn't return anything. It uses assertions to verify the correctness.
+    """
     data = pycst.merge_docstring(code, documented_code)
     print(data)
     assert data == merged_code
