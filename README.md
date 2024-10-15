@@ -8,7 +8,13 @@ Minion is designed to execute and analyze complex queries, offering a variety of
 
 The core logic of Minion is implemented in `examples/smart_minion/brain.py`. You can experiment with different examples by modifying the code, as various scenarios are commented out for easy testing.
 
-### Example Usage
+## Quick Demo
+
+Check out this quick demo video to see Minion in action:
+
+[![Minion Quick Demo](https://img.youtube.com/vi/-LW7TCMUfLs/0.jpg)](https://youtu.be/-LW7TCMUfLs?si=-pL9GhNfbjFtNagJ)
+
+## Example Usage
 
 ```python
 obs, score, *_ = await brain.step(query="what's the solution 234*568")
