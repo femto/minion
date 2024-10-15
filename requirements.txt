@@ -88,6 +88,8 @@ sqlmodel
 aiosqlite
 asyncpg
 dill
+
+#accelerate
 #psycopg2-binary
 #ell-ai
 #ell-ai[anthropic]
