@@ -14,6 +14,8 @@ Check out this quick demo video to see Minion in action:
 
 [![Minion Quick Demo](https://img.youtube.com/vi/-LW7TCMUfLs/0.jpg)](https://youtu.be/-LW7TCMUfLs?si=-pL9GhNfbjFtNagJ)
 
+**Note:** The image above is a clickable link. Click on it to watch the demo video on YouTube.
+
 ## Example Usage
 
 ```python
