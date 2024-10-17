@@ -4,8 +4,6 @@
 
 Minion is designed to execute and analyze complex queries, offering a variety of features that demonstrate its flexibility and intelligence.
 
-<img src="assets/minion1.webp" alt="Minion" width="200" align="right">
-
 ## Minion Design
 
 The core logic of Minion is implemented in `examples/smart_minion/brain.py`. You can experiment with different examples by modifying the code, as various scenarios are commented out for easy testing.
