@@ -2,7 +2,7 @@
 
 ## Features
 
-Minion is designed to execute and analyze complex queries, offering a variety of features that demonstrate its flexibility and intelligence.
+Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence.
 
 <img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
