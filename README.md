@@ -6,6 +6,15 @@ Minion is designed to execute and analyze complex queries, offering a variety of
 
 <img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
+## Benchmarks
+
+Minion has achieved impressive results on various benchmarks:
+
+- GSM8K: 96% accuracy using DeepSeek-Chat
+- Game of 24: 100% success rate on the 20 most difficult problems
+  (These were selected by running the TOT Game24 CSV from the most difficult backwards. The last problem had a 20.70% success rate, and the second to last had a 26.90% success rate.)
+- AIME 2024: 26% success rate (4 out of 15 tasks completed successfully)
+
 ## Minion Design
 
 The core logic of Minion is implemented in `examples/smart_minion/brain.py`. You can experiment with different examples by modifying the code, as various scenarios are commented out for easy testing.
