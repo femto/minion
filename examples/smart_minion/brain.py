@@ -135,7 +135,8 @@ async def smart_brain():
         query='''
 from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
         route="cot",
-        query_type="code_solution",
+        # query_type="code_solution",
+        post_processing="extract_python",
     )
     print(obs)
 
@@ -151,7 +152,8 @@ from typing import List def has_close_elements(numbers: List[float], threshold: 
     strange_sort_list([]) == []
     '''""",
         route="cot",
-        query_type="code_solution",
+        # query_type="code_solution",
+        post_processing="extract_python",
     )
     print(obs)
 

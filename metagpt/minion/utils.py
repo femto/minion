@@ -89,17 +89,6 @@ def extract_number_from_string(price_str):
     #     return None  # Return None if there is an error
 
 
-def extract_math_answer(text: str) -> str:
-    # Look for the answer within \boxed{...}
-    boxed_match = re.search(r"\\boxed{(.*?)}", text)
-    if boxed_match:
-        return boxed_match.group(1)
-
-    # If no \boxed{...}, return the last sentence
-    sentences = text.split(".")
-    return sentences[-1].strip() if sentences else ""
-
-
 def compare_number_result(result, correct_answer, tolerance=0.0):
     try:
         return abs(float(result) - float(correct_answer)) <= tolerance
@@ -238,6 +227,15 @@ def process_image(image_input):
 
     # If we've reached here, the input is not in a recognized format
     raise ValueError("Input is not a recognized image format (base64 string, file path, or PIL Image)")
+
+
+def extract_python(text: str) -> str:
+    """Extract Python code from text, typically enclosed in triple backticks."""
+    pattern = r"```python\s*(.*?)```"
+    matches = re.findall(pattern, text, re.DOTALL)
+    if matches:
+        return matches[0].strip()
+    return ""
 
 
 def main():
