@@ -17,7 +17,7 @@ from metagpt.minion.symbol_table import SymbolTable
 from metagpt.minion.utils import extract_number_from_string, extract_python
 
 
-class PostProcessingType(Enum):
+class PostProcessingType(str, Enum):
     NONE = "none"
     EXTRACT_NUMBER = "extract_number_from_string"
     EXTRACT_MATH_ANSWER = "extract_math_answer"

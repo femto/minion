@@ -235,7 +235,7 @@ def extract_python(text: str) -> str:
     matches = re.findall(pattern, text, re.DOTALL)
     if matches:
         return matches[0].strip()
-    return ""
+    return text  # assume we already extracted
 
 
 def main():
