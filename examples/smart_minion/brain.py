@@ -97,23 +97,20 @@ async def smart_brain():
     # )
     # print(obs)
 
-    # llm.model = "z3-" + llm.model
+    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
+    #
+    # obs, score, *_ = await brain.step(
+    #     query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+    #     route="cot",
+    #     dataset="aime 2024",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
 
-    # llm.model = "re2-" + llm.model
     obs, score, *_ = await brain.step(
-        query="一架飞机降落在水面发现漏水时，已经进了一些水，水匀速进入飞机内.如果10人淘水，3小时淘完；如5人淘水8小时淘完.如果要求2小时淘完，要安排多少人淘水？",
-        route="dot",
-    )
-    print(obs)
-
-    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
-
-    llm.model = "re2-" + llm.model
-    obs, score, *_ = await brain.step(
-        query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+        query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",
         route="cot",
         dataset="aime 2024",
-        cache_plan=cache_plan,
     )
     print(obs)
 
