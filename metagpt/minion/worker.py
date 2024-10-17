@@ -227,20 +227,34 @@ class CotMinion(Minion):
             images=self.input.images,
         )
         self.answer_node = node
-        self.answer = self.input.answer = extract_final_answer(node.content)
 
-        for _ in range(3):  # try using llm 3 times to extract answer
-            if not self.answer:
+        if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
+            self.answer = self.extract_python_code(node.content)
+        else:
+            self.answer = extract_final_answer(node.content)
+
+        if not self.answer:
+            for _ in range(3):  # try using llm 3 times to extract answer
                 # try using llm to extract answer
                 node = ActionNode(
-                    key="answer", expected_type=str, instruction="extract final answer from result", example=""
+                    key="answer", expected_type=str, instruction="extract final answer or code from result", example=""
                 )
                 node = await node.fill(context=node.content, llm=self.brain.llm, schema="json")
-                self.answer = self.input.answer = node.instruct_content.answer
-            else:
-                break
+                self.answer = node.instruct_content.answer
+                if self.answer:
+                    break
+
+        self.input.answer = self.answer
         self.raw_answer = self.input.raw_answer = node.content
-        return self.answer  # maybe also adds score?
+        return self.answer
+
+    def extract_python_code(self, content):
+        # Regex pattern to extract code inside ```python ``` blocks
+        pattern = r"```python\s*(.*?)\s*```"
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return None
 
 
 @register_route_downstream
