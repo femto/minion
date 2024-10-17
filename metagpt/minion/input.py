@@ -13,6 +13,13 @@ from typing import Any, Dict, Optional, Union
 from pydantic import BaseModel, Field
 
 from metagpt.minion.symbol_table import SymbolTable
+from metagpt.utils.math_utils import extract_math_answer, extract_number_from_string
+
+
+class PostProcessingType(Enum):
+    NONE = "none"
+    EXTRACT_NUMBER = "extract_number_from_string"
+    EXTRACT_MATH_ANSWER = "extract_math_answer"
 
 
 class EnsembleStrategyType(Enum):
@@ -108,6 +115,10 @@ class Input(BaseModel):
     # 新增字段
     execution_state: ExecutionState = Field(default_factory=ExecutionState)
 
+    post_processing: PostProcessingType = Field(
+        default=PostProcessingType.NONE, description="The type of post-processing to apply to the answer"
+    )
+
     def save_state(self, file_path: str):
         """将当前状态保存到文件"""
         import os
@@ -143,6 +154,15 @@ class Input(BaseModel):
     @context.setter
     def context(self, context):
         self.long_context = context
+
+    def apply_post_processing(self, raw_answer: str) -> Any:
+        """Apply the specified post-processing to the raw answer."""
+        if self.post_processing == PostProcessingType.EXTRACT_NUMBER:
+            return extract_number_from_string(raw_answer)
+        elif self.post_processing == PostProcessingType.EXTRACT_MATH_ANSWER:
+            return extract_math_answer(raw_answer)
+        else:
+            return raw_answer
 
 
 Task.update_forward_refs()

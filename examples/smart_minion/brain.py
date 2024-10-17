@@ -82,7 +82,7 @@ async def smart_brain():
     # print(obs)
 
     # Get the directory of the current file
-    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    os.path.dirname(os.path.abspath(__file__))
 
     #     llm1 = LLM()
     #     LLM()
@@ -107,12 +107,12 @@ async def smart_brain():
     # )
     # print(obs)
 
-    obs, score, *_ = await brain.step(
-        query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",
-        route="cot",
-        dataset="aime 2024",
-    )
-    print(obs)
+    # obs, score, *_ = await brain.step(
+    #     query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",
+    #     route="cot",
+    #     dataset="aime 2024",
+    # )
+    # print(obs)
 
     # obs, score, *_ = await brain.step(
     #     query="Kylar went to the store to buy glasses for his new apartment. One glass costs $5, but every second glass costs only 60% of the price. Kylar wants to buy 16 glasses. How much does he need to pay for them",
@@ -121,22 +121,21 @@ async def smart_brain():
     # )
     # print(obs)
     # llm.model = "z3-" + llm.model
-    cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.12.json")
-
-    obs, score, *_ = await brain.step(
-        query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]",
-        route="cot",
-        dataset="aime 2024",
-        cache_plan=cache_plan,
-    )
-    print(obs)
+    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.12.json")
+    #
+    # obs, score, *_ = await brain.step(
+    #     query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]",
+    #     route="cot",
+    #     dataset="aime 2024",
+    #     cache_plan=cache_plan,
+    # )
+    # print(obs)
 
     obs, score, *_ = await brain.step(
         query='''
 from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
         route="cot",
-        dataset="aime 2024",
-        cache_plan=cache_plan,
+        query_type="code_solution",
     )
     print(obs)
 
@@ -152,8 +151,7 @@ from typing import List def has_close_elements(numbers: List[float], threshold: 
     strange_sort_list([]) == []
     '''""",
         route="cot",
-        dataset="aime 2024",
-        cache_plan=cache_plan,
+        query_type="code_solution",
     )
     print(obs)
 

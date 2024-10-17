@@ -47,11 +47,7 @@ from metagpt.minion.prompt import (
 )
 from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
-from metagpt.minion.utils import (
-    extract_math_answer,
-    extract_number_from_string,
-    most_similar_minion,
-)
+from metagpt.minion.utils import most_similar_minion
 from metagpt.utils.custom_decoder import CustomDecoder
 
 
@@ -482,7 +478,7 @@ class PythonMinion(Minion):
             return await self.execute_calculation()
         elif self.input.query_type == "code_solution":
             return await self.execute_code_solution()
-        elif self.input.query_type == "file_creation":
+        elif self.input.query_type == "file_creation" or self.input.query_type == "generate":
             return await self.execute_file_creation()
         else:
             return await self.execute_calculation()  # 默认行为
@@ -756,32 +752,26 @@ class ModeratorMinion(Minion):
                     self.save_execution_state()
 
                     raw_answer = await self.invoke_minion(minion_name)
-
-                    if minion.get("post_processing", None) == "extract_number_from_string":
-                        result = extract_number_from_string(raw_answer)
-                    elif minion.get("post_processing", None) == "extract_math_answer":
-                        result = extract_math_answer(raw_answer)
-                    else:
-                        result = raw_answer
+                    processed_answer = raw_answer  # already handled in route minion?
+                    # processed_answer = self.input.apply_post_processing(raw_answer)
 
                     weight = minion.get("weight", 1)
 
-                    await self.update_stats(minion_name, result, raw_answer)
+                    await self.update_stats(minion_name, processed_answer, raw_answer)
 
-                    if True:  # result: todo: consider how to handle result is None case
-                        # Update the results dictionary
-                        if result in results:
-                            results[result] += weight
+                    if True:  # 考虑如何处理 processed_answer 为 None 的情况
+                        if processed_answer in results:
+                            results[processed_answer] += weight
                         else:
-                            results[result] = weight
+                            results[processed_answer] = weight
 
-                        # short circuit logic, check if this result has reached the majority count
+                        # 短路逻辑
                         if (
                             self.input.ensemble_logic["ensemble_strategy"].get("short_circuit", True)
-                            and results[result] >= majority_count
+                            and results[processed_answer] >= majority_count
                         ):
-                            self.answer = self.input.answer = result
-                            return result  # Majority found, return it
+                            self.answer = self.input.answer = processed_answer
+                            return processed_answer
 
             # No result reached majority; find the result with the highest weight
             most_weight = max(results.values())
@@ -804,11 +794,10 @@ class ModeratorMinion(Minion):
 
         if self.input.execution_state.current_minion:
             # 从上次状态恢复
-            minion_name = self.input.execution_state.current_minion
             if self.input.ensemble_logic:
                 await self.execute_ensemble()
             else:
-                await self.invoke_minion(minion_name)
+                await self.execute_single()
         else:
             # 开始新的执行
             await self.choose_minion_and_run()
@@ -916,12 +905,14 @@ class RouteMinion(Minion):
             self.input.update_execution_state(current_iteration=iteration)
             self.save_execution_state()
 
-            result = await self.invoke_minion(klass)
-            self.answer = self.input.answer = result
-            await self.update_stats(name, result, result)
+            raw_answer = await self.invoke_minion(klass)
+            processed_answer = self.input.apply_post_processing(raw_answer)
+
+            self.answer = self.input.answer = processed_answer
+            await self.update_stats(name, processed_answer, raw_answer)
 
             if not self.input.check:
-                break  # Exit the loop if checking is not required
+                break
 
             check_minion = CheckMinion(input=self.input, brain=self.brain)
             check_result = await check_minion.execute()
@@ -930,7 +921,7 @@ class RouteMinion(Minion):
             self.save_execution_state()
 
             if check_result and check_result["correct"]:
-                break  # Exit the loop if the result is correct
+                break
 
         return self.answer
 
