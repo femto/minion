@@ -4,7 +4,7 @@
 
 Minion is designed to execute and analyze complex queries, offering a variety of features that demonstrate its flexibility and intelligence.
 
-![Minion](assets/minion1.webp)
+<img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
 ## Minion Design
 
