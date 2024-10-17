@@ -1,0 +1,25 @@
+{
+    "preprocessing": {
+        "cognitive_enhancements": [
+            {
+                "type": "re2",
+                "apply_to": ["query", "short_context", "instruction"],
+                "repeat": 2,
+                "description": "Enhance attention through repeated reading"
+            }
+
+        ]
+    },
+    "ensemble_strategy": {
+        "ensemble_minions": [
+            {
+                "name": "cot",
+                "count": 5,
+                "post_processing": "extract_number_from_string"
+            }
+        ],
+        "ensemble_logic": {
+            "type": "majority_voting"
+        }
+    }
+}

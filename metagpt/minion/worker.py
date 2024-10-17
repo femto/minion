@@ -477,12 +477,17 @@ class TaskMinion(Minion):
 class PythonMinion(Minion):
     "This problem requires writing code to solve it, write python code to solve it"
 
-    # """This problem is a simple math problem, can write code to solve it.
-    # Then directly use python stragety to solve it, return python, don't return math.
-    # Or this problem requires writing code to solve it, write python code to solve it
-    # """
-
     async def execute(self):
+        if self.input.query_type == "calculate":
+            return await self.execute_calculation()
+        elif self.input.query_type == "code_solution":
+            return await self.execute_code_solution()
+        elif self.input.query_type == "file_creation":
+            return await self.execute_file_creation()
+        else:
+            return await self.execute_calculation()  # 默认行为
+
+    async def execute_calculation(self):
         error = ""
         for i in range(5):
             node = ActionNode(
@@ -550,15 +555,97 @@ Previous error:
         self.answer = self.input.answer = ""
         return self.answer
 
+    async def execute_code_solution(self):
+        error = ""
+        for i in range(5):
+            node = ActionNode(
+                key="code",
+                expected_type=str,
+                instruction="Generate the complete code solution",
+                example="",
+            )
+            prompt = Template(
+                PYTHON_PROMPT
+                + ASK_PROMPT_JINJA
+                + """
+                Generate a complete Python solution for the given problem.
+                This may include one or more functions, classes, or a full module as needed.
+                Do not include any explanations or comments, just the code.
+                
+                Previous error (if any):
+                {{error}}
+                """
+            )
+            prompt = prompt.render(input=self.input, error=error)
 
-# class WebMinion(PythonMinion):
-#     "This task require access web to get information, write python code to get the information"
-#     def __init__(self, question, id=None):
-#         super().__init__(question, id)
-#         self.question = (
-#             "This task require access web to get information, write python code to get the information, question:"
-#             + self.question
-#         )
+            node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
+            code = self.extract_code(node.content)
+            self.answer = self.input.answer = code
+            return self.answer
+
+    async def execute_file_creation(self):
+        error = ""
+        for i in range(5):
+            node = ActionNode(
+                key="files",
+                expected_type=str,
+                instruction="Generate the file structure and contents",
+                example="",
+            )
+            prompt = Template(
+                PYTHON_PROMPT
+                + ASK_PROMPT_JINJA
+                + """
+                Create the necessary file structure and contents for the given task.
+                Include file paths and their contents.
+                
+                Previous error (if any):
+                {{error}}
+                """
+            )
+            prompt = prompt.render(input=self.input, error=error)
+
+            node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
+            file_structure = self.extract_file_structure(node.content)
+            self.save_files(file_structure)
+            self.answer = self.input.answer = "Files created successfully"
+            return self.answer
+
+    def extract_code(self, text):
+        # 提取代码的逻辑，保持不变
+        pattern = r"```python(.*?)```"
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return text
+
+    def extract_file_structure(self, text):
+        # 从LLM输出中提取项目结构和文件内容
+        # 这需要根据LLM的输出格式进行定制
+        # 返回一个字典，键为文件路径，值为文件内容
+        structure = {}
+        current_file = None
+        for line in text.split("\n"):
+            if line.startswith("File:"):
+                current_file = line.split(":", 1)[1].strip()
+                structure[current_file] = ""
+            elif current_file:
+                structure[current_file] += line + "\n"
+        return structure
+
+    def save_files(self, file_structure):
+        # 将项目文件保存到磁盘
+        for file_path, content in file_structure.items():
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w") as f:
+                f.write(content)
+
+
+# 在其他地方使用PythonMinion时，根据需要设置query_type
+self.input.query_type = "calculate"  # 对于数学问题
+self.input.query_type = "code_solution"  # 对于代码生成问题
+self.input.query_type = "file_creation"  # 对于文件创建问题
+python_minion = PythonMinion(input=self.input, brain=self.brain)
 
 
 @register_route_downstream
@@ -567,6 +654,7 @@ class MathMinion(PythonMinion):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.input.query_type = "calculate"
         self.input.instruction = "This is a math problem, write python code to solve it"
 
 
