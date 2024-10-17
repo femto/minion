@@ -218,7 +218,8 @@ async def load_data_sample(file_path: str, samples=1) -> List[dict]:
 
 
 async def main():
-    file_name = "gsm8k_test.json"
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_name = os.path.join(current_dir, "gsm8k_test.jsonl")
     data = load_jsonl(file_name)
     # data = await load_data_sample(file_name, samples=1055)
 

@@ -641,13 +641,6 @@ Previous error:
                 f.write(content)
 
 
-# 在其他地方使用PythonMinion时，根据需要设置query_type
-self.input.query_type = "calculate"  # 对于数学问题
-self.input.query_type = "code_solution"  # 对于代码生成问题
-self.input.query_type = "file_creation"  # 对于文件创建问题
-python_minion = PythonMinion(input=self.input, brain=self.brain)
-
-
 @register_route_downstream
 class MathMinion(PythonMinion):
     "This is a problem involve math, you need to use math tool to solve it"
