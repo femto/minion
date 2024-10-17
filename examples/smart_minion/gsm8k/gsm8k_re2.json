@@ -4,7 +4,7 @@
             {
                 "type": "re2",
                 "apply_to": ["query", "short_context", "instruction"],
-                "repeat": 2,
+                "repeat": 1,
                 "description": "Enhance attention through repeated reading"
             }
 

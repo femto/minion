@@ -35,7 +35,6 @@ class PreprocessingMinion(Minion):
                 enhanced_perceptions = self.apply_attention_enhancement(enhanced_perceptions, step)
             elif step["type"] == "rephrase":
                 enhanced_perceptions = await self.apply_semantic_refinement(enhanced_perceptions, step)
-            # 可以在这里添加更多的处理步骤
 
         return enhanced_perceptions
 

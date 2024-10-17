@@ -185,7 +185,9 @@ async def solve_question(question, route=None):
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
-    obs, score, *_ = await brain.step(query=question, ensemble_logic=load_ensemble_logic("gsm8k_re2.json"))
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    ensemble_logic_path = os.path.join(current_dir, "gsm8k_re2.json")
+    obs, score, *_ = await brain.step(query=question, ensemble_logic=load_ensemble_logic(ensemble_logic_path))
     # print(obs)
     return obs
 

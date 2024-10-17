@@ -115,6 +115,7 @@ class Input(BaseModel):
         import dill
 
         # Create directory if it doesn't exist
+        file_path = os.path.join(os.getcwd(), file_path) if not os.path.isabs(file_path) else file_path
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, "wb") as f:
             dill.dump(self, f)
