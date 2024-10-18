@@ -21,7 +21,7 @@ from tenacity import retry, stop_after_attempt, wait_none
 from metagpt.actions.action_node import ActionNode
 from metagpt.logs import logger
 from metagpt.minion.check import CheckMinion
-from metagpt.minion.input import Input, PostProcessingType
+from metagpt.minion.input import Input
 from metagpt.minion.minion import (
     MINION_REGISTRY,
     MINION_ROUTE_DOWNSTREAM,
@@ -47,7 +47,7 @@ from metagpt.minion.prompt import (
 )
 from metagpt.minion.symbol_table import Symbol
 from metagpt.minion.task_graph import convert_tasks_to_graph
-from metagpt.minion.utils import extract_python, most_similar_minion
+from metagpt.minion.utils import most_similar_minion
 from metagpt.utils.custom_decoder import CustomDecoder
 
 
@@ -228,8 +228,8 @@ class CotMinion(Minion):
         )
         self.answer_node = node
 
-        if self.input.query_type == "code_solution" or self.input.post_processing == PostProcessingType.EXTRACT_PYTHON:
-            self.answer = extract_python(node.content)
+        if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
+            self.answer = self.extract_python_code(node.content)
         else:
             self.answer = extract_final_answer(node.content)
 
@@ -246,7 +246,15 @@ class CotMinion(Minion):
 
         self.input.answer = self.answer
         self.raw_answer = self.input.raw_answer = node.content
-        return self.answer
+        return self.raw_answer  # Return raw_answer instead of processed answer
+
+    def extract_python_code(self, content):
+        # Regex pattern to extract code inside ```python ``` blocks
+        pattern = r"```python\s*(.*?)\s*```"
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return None
 
 
 @register_route_downstream
@@ -484,8 +492,8 @@ class PythonMinion(Minion):
             return await self.execute_calculation()
         elif self.input.query_type == "code_solution":
             return await self.execute_code_solution()
-        elif self.input.query_type == "file_creation" or self.input.query_type == "generate":
-            return await self.execute_file_creation()
+        elif self.input.query_type == "generate":
+            return await self.execute_generation()
         else:
             return await self.execute_calculation()  # 默认行为
 
@@ -585,7 +593,7 @@ Previous error:
             self.answer = self.input.answer = code
             return self.answer
 
-    async def execute_file_creation(self):
+    async def execute_generation(self):
         error = ""
         for i in range(5):
             node = ActionNode(
@@ -610,7 +618,7 @@ Previous error:
             node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
             file_structure = self.extract_file_structure(node.content)
             self.save_files(file_structure)
-            self.answer = self.input.answer = "Files created successfully"
+            self.answer = self.input.answer = "Files generated successfully"
             return self.answer
 
     def extract_code(self, text):
@@ -878,9 +886,9 @@ class RouteMinion(Minion):
             klass = MINION_ROUTE_DOWNSTREAM.get(klass, CotMinion)
         self.current_minion = klass(input=self.input, brain=self.brain)
         self.add_followers(self.current_minion)
-        result = await self.current_minion.execute()
-        self.answer = self.input.answer = result
-        return result
+        await self.current_minion.execute()
+        self.answer = self.input.answer = self.current_minion.answer
+        return self.current_minion.answer
 
     async def choose_minion_and_run(self):
         choose_template = Template(SMART_PROMPT_TEMPLATE)
