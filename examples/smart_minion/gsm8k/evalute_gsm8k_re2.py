@@ -109,7 +109,7 @@ async def evaluate_dataset(
 
     with tqdm(total=total_count, desc="Evaluating") as pbar:
         for i, item in enumerate(data):
-            item_id = item.get("idx", -1)
+            item_id = i
 
             if last_processed_id and item_id <= last_processed_id:
                 continue

@@ -7,7 +7,6 @@
                 "repeat": 1,
                 "description": "Enhance attention through repeated reading"
             }
-
         ]
     },
     "ensemble_strategy": {
@@ -21,5 +20,6 @@
         "ensemble_logic": {
             "type": "majority_voting"
         }
-    }
+    },
+    "check": true
 }

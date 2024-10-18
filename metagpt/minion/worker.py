@@ -722,6 +722,10 @@ class ModeratorMinion(Minion):
         preprocessing_minion = PreprocessingMinion(input=self.input, brain=self.brain)
         self.input = await preprocessing_minion.execute()
 
+        # Check if 'check' key exists in ensemble_logic and set input.check accordingly
+        if self.input.ensemble_logic and "check" in self.input.ensemble_logic:
+            self.input.check = self.input.ensemble_logic["check"]
+
         if self.input.ensemble_logic:
             return await self.execute_ensemble()
         else:
@@ -925,17 +929,15 @@ class RouteMinion(Minion):
             self.answer = self.input.answer = processed_answer
             await self.update_stats(name, processed_answer, raw_answer)
 
-            if not self.input.check:
-                break
+            for _ in range(self.input.check):
+                check_minion = CheckMinion(input=self.input, brain=self.brain)
+                check_result = await check_minion.execute()
 
-            check_minion = CheckMinion(input=self.input, brain=self.brain)
-            check_result = await check_minion.execute()
+                self.input.update_execution_state(check_result=check_result)
+                self.save_execution_state()
 
-            self.input.update_execution_state(check_result=check_result)
-            self.save_execution_state()
-
-            if check_result and check_result["correct"]:
-                break
+                if check_result and check_result["correct"]:
+                    return self.answer
 
         return self.answer
 
