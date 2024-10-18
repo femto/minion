@@ -12,7 +12,7 @@ class PreprocessingMinion(Minion):
     """
 
     async def execute(self):
-        if not self.input.ensemble_logic or "preprocessing" not in self.input.ensemble_logic:
+        if not self.input.execution_config or "preprocessing" not in self.input.execution_config:
             return self.input
 
         observations = self.collect_raw_observations()
@@ -30,7 +30,7 @@ class PreprocessingMinion(Minion):
 
     async def enhance_cognitive_representations(self, observations):
         enhanced_perceptions = observations.copy()
-        for step in self.input.ensemble_logic["preprocessing"]["cognitive_enhancements"]:
+        for step in self.input.execution_config["preprocessing"]["cognitive_enhancements"]:
             if step["type"] == "re2":
                 enhanced_perceptions = self.apply_attention_enhancement(enhanced_perceptions, step)
             elif step["type"] == "rephrase":

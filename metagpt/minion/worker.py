@@ -418,11 +418,15 @@ class PlanMinion(Minion):
 
     def save_execution_state(self):
         """保存执行状态"""
-        # self.input.save_state(f"state_{self.input.query_id}.pkl")
+        if self.input.save_state:
+            self.input.save_state(f"state_{self.input.query_id}.pkl")
 
     def load_execution_state(self):
         """加载执行状态"""
-        # self.input = Input.load_state(f"state_{self.input.query_id}.pkl")
+        if self.input.save_state:
+            loaded_input = Input.load_state(f"state_{self.input.query_id}.pkl")
+            if loaded_input:
+                self.input = loaded_input
 
     def pause(self):
         """暂停执行并保存当前状态"""
@@ -722,11 +726,10 @@ class ModeratorMinion(Minion):
         preprocessing_minion = PreprocessingMinion(input=self.input, brain=self.brain)
         self.input = await preprocessing_minion.execute()
 
-        # Check if 'check' key exists in ensemble_logic and set input.check accordingly
-        if self.input.ensemble_logic and "check" in self.input.ensemble_logic:
-            self.input.check = self.input.ensemble_logic["check"]
+        # Update input based on the configuration
+        self.input.update_from_config(self.input.execution_config)
 
-        if self.input.ensemble_logic:
+        if self.input.execution_config.get("ensemble_strategy", {}).get("ensemble_minions"):
             return await self.execute_ensemble()
         else:
             return await self.execute_single()
@@ -746,13 +749,12 @@ class ModeratorMinion(Minion):
         return extract_final_answer(node.content)
 
     async def execute_ensemble(self):
-        ensemble_logic = self.input.ensemble_logic["ensemble_strategy"]["ensemble_logic"]
-        ensemble_minions = self.input.ensemble_logic["ensemble_strategy"]["ensemble_minions"]
+        ensemble_strategy = self.input.execution_config.get("ensemble_strategy", {})
 
-        if ensemble_logic["type"] == "majority_voting":
+        if ensemble_strategy.get("ensemble_logic", {}).get("type") == "majority_voting":
             # calculate majority_count
             total = 0
-            for minion in ensemble_minions:
+            for minion in ensemble_strategy["ensemble_minions"]:
                 count = minion["count"]
                 weight = minion.get("weight", 1)
                 total += count * weight
@@ -760,7 +762,7 @@ class ModeratorMinion(Minion):
 
             results = {}
 
-            for minion in ensemble_minions:
+            for minion in ensemble_strategy["ensemble_minions"]:
                 minion_name = minion["name"]
                 count = minion["count"]
 
@@ -785,7 +787,7 @@ class ModeratorMinion(Minion):
 
                         # 短路逻辑
                         if (
-                            self.input.ensemble_logic["ensemble_strategy"].get("short_circuit", True)
+                            self.input.execution_config["ensemble_strategy"].get("short_circuit", True)
                             and results[processed_answer] >= majority_count
                         ):
                             self.answer = self.input.answer = processed_answer
@@ -812,7 +814,7 @@ class ModeratorMinion(Minion):
 
         if self.input.execution_state.current_minion:
             # 从上次状态恢复
-            if self.input.ensemble_logic:
+            if self.input.execution_config.get("ensemble_strategy", {}).get("ensemble_minions"):
                 await self.execute_ensemble()
             else:
                 await self.execute_single()
@@ -826,11 +828,15 @@ class ModeratorMinion(Minion):
 
     def save_execution_state(self):
         """保存执行状态"""
-        self.input.save_state(f"state_{self.input.query_id}.pkl")
+        if self.input.save_state:
+            self.input.exec_save_state(f"state_{self.input.query_id}.pkl")
 
     def load_execution_state(self):
         """加载执行状态"""
-        self.input = Input.load_state(f"state_{self.input.query_id}.pkl") or self.input
+        if self.input.save_state:
+            loaded_input = Input.exec_load_state(f"state_{self.input.query_id}.pkl")
+            if loaded_input:
+                self.input = loaded_input
 
     def pause(self):
         """暂停执行并保存当前状态"""
@@ -929,7 +935,7 @@ class RouteMinion(Minion):
             self.answer = self.input.answer = processed_answer
             await self.update_stats(name, processed_answer, raw_answer)
 
-            for _ in range(self.input.check):
+            if self.input.check:
                 check_minion = CheckMinion(input=self.input, brain=self.brain)
                 check_result = await check_minion.execute()
 
@@ -958,11 +964,15 @@ class RouteMinion(Minion):
 
     def save_execution_state(self):
         """保存执行状态"""
-        # self.input.save_state(f"state_{self.input.query_id}.pkl")
+        if self.input.save_state:
+            self.input.save_state(f"state_{self.input.query_id}.pkl")
 
     def load_execution_state(self):
         """加载执行状态"""
-        # self.input = Input.load_state(f"state_{self.input.query_id}.pkl")
+        if self.input.save_state:
+            loaded_input = Input.load_state(f"state_{self.input.query_id}.pkl")
+            if loaded_input:
+                self.input = loaded_input
 
     def pause(self):
         """暂停执行并保存当前状态"""

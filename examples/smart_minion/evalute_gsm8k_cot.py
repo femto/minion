@@ -173,7 +173,7 @@ async def solve_single_question(item, route="cot"):
 
 
 # Load ensemble logic from JSON files
-def load_ensemble_logic(file_path):
+def load_execution_config(file_path):
     with open(file_path, "r") as file:
         ensemble_logic = json.load(file)
     return ensemble_logic
@@ -185,7 +185,7 @@ async def solve_question(question, route=None):
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
-    obs, score, *_ = await brain.step(query=question, ensemble_logic=load_ensemble_logic("gsm8k_ensemble.json"))
+    obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config("gsm8k_ensemble.json"))
     # print(obs)
     return obs
 

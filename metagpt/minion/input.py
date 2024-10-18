@@ -85,7 +85,7 @@ class Input(BaseModel):
     question_type: str = ""  # a query sub type that determines the answer protocol
     answer_protocol: str = ""
 
-    ensemble_logic: dict = {}
+    execution_config: dict = {}
     check: bool = True
 
     # plan cache
@@ -121,8 +121,14 @@ class Input(BaseModel):
         default=PostProcessingType.NONE, description="The type of post-processing to apply to the answer"
     )
 
-    def save_state(self, file_path: str):
+    execution_config: dict = Field(default_factory=dict)
+
+    save_state: bool = Field(default=False, description="Whether to save and load state during execution")
+
+    def exec_save_state(self, file_path: str):
         """将当前状态保存到文件"""
+        if not self.save_state:
+            return
         import os
 
         import dill
@@ -134,8 +140,9 @@ class Input(BaseModel):
             dill.dump(self, f)
 
     @classmethod
-    def load_state(cls, file_path: str) -> "Input":
+    def exec_load_state(cls, file_path: str) -> "Input":
         """从文件加载状态"""
+
         import os
 
         import dill
@@ -167,6 +174,13 @@ class Input(BaseModel):
             return extract_python(raw_answer)
         else:
             return raw_answer
+
+    def update_from_config(self, config: dict):
+        """Update input fields based on the provided configuration"""
+        self.execution_config = config
+        if "check" in config:
+            self.check = config["check"]
+        # 可能需要处理其他顶级配置项
 
 
 Task.update_forward_refs()

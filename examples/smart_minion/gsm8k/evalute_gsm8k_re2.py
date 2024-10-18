@@ -38,7 +38,7 @@ def extract_answer(answer_str):
     if match:
         return match.group(1).strip()  # Extract and remove any surrounding whitespace
     else:
-        return None  # Return None if no match is found
+        return answer_str  # Return None if no match is found
 
 
 cost_manager = CostManager()
@@ -110,7 +110,7 @@ async def evaluate_dataset(
     with tqdm(total=total_count, desc="Evaluating") as pbar:
         for i, item in enumerate(data):
             item_id = i
-
+            item["idx"] = i
             if last_processed_id and item_id <= last_processed_id:
                 continue
             if start_id and item_id < start_id:
@@ -173,7 +173,7 @@ async def solve_single_question(item, route="cot"):
 
 
 # Load ensemble logic from JSON files
-def load_ensemble_logic(file_path):
+def load_execution_config(file_path):
     with open(file_path, "r") as file:
         ensemble_logic = json.load(file)
     return ensemble_logic
@@ -187,7 +187,7 @@ async def solve_question(question, route=None):
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     ensemble_logic_path = os.path.join(current_dir, "gsm8k_re2.json")
-    obs, score, *_ = await brain.step(query=question, ensemble_logic=load_ensemble_logic(ensemble_logic_path))
+    obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
     # print(obs)
     return obs
 

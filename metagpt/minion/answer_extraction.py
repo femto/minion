@@ -22,7 +22,7 @@ def extract_gsm8k_answer(answer_str):
     if match:
         return match.group(1).strip()  # Extract and remove any surrounding whitespace
     else:
-        return None  # Return None if no match is found
+        return answer_str  # Return None if no match is found
 
 
 def extract_math_answer(answer_str):

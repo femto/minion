@@ -196,7 +196,7 @@ async def solve_single_question(item, route="cot", stats_storer=None, **kwargs):
     obs, score, *_ = await brain.step(
         query=question,
         route=route,
-        ensemble_logic=load_ensemble_logic("math_ensemble.json"),
+        execution_config=load_execution_config("math_ensemble.json"),
         raw_correct_answer=correct_answer_str,
         correct_answer=correct_answer,
         metadata=item,
@@ -216,7 +216,7 @@ async def solve_single_question(item, route="cot", stats_storer=None, **kwargs):
 
 
 # Load ensemble logic from JSON files
-def load_ensemble_logic(file_path):
+def load_execution_config(file_path):
     with open(file_path, "r") as file:
         ensemble_logic = json.load(file)
     return ensemble_logic
