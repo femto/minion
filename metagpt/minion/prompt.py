@@ -406,12 +406,19 @@ PYTHON_PROMPT = (
                 """
 )
 tmp = """
-Solution:
-{{input.solution}}
+{% if input.full_output %}
+Full Output:
+{{ input.full_output }}
+{% endif %}
+
+{% if input.answer_code %}
+Answer Code:
+{{ input.answer_code }}
+{% endif %}
+
 Answer:
-{{
-     input.answer}}
-     """
+{{input.answer}}
+"""
 CHECK_PROMPT = f"""Given the following problem details:
 
 {ASK_PROMPT_JINJA}
@@ -427,6 +434,39 @@ Your feedback should be structured as follows:
     </feedback>
     <correct>true/false</correct>
     <score>1 for a correct/perfect match, 0 for an incorrect/mismatch, or a fractional score for partial correctness.</score>
+</root>
+
+"""
+
+CHECK_PROMPT1 = f"""Given the following problem details:
+
+{ASK_PROMPT_JINJA}
+
+{tmp}
+
+Given the complete solution process and final answer above, evaluate:
+
+1. Process Validation:
+- Are the thinking steps logical and complete?
+- Are mathematical derivations correct?
+- Are units handled properly?
+- Is step counting accurate?
+
+2. Answer Validation:
+- Does the final answer follow from the steps?
+- Is it numerically correct?
+- Are units correct?
+
+Your feedback should be structured as:
+<root>
+    <process_check>
+        Evaluate the solution process
+    </process_check>
+    <answer_check>
+        Evaluate the final answer
+    </answer_check>
+    <correct>true/false</correct>
+    <score>score value</score>
 </root>
 
 """
@@ -501,6 +541,51 @@ You are an AI language model employing iterative reasoning through three distinc
 [Summarizer's synthesis and assessment]
 </summarizer>
 ```
+"""
+    + ASK_PROMPT_JINJA
+)
+
+DCOT_PROMPT = (
+    """
+You are an AI assistant designed to solve complex problems by dynamically reasoning through multiple perspectives, employing reflection, and adapting your approach as new information emerges. Your task is to solve the problem step by step, incorporating deep reasoning, critical reflection, and strategic adjustments throughout the process.
+
+Thinking and Perspective Exploration:
+
+Enclose all thoughts within <thinking> tags. Examine the problem from multiple angles, exploring alternative approaches and considering possible solutions or errors.
+Be open to unconventional thinking, challenging assumptions, and exploring edge cases or rare conditions.
+Step-by-Step Breakdown:
+
+Use <step> tags to break down the solution into clear, logical steps. Start with a 50-step budget, requesting more if the problem demands additional complexity.
+After each step, indicate the remaining budget with <count> tags and evaluate whether the approach is on track. Adjust if needed.
+Reflection and Progress Evaluation:
+
+After every 3 steps, perform a detailed self-reflection using <reflection> tags. Critically assess your progress, and consider potential biases, assumptions, and alternative viewpoints.
+Assign a reward score between 0.0 and 1.0 after each reflection, using the following criteria:
+0.8+: Continue the current approach.
+0.5-0.7: Consider minor adjustments or refinements.
+Below 0.5: Reevaluate the approach and consider backtracking or starting fresh with an alternate strategy.
+Dynamic Reasoning Adjustments:
+
+If a low reward score is assigned, justify backtracking or changing your approach within <thinking> tags. Be explicit about your reasoning and decision-making process.
+If you are uncertain, simulate different potential paths and compare outcomes before choosing the optimal approach.
+Mathematical and Formal Reasoning:
+
+For mathematical problems, show all work in detail using LaTeX for formal notation. Provide detailed proofs or calculations to support your conclusions.
+Multi-Solution Comparison:
+
+Whenever feasible, explore multiple methods to reach the solution. Compare their effectiveness within <reflection> tags and assess their strengths and weaknesses.
+Synthesizing the Final Answer:
+
+Once all steps are complete and you've settled on the best approach, synthesize your final answer using <answer> tags. Provide a concise, well-reasoned summary of your solution, explaining why it is the most effective.
+Final Reflection and Reward:
+
+Conclude with a final reflection on the overall solution. Discuss the effectiveness of your approach, the challenges faced, and any learning opportunities encountered along the way.
+Assign a final reward score (0.0 to 1.0) based on the overall quality of your solution.
+Exploration of Broader Implications:
+
+When applicable, consider the broader implications of your solution. What insights can be drawn from the process? Are there larger principles or concepts that apply?
+
+By incorporating multi-step reasoning, critical reflection, and adaptive problem-solving, you will dynamically develop the best solution while learning from each phase of the process.
 """
     + ASK_PROMPT_JINJA
 )

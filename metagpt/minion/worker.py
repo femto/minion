@@ -33,6 +33,7 @@ from metagpt.minion.prompt import (
     ASK_PROMPT,
     ASK_PROMPT_JINJA,
     COT_PROBLEM_INSTRUCTION,
+    DCOT_PROMPT,
     DOT_PROMPT,
     IDENTIFY_PROMPT,
     MATH_PLAN_PROMPT,
@@ -77,7 +78,16 @@ def extract_final_answer(text):
     if match_tag:
         return match_tag.group(1).strip()
 
-    return None
+    return text
+
+
+def extract_answer(text):
+    # Match for <final_answer> tag
+    match_tag = re.search(r"<answer>\s*(.*?)\s*</answer>", text, re.DOTALL)
+    if match_tag:
+        return match_tag.group(1).strip()
+
+    return text
 
 
 class MetaPlan(BaseModel):
@@ -283,6 +293,27 @@ class DotMinion(Minion):
                 self.answer = self.input.answer = node.instruct_content.answer
             else:
                 break
+        self.raw_answer = self.input.raw_answer = node.content
+        return self.answer  # maybe also adds score?
+
+
+# https://x.com/_philschmid/status/1842846050320544016
+@register_route_downstream
+class DcotMinion(Minion):
+    """Dynamic Chain of Thought Strategy"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.input.instruction = ""
+
+    async def execute(self):
+        node = ActionNode(key="answer", expected_type=str, instruction="", example="")
+        prompt = Template(DCOT_PROMPT)
+        prompt = prompt.render(input=self.input)
+        node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
+        self.answer_node = node
+        self.answer = self.input.answer = extract_answer(node.content)
+
         self.raw_answer = self.input.raw_answer = node.content
         return self.answer  # maybe also adds score?
 
@@ -550,7 +581,7 @@ Previous error:
 
             # deepseek may still put ```python...``` in the returned json
             code = extract_code(node.content)
-            self.answer_code = self.input.solution = code
+            self.answer_code = self.input.answer_code = code
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
             result = self.brain.python_env.step(f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}")

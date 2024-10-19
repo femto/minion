@@ -350,7 +350,7 @@ async def main():
     data = load_dataset("qq8933/AIME_1983_2024", split="train")
 
     #
-    json_storer = JsonStatsStorer("logs/stats_output.json")
+    json_storer = JsonStatsStorer("logs/aime_stats_output.json")
 
     # tracker = AsyncStatsTracker(stats_db_url)
     # In your main function or wherever you set up your application
@@ -362,10 +362,8 @@ async def main():
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
         data,
-        to_processed_id=None,
         concurrency_count=1,
         stats_storer=stats_storer,
-        start_id=None,
         continue_process=True,
         run_filename="run_aime.json",
     )

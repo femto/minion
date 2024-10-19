@@ -78,7 +78,8 @@ class Input(BaseModel):
     score_func: Any = None
 
     answer: str = ""  # the extracted final answer
-    solution: str = ""
+    answer_code: str = ""  # the extracted final answer
+    full_output: str = ""
     raw_answer: str = ""  # the complete answer with cot thought
     feedback: str = ""  # the feedback for improvement
 

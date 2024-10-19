@@ -46,7 +46,7 @@ class PreprocessingMinion(Minion):
         for field in step["apply_to"]:
             if field in perceptions:
                 for _ in range(step.get("repeat", 1)):
-                    perceptions[field] = self.apply_re2(perceptions[field])
+                    perceptions[field] = self.apply_re2(field, perceptions[field])
         return perceptions
 
     async def apply_semantic_refinement(self, perceptions, step):
@@ -55,7 +55,7 @@ class PreprocessingMinion(Minion):
                 perceptions[field] = await self.apply_rephrase(perceptions[field])
         return perceptions
 
-    def apply_re2(self, text):
+    def apply_re2(self, field, text):
         if not text:
             return text
         return f"{text}\nRead the above again: {text}"

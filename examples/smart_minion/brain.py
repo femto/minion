@@ -9,6 +9,7 @@ import asyncio
 
 import yaml
 
+from metagpt.configs.models_config import ModelsConfig
 from metagpt.llm import LLM
 from metagpt.minion.brain import Brain
 from metagpt.minion.rpyc_python_env import RpycPythonEnv
@@ -22,7 +23,14 @@ async def smart_brain():
 
     # Load the .env file
     load_dotenv()
-    llm = LLM()
+    gpt4o_llm_config = ModelsConfig.default().get("gpt-4o")
+    ModelsConfig.default().get("gpt-4o-mini")
+    ModelsConfig.default().get("deepseek-chat")
+
+    llm = LLM(llm_config=gpt4o_llm_config)
+    # llm = LLM(llm_config=gpt4o_mini_llm_config)
+    # llm = LLM(llm_config=deepseek_llm_config)
+
     # Load the config file
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -90,22 +98,22 @@ async def smart_brain():
     #
     # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.3.json")
     # obs, score, *_ = await brain.step(
-    #     query="Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes $1$ token or $4$ tokens from the stack. The player who removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ such that there is a strategy that guarantees that Bob wins, regardless of Alice’s moves.",
-    #     route="native",
+    #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
+    #     route="dcot",
     #     dataset="aime 2024",
-    #     cache_plan=cache_plan,
+    #     check=False
     # )
     # print(obs)
 
     # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
     #
-    # obs, score, *_ = await brain.step(
-    #     query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
-    #     route="cot",
-    #     dataset="aime 2024",
-    #     cache_plan=cache_plan,
-    # )
-    # print(obs)
+    obs, score, *_ = await brain.step(
+        query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+        route="dcot",
+        dataset="aime 2024",
+        check=False,
+    )
+    print(obs)
 
     # obs, score, *_ = await brain.step(
     #     query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",
