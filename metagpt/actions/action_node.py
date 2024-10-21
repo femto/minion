@@ -697,7 +697,7 @@ class ActionNode:
             for _, child in self.children.items():
                 child_revise_content = await child.simple_revise(revise_mode)
                 revise_contents.update(child_revise_content)
-            self.update_instruct_content(revise_contents)
+        self.update_instruct_content(revise_contents)
 
         return revise_contents
 
@@ -706,8 +706,7 @@ class ActionNode:
         """
         Creates an ActionNode tree from a Pydantic model.
 
-        Args:
-            model (Type[BaseModel]): The Pydantic model to convert.
+        Args:            model (Type[BaseModel]): The Pydantic model to convert.
 
         Returns:
             ActionNode: The root node of the created ActionNode tree.
