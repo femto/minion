@@ -256,22 +256,50 @@ def evaluate_expression(expr, numbers):
 
     # Evaluate the expression
     try:
-        result = eval(expr)
+        result = ast.literal_eval(expr)
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
     except:
-        return False
-
-
-def verify_game24_solution(question, user_answer):
-    # Extract numbers from the question
-    numbers = re.findall(r"\d+", question)
-
-    # Ensure we have exactly 4 numbers
-    if len(numbers) != 4:
-        return False
-
-    # Extract the solution from the user_answer
-    solution = extract_solution(user_answer)
+        return False        try:
+            # Parse the expression into an Abstract Syntax Tree
+            tree = ast.parse(expr, mode='eval')
+    
+            # Define allowed operations
+            operations = {
+                ast.Add: operator.add,
+                ast.Sub: operator.sub,
+                ast.Mult: operator.mul,
+                ast.Div: operator.truediv,
+            }
+    
+            # Recursive function to evaluate the AST
+            def eval_expr(node):
+                if isinstance(node, ast.Num):
+                    return node.n
+                elif isinstance(node, ast.BinOp):
+                    left = eval_expr(node.left)
+                    right = eval_expr(node.right)
+                    if type(node.op) not in operations:
+                        raise ValueError(f"Unsupported operation: {type(node.op)}")
+                    return operations[type(node.op)](left, right)
+                else:
+                    raise ValueError(f"Unsupported node type: {type(node)}")
+    
+            result = eval_expr(tree.body)
+            return abs(result - 24) < 1e-6  # Allow for small floating-point errors
+        except:
+            return False
+    
+    
+    def verify_game24_solution(question, user_answer):
+        # Extract numbers from the question
+        numbers = re.findall(r"\d+", question)
+    
+        # Ensure we have exactly 4 numbers
+        if len(numbers) != 4:
+            return False
+    
+        # Extract the solution from the user_answer
+        solution = extract_solution(user_answer)
     if not solution:
         return False
 
