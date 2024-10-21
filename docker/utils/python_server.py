@@ -69,6 +69,9 @@ class MyService(rpyc.Service):
             sys.stderr = error_buffer
 
             with lock:
+                # Validate and sanitize the command before execution
+                if not self.is_safe_command(command):
+                    raise ValueError("Unsafe command detected")
                 exec(command, namespace)
 
             sys.stdout = sys.__stdout__
@@ -80,6 +83,19 @@ class MyService(rpyc.Service):
         except Exception as e:
             stack_trace = traceback.format_exc()
             return {"error": f"Error: {str(e)}\nStack trace:\n{stack_trace}"}
+
+    def is_safe_command(self, command):
+        # Implement proper validation and sanitization logic here
+        # This is a placeholder and should be replaced with actual security checks
+        unsafe_patterns = [
+            r"import\s+os",
+            r"import\s+subprocess",
+            r"__import__\s*\(",
+            r"eval\s*\(",
+            r"exec\s*\(",
+            r"open\s*\(",
+        ]
+        return not any(re.search(pattern, command, re.IGNORECASE) for pattern in unsafe_patterns)
 
 
 if __name__ == "__main__":
