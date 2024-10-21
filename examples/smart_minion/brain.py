@@ -23,13 +23,13 @@ async def smart_brain():
 
     # Load the .env file
     load_dotenv()
-    gpt4o_llm_config = ModelsConfig.default().get("gpt-4o")
+    ModelsConfig.default().get("gpt-4o")
     ModelsConfig.default().get("gpt-4o-mini")
-    ModelsConfig.default().get("deepseek-chat")
+    deepseek_llm_config = ModelsConfig.default().get("deepseek-chat")
 
-    llm = LLM(llm_config=gpt4o_llm_config)
+    # llm = LLM(llm_config=gpt4o_llm_config)
     # llm = LLM(llm_config=gpt4o_mini_llm_config)
-    # llm = LLM(llm_config=deepseek_llm_config)
+    llm = LLM(llm_config=deepseek_llm_config)
 
     # Load the config file
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -96,7 +96,13 @@ async def smart_brain():
     #     LLM()
     #     llm1.config.temperature = 0.7
     #
-    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.3.json")
+    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.1.json")
+
+    deepseek_llm_config = ModelsConfig.default().get("deepseek-chat")
+
+    llm = LLM(llm_config=deepseek_llm_config)
+    brain = Brain(python_env=RpycPythonEnv(port=3007), llm=llm)
+    # aime 2024 problem 1, solution 204
     # obs, score, *_ = await brain.step(
     #     query="Every morning, Aya does a $9$ kilometer walk, and then finishes at the coffee shop. One day, she walks at $s$ kilometers per hour, and the walk takes $4$ hours, including $t$ minutes at the coffee shop. Another morning, she walks at $s+2$ kilometers per hour, and the walk takes $2$ hours and $24$ minutes, including $t$ minutes at the coffee shop. This morning, if she walks at $s+\frac12$ kilometers per hour, how many minutes will the walk take, including the $t$ minutes at the coffee shop?",
     #     route="dcot",
@@ -104,9 +110,26 @@ async def smart_brain():
     #     check=False
     # )
     # print(obs)
-
-    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
     #
+    # #aime 2024 problem 2, solution 25
+    # obs, score, *_ = await brain.step(
+    #     query="There exist real numbers $x$ and $y$, both greater than 1, such that $\log_x\left(y^x\right)=\log_y\left(x^{4y}\right)=10$. Find $xy$.",
+    #     route="dcot",
+    #     dataset="aime 2024",
+    #     check=False
+    # )
+    # print(obs)
+
+    # aime 2024 problem 4, solution 116
+    obs, score, *_ = await brain.step(
+        query="Jen enters a lottery by picking $4$ distinct numbers from $S=\{1,2,3,\cdots,9,10\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+        route="dcot",
+        dataset="aime 2024",
+        check=False,
+    )
+    print(obs)
+
+    # aime 2024 problem 7, solution 540
     obs, score, *_ = await brain.step(
         query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
         route="dcot",
@@ -114,6 +137,16 @@ async def smart_brain():
         check=False,
     )
     print(obs)
+    print("done")
+    # cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
+    #
+    # obs, score, *_ = await brain.step(
+    #     query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
+    #     route="dcot",
+    #     dataset="aime 2024",
+    #     check=False,
+    # )
+    # print(obs)
 
     # obs, score, *_ = await brain.step(
     #     query="Real numbers $x$ and $y$ with $x,y>1$ satisfy $\log_x(y^x)=\log_y(x^{4y})=10.$ What is the value of $xy$?",

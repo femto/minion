@@ -545,6 +545,7 @@ You are an AI language model employing iterative reasoning through three distinc
     + ASK_PROMPT_JINJA
 )
 
+# adapted from https://x.com/_philschmid/status/1842846050320544016
 DCOT_PROMPT = (
     """
 You are an AI assistant designed to solve complex problems by dynamically reasoning through multiple perspectives, employing reflection, and adapting your approach as new information emerges. Your task is to solve the problem step by step, incorporating deep reasoning, critical reflection, and strategic adjustments throughout the process.

@@ -956,25 +956,37 @@ class RouteMinion(Minion):
         return result
 
     async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
-        for iteration in range(max_iterations):
+        self.input.update_execution_state(current_iteration=0)
+        self.save_execution_state()
+
+        raw_answer = await self.invoke_minion(klass)
+        processed_answer = self.input.apply_post_processing(raw_answer)
+
+        self.answer = self.input.answer = processed_answer
+        await self.update_stats(name, processed_answer, raw_answer)
+
+        if not self.input.check:
+            return self.answer
+
+        for iteration in int(self.input.check):
             self.input.update_execution_state(current_iteration=iteration)
             self.save_execution_state()
 
+            check_minion = CheckMinion(input=self.input, brain=self.brain)
+            check_result = await check_minion.execute()
+
+            self.input.update_execution_state(check_result=check_result)
+            self.save_execution_state()
+
+            if check_result and check_result["correct"]:
+                return self.answer
+
+            # If the check fails, try invoking the minion again
             raw_answer = await self.invoke_minion(klass)
             processed_answer = self.input.apply_post_processing(raw_answer)
 
             self.answer = self.input.answer = processed_answer
             await self.update_stats(name, processed_answer, raw_answer)
-
-            if self.input.check:
-                check_minion = CheckMinion(input=self.input, brain=self.brain)
-                check_result = await check_minion.execute()
-
-                self.input.update_execution_state(check_result=check_result)
-                self.save_execution_state()
-
-                if check_result and check_result["correct"]:
-                    return self.answer
 
         return self.answer
 
