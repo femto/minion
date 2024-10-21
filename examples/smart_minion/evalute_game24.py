@@ -256,7 +256,7 @@ def evaluate_expression(expr, numbers):
 
     # Evaluate the expression
     try:
-        result = eval(expr)
+        result = safe_eval(expr)
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
     except:
         return False
@@ -319,7 +319,6 @@ async def solve_single_question(
             "user_answer": user_answer,
             "idx": item_id,
         }
-
 
 # Load ensemble logic from JSON files
 def load_execution_config(file_path):
