@@ -241,6 +241,8 @@ def extract_solution(solution_str):
 
 
 def evaluate_expression(expr, numbers):
+    import ast
+
     # Convert all numbers to integers
     numbers = [int(num) for num in numbers]
 
@@ -254,11 +256,11 @@ def evaluate_expression(expr, numbers):
     if Counter(expr_numbers) != Counter(numbers):
         return False
 
-    # Evaluate the expression
+    # Evaluate the expression safely
     try:
-        result = eval(expr)
+        result = ast.literal_eval(expr)
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
-    except:
+    except (ValueError, SyntaxError):
         return False
 
 
