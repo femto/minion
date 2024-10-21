@@ -108,7 +108,8 @@ class ExecuteNbCode(Action):
 
     def parse_outputs(self, outputs: list[str], keep_len: int = 2000) -> Tuple[bool, str]:
         """Parses the outputs received from notebook execution."""
-        assert isinstance(outputs, list)
+        if not isinstance(outputs, list):
+            raise TypeError("outputs must be a list")
         parsed_output, is_success = [], True
         for i, output in enumerate(outputs):
             output_text = ""
@@ -128,17 +129,17 @@ class ExecuteNbCode(Action):
                 output_text = output["data"]["text/plain"]
             elif output["output_type"] == "error":
                 output_text, is_success = "\n".join(output["traceback"]), False
-
+    
             # handle coroutines that are not executed asynchronously
             if output_text.strip().startswith("<coroutine object"):
                 output_text = "Executed code failed, you need use key word 'await' to run a async code."
                 is_success = False
-
+    
             output_text = remove_escape_and_color_codes(output_text)
             # The useful information of the exception is at the end,
             # the useful information of normal output is at the begining.
             output_text = output_text[:keep_len] if is_success else output_text[-keep_len:]
-
+    
             parsed_output.append(output_text)
         return is_success, ",".join(parsed_output)
 
