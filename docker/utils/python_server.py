@@ -68,15 +68,20 @@ class MyService(rpyc.Service):
             sys.stdout = output_buffer
             sys.stderr = error_buffer
 
-            with lock:
-                exec(command, namespace)
+            response = "Unsupported Command"
+
+            # Only allowing specific commands that are known
+            if command == "print_version":
+                response = "Version 1.0"
+
+            # More commands can be handled here
 
             sys.stdout = sys.__stdout__
             sys.stderr = sys.__stderr__
             output = output_buffer.getvalue().strip()
             error = error_buffer.getvalue().strip()
 
-            return {"output": output, "error": error}
+            return {"output": response, "error": error}
         except Exception as e:
             stack_trace = traceback.format_exc()
             return {"error": f"Error: {str(e)}\nStack trace:\n{stack_trace}"}

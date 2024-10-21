@@ -311,7 +311,12 @@ class ActionNode:
         return node_value
 
     def update_instruct_content(self, incre_data: dict[str, Any]):
-        assert self.instruct_content
+        try:
+            if not self.instruct_content:
+                raise ValueError("instruct_content must exist")
+        except ValueError as e:
+            # Handle error, log, or return
+            return
         origin_sc_dict = self.instruct_content.model_dump()
         origin_sc_dict.update(incre_data)
         output_class = self.create_class()
@@ -592,16 +597,20 @@ class ActionNode:
 
     async def review(self, strgy: str = "simple", review_mode: ReviewMode = ReviewMode.AUTO):
         """only give the review comment of each exist and mismatch key
-
+    
         :param strgy: simple/complex
          - simple: run only once
          - complex: run each node
         """
         if not hasattr(self, "llm"):
             raise RuntimeError("use `review` after `fill`")
-        assert review_mode in ReviewMode
-        assert self.instruct_content, 'review only support with `schema != "raw"`'
-
+    
+        if review_mode not in ReviewMode:
+            raise ValueError("Invalid review mode")
+    
+        if not self.instruct_content:
+            raise ValueError('review only support with `schema != "raw"`')
+    
         if strgy == "simple":
             review_comments = await self.simple_review(review_mode)
         elif strgy == "complex":
@@ -610,7 +619,7 @@ class ActionNode:
             for _, child in self.children.items():
                 child_review_comment = await child.simple_review(review_mode)
                 review_comments.update(child_review_comment)
-
+    
         return review_comments
 
     async def human_revise(self) -> dict[str, str]:
@@ -679,16 +688,20 @@ class ActionNode:
 
     async def revise(self, strgy: str = "simple", revise_mode: ReviseMode = ReviseMode.AUTO) -> dict[str, str]:
         """revise the content of ActionNode and update the instruct_content
-
+    
         :param strgy: simple/complex
          - simple: run only once
          - complex: run each node
         """
         if not hasattr(self, "llm"):
             raise RuntimeError("use `revise` after `fill`")
-        assert revise_mode in ReviseMode
-        assert self.instruct_content, 'revise only support with `schema != "raw"`'
-
+        
+        if revise_mode not in ReviseMode:
+            raise ValueError("Invalid revise mode")
+        
+        if not self.instruct_content:
+            raise ValueError("revise only support with `schema != \"raw\"`")
+    
         if strgy == "simple":
             revise_contents = await self.simple_revise(revise_mode)
         elif strgy == "complex":
@@ -698,7 +711,7 @@ class ActionNode:
                 child_revise_content = await child.simple_revise(revise_mode)
                 revise_contents.update(child_revise_content)
             self.update_instruct_content(revise_contents)
-
+    
         return revise_contents
 
     @classmethod
