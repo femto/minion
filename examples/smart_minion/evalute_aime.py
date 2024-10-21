@@ -240,6 +240,61 @@ def extract_solution(solution_str):
     return expr
 
 
+import re
+from collections import Counter
+import operator
+
+# Define operator mappings
+ops = {
+    '+': operator.add,
+    '-': operator.sub,
+    '*': operator.mul,
+    '/': operator.truediv,
+}
+
+# Function to safely evaluate expressions
+def safe_eval(expr, numbers):
+    # Tokenize the expression
+    tokens = re.findall(r'\d+|[-+/*()]', expr)
+
+    # Convert all numbers to integers
+    number_queue = [int(num) for num in numbers]
+
+    # Stack for numbers and operators
+    values = []
+    operations = []
+
+    # Helper function to apply an operation to the stack
+    def apply_operation():
+        right = values.pop()
+        left = values.pop()
+        operation = operations.pop()
+        values.append(ops[operation](left, right))
+
+    # Parse and evaluate the expression
+    for token in tokens:
+        if token.isdigit():
+            values.append(int(token))
+        elif token in ops:
+            while (operations and operations[-1] in ops and
+                   ops[token] in [operator.add, operator.sub] and
+                   ops[operations[-1]] in [operator.mul, operator.truediv]):
+                apply_operation()
+            operations.append(token)
+        elif token == '(':
+            operations.append(token)
+        elif token == ')':
+            while operations[-1] != '(':
+                apply_operation()
+            operations.pop()  # Pop the '('
+
+    # Apply remaining operations
+    while operations:
+        apply_operation()
+
+    return values[0]
+
+
 def evaluate_expression(expr, numbers):
     # Convert all numbers to integers
     numbers = [int(num) for num in numbers]
@@ -254,13 +309,12 @@ def evaluate_expression(expr, numbers):
     if Counter(expr_numbers) != Counter(numbers):
         return False
 
-    # Evaluate the expression
+    # Evaluate the expression using the safe evaluator
     try:
-        result = eval(expr)
+        result = safe_eval(expr, numbers)
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
-    except:
+    except Exception as e:
         return False
-
 
 def verify_game24_solution(question, user_answer):
     # Extract numbers from the question
