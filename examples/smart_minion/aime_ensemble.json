@@ -1,0 +1,16 @@
+{
+    "ensemble_strategy": {
+        "ensemble_minions": [
+            {
+                "name": "native",
+                "count": 1,
+                "post_processing": "extract_number_from_string",
+                "short_circuit": false
+            }
+        ],
+       "ensemble_logic": {
+            "type": "majority_voting",
+            "short_circuit": false
+        }
+    }
+}

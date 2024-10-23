@@ -1,0 +1,32 @@
+{
+    "name": "Python Development",
+    "image": "mcr.microsoft.com/devcontainers/python:3.11",
+    
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                "njpwerner.autodocstring"
+            ],
+            "settings": {
+                "python.formatting.provider": "black",
+                "python.linting.enabled": true,
+                "python.linting.pylintEnabled": true,
+                "editor.formatOnSave": true,
+                "editor.rulers": [88],
+                "files.trimTrailingWhitespace": true
+            }
+        }
+    },
+
+    "postCreateCommand": "pip install --user -r requirements.txt",
+    
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+
+    "remoteUser": "vscode"
+}
