@@ -122,11 +122,11 @@ make sure container name intercode-python_ic_ctr is listening on 3006
 
 Join our Discord community to connect with other Minion users, get support, and stay updated on the latest developments:
 
-[Join Minion Discord](https://discord.gg/StbzWTkn)
+[![Discord](https://dcbadge.limes.pink/api/server/StbzWTkn?style=flat)](https://discord.gg/StbzWTkn)
 
 Follow the project creator on Twitter for announcements and insights:
 
-[@femtowin on Twitter](https://x.com/femtowin)
+[![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)
 
 ## Enjoy Your Brain.Step() Journey
 

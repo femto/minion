@@ -28,11 +28,11 @@ setup(
     description='A short description of your package',
     long_description=get_long_description(),
     long_description_content_type='text/markdown',
-    author='Your Name',  # Replace with your name
-    author_email='your.email@example.com',  # Replace with your email
+    author='femto',
+    author_email='femtowin@gmail',
     
     # Project URLs
-    url='https://github.com/username/project',  # Replace with your project URL
+    url='https://github.com/femto/minion',
     
     # Find packages automatically
     packages=find_packages(exclude=['tests*']),
@@ -44,7 +44,7 @@ setup(
     install_requires=get_requirements(),
     
     # Python version requirement
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     
     # Classifiers help users find your project
     classifiers=[
