@@ -1,3 +1,5 @@
+[![Documentation Status](https://img.shields.io/badge/documentation-go-brightgreen)](https://github.com/femto/minion) [![Install](https://img.shields.io/badge/get_started-blue)](https://github.com/femto/minion#get-started) [![Discord](https://img.shields.io/discord/1234567890?color=7289da&label=discord&logo=discord&logoColor=white)](https://discord.gg/StbzWTkn) [![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)
+
 # Minion README
 
 ## Features
@@ -112,6 +114,16 @@ docker rm intercode-python_ic_ctr
 docker run -d -p 3006:3006 --name intercode-python_ic_ctr intercode-python
 ```
 make sure container name intercode-python_ic_ctr is listening on 3006
+
+## Community and Support
+
+Join our Discord community to connect with other Minion users, get support, and stay updated on the latest developments:
+
+[Join Minion Discord](https://discord.gg/StbzWTkn)
+
+Follow the project creator on Twitter for announcements and insights:
+
+[@femtowin on Twitter](https://x.com/femtowin)
 
 ## Enjoy Your Brain.Step() Journey
 
