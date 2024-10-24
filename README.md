@@ -1,4 +1,4 @@
-[![Documentation Status](https://img.shields.io/badge/documentation-go-brightgreen)](https://github.com/femto/minion) 
+[![Documentation Status](https://img.shields.io/badge/documentation-brightgreen)](https://github.com/femto/minion) 
 [![Install](https://img.shields.io/badge/get_started-blue)](https://github.com/femto/minion#get-started) 
 [![Discord](https://dcbadge.limes.pink/api/server/StbzWTkn?style=flat)](https://discord.gg/StbzWTkn)
 [![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)
