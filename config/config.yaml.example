@@ -17,7 +17,6 @@ llm:
   base_url: "${LLM_BASE_URL}"
 
 models:
-
   "default":
     api_type: "openai"
     base_url: "${DEFAULT_BASE_URL}"
@@ -34,5 +33,9 @@ models:
     base_url: "${CLAUDE_BASE_URL}"
     api_key: "${CLAUDE_API_KEY}"
     temperature: 0.7
+ell:
+  store: 'logs'
+  autocommit:true
+  verbose:true
 
 

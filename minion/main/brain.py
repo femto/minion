@@ -12,8 +12,8 @@ from typing import Any
 from jinja2 import Template
 from mem0 import Memory
 from pydantic import BaseModel
-
 from minion import config
+from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.input import Input
 from minion.main.python_env import PythonEnv
 from minion.main.utils import process_image
@@ -149,15 +149,14 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
         # Create the filled template
         filled_template = mind_template.render(minds=self.minds.values(), input=input)
 
-        node = ActionNode(
+        node = LmpActionNode(
             key="mind",
             expected_type=str,
             instruction="mind id",
             example="",
         )
-        node = await node.fill(
-            context=filled_template,
-            llm=self.llm,
+        node = await node.execute(
+
         )
 
         return node.instruct_content.mind

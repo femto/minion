@@ -34,14 +34,6 @@ class BaseLLM(ABC):
 
 
 def main():
-    # 打印已注册的提供者
-    print("Registered providers:", LLMRegistry._providers)
-
-    # 确保至少有一个提供者被注册
-    if not LLMRegistry._providers:
-        print("No providers registered. Make sure to import the provider modules.")
-        return
-
     # 假设配置文件中有一个名为 "deepseek-chat" 的模型配置
     llm_config = config.models.get("deepseek-chat")
     if not llm_config:
