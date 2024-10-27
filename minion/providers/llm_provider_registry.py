@@ -25,11 +25,7 @@ class LLMRegistry:
         if api_type not in self.providers:
             # 尝试动态导入
             try:
-                module = importlib.import_module(f"minion.providers.{api_type}_provider")
-                for name, obj in module.__dict__.items():
-                    if isinstance(obj, type) and issubclass(obj, BaseLLM):
-                        self.providers[api_type] = f"{module.__name__}.{name}"
-                        break
+                importlib.import_module(f"minion.providers.{api_type}_provider")
             except ImportError:
                 raise ValueError(f"Unknown API type: {api_type}")
 

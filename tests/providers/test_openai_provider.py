@@ -1,3 +1,5 @@
+import inspect
+from asyncio import iscoroutinefunction
 from unittest.mock import AsyncMock, patch
 
 import pytest

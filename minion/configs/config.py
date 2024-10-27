@@ -45,11 +45,18 @@ class LLMConfig(BaseModel):
         use_enum_values = True
 
 
+class EllConfig(BaseModel):
+    store: str = 'logs'
+    autocommit: bool = True
+    verbose: bool = True
+
+
 class Config(BaseModel):
     environment: Dict[str, str] = Field(default_factory=dict)
     env_file: List[str] = Field(default_factory=list)
     llm: LLMConfig
     models: Dict[str, LLMConfig]
+    ell: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         populate_by_name = True
@@ -100,6 +107,14 @@ def load_config(root_path: Optional[Path] = None, override_env: bool = False):
 
     if "llm" not in config_dict:
         config_dict["llm"] = config_dict["models"].get("default", next(iter(config_dict["models"].values())))
+
+    # 确保 ell 配置存在，如果不存在则使用默认值
+    if "ell" not in config_dict:
+        config_dict["ell"] = {
+            "store": 'logs',
+            "autocommit": True,
+            "verbose": True
+        }
 
     return Config(**config_dict)
 
