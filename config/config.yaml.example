@@ -1,0 +1,38 @@
+# Full Example: https://github.com/geekan/MetaGPT/blob/main/config/config2.example.yaml
+# Reflected Code: https://github.com/geekan/MetaGPT/blob/main/metagpt/config2.py
+# Config Docs: https://docs.deepwisdom.ai/main/en/guide/get_started/configuration.html
+
+environment:
+  ENV1: val1
+  ENV2: val2
+  ENV3: val3
+
+env_file:
+  - .env
+  - .env.local
+
+llm:
+  api_key: "${LLM_API_KEY}"
+  model: "deepseek-chat"
+  base_url: "${LLM_BASE_URL}"
+
+models:
+
+  "default":
+    api_type: "openai"
+    base_url: "${DEFAULT_BASE_URL}"
+    api_key: "${DEFAULT_API_KEY}"
+    model: "deepseek-chat"
+    temperature: 0
+  "gpt-4-0125":
+    api_type: "openai"
+    base_url: "https://oneapi.deepwisdom.ai/v1"
+    api_key: "sk-example-key"
+    temperature: 0
+  "claude-3-5-sonnet-20240620":
+    api_type: "openai"
+    base_url: "${CLAUDE_BASE_URL}"
+    api_key: "${CLAUDE_API_KEY}"
+    temperature: 0.7
+
+
