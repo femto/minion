@@ -12,7 +12,7 @@ from minion.providers.llm_provider_registry import llm_registry
 class OpenAIProvider(BaseLLM):
     def _setup(self) -> None:
         import openai
-
+        self.client0 = openai.OpenAI(api_key=self.config.api_key, base_url=str(self.config.base_url))
         self.client = openai.AsyncOpenAI(api_key=self.config.api_key, base_url=str(self.config.base_url))
 
     def _prepare_messages(self, messages: List[Message]) -> List[dict]:

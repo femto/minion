@@ -98,6 +98,7 @@ Supporting navigation and spatial memory""",
         self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
 
         self.stats_storer = stats_storer
+        self.lmp_action_node = LmpActionNode(llm=self.llm)
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind
@@ -149,17 +150,13 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
         # Create the filled template
         filled_template = mind_template.render(minds=self.minds.values(), input=input)
 
-        node = LmpActionNode(
-            key="mind",
-            expected_type=str,
-            instruction="mind id",
-            example="",
-        )
-        node = await node.execute(
+        result = await self.lmp_action_node.execute(filled_template)
 
-        )
+        # Ensure the result is a valid mind ID
+        if result not in self.minds:
+            raise ValueError(f"Invalid mind ID returned: {result}")
 
-        return node.instruct_content.mind
+        return result
 
 
 Mind.update_forward_refs()
