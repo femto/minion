@@ -38,7 +38,7 @@ class LLMConfig(BaseModel):
     base_url: Optional[str] = None
     model: str
     temperature: float = 0.7
-    max_tokens: int = 1000
+    max_tokens: int = 4000
     vision_enabled: bool = False
 
     class Config:
