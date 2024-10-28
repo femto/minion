@@ -19,6 +19,7 @@ def lmp_action_node():
     llm = create_llm_provider(config.models.get("default"))
     #llm = create_llm_provider(config.models.get("o1-mini"))
     #llm = create_llm_provider(config.models.get("gpt-4o-mini"))
+    llm = create_llm_provider(config.models.get("llama2"))
     return LmpActionNode(llm=llm)
 
 @pytest.mark.llm_integration
