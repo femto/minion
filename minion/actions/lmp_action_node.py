@@ -26,7 +26,6 @@ class LmpActionNode(LLMActionNode):
             # "base_url": self.llm.config.base_url,
             "temperature": self.llm.config.temperature,
             "model": self.llm.config.model,
-            "stream": True
         }
         
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
