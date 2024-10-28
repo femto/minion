@@ -21,10 +21,5 @@ asyncpg
 dill
 antlr4-python3-runtime
 
-#accelerate
-#psycopg2-binary
 ell-ai
-#-e /Users/femtozheng/python-project/ell
-#ell-ai[anthropic]
 optillm
-#-e /Users/femtozheng/python-project/optillm
