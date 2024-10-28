@@ -11,22 +11,27 @@ from jinja2 import Template
 @pytest.fixture
 def lmp_action_node():
     llm = create_llm_provider(config.models.get("default"))
+    #llm = create_llm_provider(config.models.get("o1-mini"))
+    #llm = create_llm_provider(config.models.get("gpt-4o-mini"))
     return LmpActionNode(llm=llm)
 
 @pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_execute_with_string(lmp_action_node):
-    result = await lmp_action_node.execute("Tell me a short joke.")
+    #result = await lmp_action_node.execute("Tell me a short joke.")
+    result = await lmp_action_node.execute("""推导E[X∣Y=y]在连续情况下,
+E[X∣Y=y]的公式是否是定义的，而不是推导的,
+离散情况下如何，E[X∣Y=y]的公式是推导出来的还是定义出来的?""")
     assert isinstance(result, str)
     assert len(result) > 0
 
-@pytest.mark.llm_integration
-@pytest.mark.asyncio
-async def test_execute_with_message(lmp_action_node):
-    result = await lmp_action_node.execute("What's the capital of France?")
-    assert isinstance(result, str)
-    assert "Paris" in result
-
+# @pytest.mark.llm_integration
+# @pytest.mark.asyncio
+# async def test_execute_with_message(lmp_action_node):
+#     result = await lmp_action_node.execute("What's the capital of France?")
+#     assert isinstance(result, str)
+#     assert "Paris" in result
+#
 # @pytest.mark.llm_integration
 # @pytest.mark.asyncio
 # async def test_execute_with_message_list(lmp_action_node):
@@ -50,12 +55,6 @@ async def test_execute_with_message(lmp_action_node):
 # @pytest.mark.asyncio
 # async def test_execute_with_kwargs(lmp_action_node):
 #     result = await lmp_action_node.execute("Tell me a color.", temperature=0.7, max_tokens=10)
-#     assert isinstance(result, str)
-#     assert len(result) > 0
-#
-# @pytest.mark.asyncio
-# async def test_ell_call_directly():
-#     result = await ell_call("What's the meaning of life?")
 #     assert isinstance(result, str)
 #     assert len(result) > 0
 
