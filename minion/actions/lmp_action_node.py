@@ -10,7 +10,7 @@ from minion.providers import create_llm_provider
 class LmpActionNode(LLMActionNode):
     def __init__(self, llm, output_parser=None):
         super().__init__(llm, output_parser)
-        ell.init(**config.ell, default_client=self.llm.client0)
+        ell.init(**config.ell, default_client=self.llm.client_ell)
 
     @ell.complex(model="gpt-4o-mini")
     def ell_call(self, ret):
@@ -29,7 +29,7 @@ class LmpActionNode(LLMActionNode):
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
         api_params.update(kwargs)
         
-        response = self.ell_call(messages, client=self.llm.client0, api_params=api_params)
+        response = self.ell_call(messages, client=self.llm.client_ell, api_params=api_params)
         response = response.text
 
         if self.output_parser:
