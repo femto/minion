@@ -12,8 +12,13 @@ from minion.providers.llm_provider_registry import llm_registry
 class OpenAIProvider(BaseLLM):
     def _setup(self) -> None:
         import openai
-        self.client_ell = openai.OpenAI(api_key=self.config.api_key, base_url=str(self.config.base_url))
-        self.client = openai.AsyncOpenAI(api_key=self.config.api_key, base_url=str(self.config.base_url))
+        # 创建客户端配置
+        client_kwargs = {"api_key": self.config.api_key}
+        if self.config.base_url:
+            client_kwargs["base_url"] = str(self.config.base_url)
+        
+        self.client_ell = openai.OpenAI(**client_kwargs)
+        self.client = openai.AsyncOpenAI(**client_kwargs)
 
     def _prepare_messages(self, messages: List[Message]) -> List[dict]:
         """准备发送给API的消息格式"""
