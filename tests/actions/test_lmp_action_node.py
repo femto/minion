@@ -5,8 +5,14 @@ from minion.providers import create_llm_provider
 from minion.configs.config import config
 from minion.main.input import Input
 from jinja2 import Template
+from pydantic import BaseModel
+from typing import List, Optional
 
-
+# 定义测试用的 Pydantic model
+class TestResponse(BaseModel):
+    message: str
+    items: List[str]
+    score: Optional[float] = None
 
 @pytest.fixture
 def lmp_action_node():
@@ -18,10 +24,8 @@ def lmp_action_node():
 @pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_execute_with_string(lmp_action_node):
-    #result = await lmp_action_node.execute("Tell me a short joke.")
-    result = await lmp_action_node.execute("""推导E[X∣Y=y]在连续情况下,
-E[X∣Y=y]的公式是否是定义的，而不是推导的,
-离散情况下如何，E[X∣Y=y]的公式是推导出来的还是定义出来的?""")
+    result = await lmp_action_node.execute("Tell me a short joke.")
+
     assert isinstance(result, str)
     assert len(result) > 0
 
@@ -100,3 +104,30 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
 
     assert result in minds.keys(), f"Expected one of {minds.keys()}, but got {result}"
     assert result == "left_mind", f"Expected 'left_mind' for a math question, but got {result}"
+
+@pytest.mark.llm_integration
+@pytest.mark.asyncio
+async def test_lmp_action_node_with_response_format(lmp_action_node):
+
+    # 执行节点
+    result = await lmp_action_node.execute("List 3 fruits",response_format=TestResponse)
+    
+    # 验证结果是否符合预期格式
+    assert isinstance(result, TestResponse)
+    assert isinstance(result.message, str)
+    assert isinstance(result.items, list)
+    assert len(result.items) == 3
+    
+# async def test_lmp_action_node_without_response_format():
+#     # 测试不设置 response_format 的情况
+#     node = LMPActionNode(
+#         name="test_node",
+#         system_prompt="You are a helpful assistant",
+#         user_prompt="List 3 fruits"
+#     )
+#
+#     # 执行节点
+#     result = await node.execute()
+#
+#     # 验证结果是字符串
+#     assert isinstance(result, str)
