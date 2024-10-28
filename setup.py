@@ -27,7 +27,7 @@ def get_long_description():
 
 
 setup(
-    name="minionx",  # Replace with your package name
+    name="minion",  # Replace with your package name
     version="0.1.0",
     description="A short description of your package",
     long_description=get_long_description(),
