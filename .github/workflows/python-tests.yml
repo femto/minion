@@ -26,7 +26,10 @@ jobs:
         pip install -e .
     - name: Setup test environment
       run: |
-        # Create basic config.yaml
+        # Create config directory if it doesn't exist
+        mkdir -p config
+        
+        # Create basic config.yaml in config directory
         echo "models:
           gpt-3.5-turbo:
             provider: openai
@@ -39,12 +42,12 @@ jobs:
         minion:
           default_model: gpt-3.5-turbo
           default_api_key: dummy-key
-          default_base_url: https://api.openai.com/v1" > config.yaml
+          default_base_url: https://api.openai.com/v1" > config/config.yaml
         
-        # Create basic .env file
+        # Create basic .env file in config directory
         echo "DEFAULT_API_KEY=dummy-key
         DEFAULT_BASE_URL=https://api.openai.com/v1
-        DEFAULT_MODEL=gpt-3.5-turbo" > .env
+        DEFAULT_MODEL=gpt-3.5-turbo" > config/.env
     - name: Run tests without LLM integration
       run: |
         PYTHONPATH=$PYTHONPATH:$(pwd) pytest -v -m "not llm_integration"
