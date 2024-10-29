@@ -21,21 +21,12 @@ async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
     llm_config = config.models.get("default")
     llm = create_llm_provider(llm_config)
-    memory_config = {}  # 如果需要，可以在 Config 类中添加 memory 字段
+    memory_config = {}
     python_env_config = {"port": 3007}  # 同上
 
     brain = Brain(
         python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), llm=llm, memory_config=memory_config
     )
-
-    # 加载 memory_config.yml 文件（如果仍然需要的话）
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(current_dir, "memory_config.yml")
-    with open(config_path, "r") as file:
-        memory_config = yaml.safe_load(file)
-
-    # 替换环境变量占位符
-    memory_config = replace_placeholders_with_env(memory_config)
 
     # 示例使用
     obs, score, *_ = await brain.step(
