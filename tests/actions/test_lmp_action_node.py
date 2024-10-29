@@ -148,6 +148,7 @@ def mock_input():
     return input_obj
 
 # 添加 IdentifyMinion 相关的测试用例
+@pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_lmp_identify_execute(mock_brain, mock_input):
     # Mock identification response
@@ -166,6 +167,7 @@ async def test_lmp_identify_execute(mock_brain, mock_input):
     # Verify the result
     assert result == "identified the input query"
 
+@pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_lmp_identify_invalid_response(mock_brain, mock_input):
     # Mock invalid JSON response
