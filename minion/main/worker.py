@@ -779,11 +779,7 @@ class RouteMinion(Minion):
         filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(filled_template)
-        
-        # Parse the response into MetaPlan model
-        meta_plan_data = json.loads(response)
-        meta_plan = MetaPlan(**meta_plan_data)
+        meta_plan = await node.execute(filled_template, response_format=MetaPlan)
         
         if self.input.route:
             name = self.input.route
