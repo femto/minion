@@ -1,5 +1,4 @@
-# 包含 Message, MessageContent, ImageContent 等类定义
-
+# use ell first, defined in messages.py
 import base64
 import mimetypes
 from pathlib import Path

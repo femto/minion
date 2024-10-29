@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional, List
 
 from minion.message_types import Message
+from minion.models.schemas import Answer
 from minion.providers import BaseLLM
 
 
@@ -28,6 +29,10 @@ class LLMActionNode(ActionNode):
             return self.output_parser(response)
 
         return response
+
+    async def execute_answer(self, messages, **kwargs):
+        result = await self.execute(messages, response_format=Answer, **kwargs)
+        return result.answer
 
 
 class ToolActionNode(ActionNode):

@@ -1,6 +1,8 @@
 import pytest
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.message_types import Message
+from minion.messages import user, system
+from minion.models.schemas import Answer
 from minion.providers import create_llm_provider
 from minion.configs.config import config
 from minion.main.input import Input
@@ -17,9 +19,6 @@ class TestResponse(BaseModel):
 @pytest.fixture
 def lmp_action_node():
     llm = create_llm_provider(config.models.get("default"))
-    #llm = create_llm_provider(config.models.get("o1-mini"))
-    #llm = create_llm_provider(config.models.get("gpt-4o-mini"))
-    llm = create_llm_provider(config.models.get("llama2"))
     return LmpActionNode(llm=llm)
 
 @pytest.mark.llm_integration
@@ -30,38 +29,38 @@ async def test_execute_with_string(lmp_action_node):
     assert isinstance(result, str)
     assert len(result) > 0
 
-# @pytest.mark.llm_integration
-# @pytest.mark.asyncio
-# async def test_execute_with_message(lmp_action_node):
-#     result = await lmp_action_node.execute("What's the capital of France?")
-#     assert isinstance(result, str)
-#     assert "Paris" in result
-#
-# @pytest.mark.llm_integration
-# @pytest.mark.asyncio
-# async def test_execute_with_message_list(lmp_action_node):
-#     messages = [
-#         Message(role="system", content="You are a helpful assistant."),
-#         Message(role="user", content="What's 2 + 2?")
-#     ]
-#     result = await lmp_action_node.execute(messages)
-#     assert isinstance(result, str)
-#     assert "4" in result
-#
-# @pytest.mark.llm_integration
-# @pytest.mark.asyncio
-# async def test_execute_with_output_parser(lmp_action_node):
-#     lmp_action_node.output_parser = lambda x: x.upper()
-#     result = await lmp_action_node.execute("Say hello.")
-#     assert isinstance(result, str)
-#     assert result.isupper()
-#
-# @pytest.mark.llm_integration
-# @pytest.mark.asyncio
-# async def test_execute_with_kwargs(lmp_action_node):
-#     result = await lmp_action_node.execute("Tell me a color.", temperature=0.7, max_tokens=10)
-#     assert isinstance(result, str)
-#     assert len(result) > 0
+@pytest.mark.llm_integration
+@pytest.mark.asyncio
+async def test_execute_with_message(lmp_action_node):
+    result = await lmp_action_node.execute("What's the capital of France?")
+    assert isinstance(result, str)
+    assert "Paris" in result
+
+@pytest.mark.llm_integration
+@pytest.mark.asyncio
+async def test_execute_with_message_list(lmp_action_node):
+    messages = [
+        system("You are a helpful assistant."),
+        user("What's 2 + 2?")
+    ]
+    result = await lmp_action_node.execute(messages)
+    assert isinstance(result, str)
+    assert "4" in result
+
+@pytest.mark.llm_integration
+@pytest.mark.asyncio
+async def test_execute_with_output_parser(lmp_action_node):
+    lmp_action_node.output_parser = lambda x: x.upper()
+    result = await lmp_action_node.execute("Say hello.")
+    assert isinstance(result, str)
+    assert result.isupper()
+
+@pytest.mark.llm_integration
+@pytest.mark.asyncio
+async def test_execute_with_kwargs(lmp_action_node):
+    result = await lmp_action_node.execute("Tell me a color.", temperature=0.7, max_tokens=10)
+    assert isinstance(result, str)
+    assert len(result) > 0
 
 @pytest.mark.llm_integration
 @pytest.mark.asyncio
@@ -101,24 +100,24 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
 
     filled_template = mind_template.render(minds=minds, input=input_data)
 
-    result = await lmp_action_node.execute(filled_template)
-
+    # Execute the node with the filled template
+    result = await lmp_action_node.execute_answer(filled_template)
+    # Validate the result
     assert result in minds.keys(), f"Expected one of {minds.keys()}, but got {result}"
     assert result == "left_mind", f"Expected 'left_mind' for a math question, but got {result}"
 
 @pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_lmp_action_node_with_response_format(lmp_action_node):
-
     # 执行节点
-    result = await lmp_action_node.execute("List 3 fruits",response_format=TestResponse)
+    result = await lmp_action_node.execute("List 3 fruits", response_format=TestResponse)
     
     # 验证结果是否符合预期格式
     assert isinstance(result, TestResponse)
     assert isinstance(result.message, str)
     assert isinstance(result.items, list)
     assert len(result.items) == 3
-    
+
 # async def test_lmp_action_node_without_response_format():
 #     # 测试不设置 response_format 的情况
 #     node = LMPActionNode(

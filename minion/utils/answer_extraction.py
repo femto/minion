@@ -15,6 +15,44 @@ from sympy import N, simplify
 from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
 
+def extract_final_answer(text):
+    # Match for <final_answer> tag
+    match_tag = re.search(r"<final_answer>\s*(.*?)\s*</final_answer>", text, re.DOTALL)
+    if match_tag:
+        return match_tag.group(1).strip()
+
+    return text
+
+def extract_json_from_string(text):
+    # Regular expression pattern to match all content between ```json and ```
+    pattern = r"```json\s*([\s\S]*?)\s*```"
+
+    # Find all matches in the input text
+    matches = re.findall(pattern, text)
+
+    if matches:
+        # Heuristic: Select the longest JSON block, assuming it's the most comprehensive
+        longest_match = max(matches, key=len)
+
+        try:
+            # Decode the longest JSON block
+            return CustomDecoder(strict=False).decode(longest_match)
+        except json.JSONDecodeError as e:
+            raise ValueError("Invalid JSON content in the selected block.") from e
+    else:
+        raise ValueError("No JSON content found.")
+
+
+
+
+
+def extract_answer(text):
+    # Match for <final_answer> tag
+    match_tag = re.search(r"<answer>\s*(.*?)\s*</answer>", text, re.DOTALL)
+    if match_tag:
+        return match_tag.group(1).strip()
+
+    return text
 
 def extract_gsm8k_answer(answer_str):
     # Regular expression to find the answer after '####'

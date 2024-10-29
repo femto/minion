@@ -7,9 +7,10 @@
 """
 import uuid
 
-from minion.main.answer_extraction import math_equal
-from minion.main.prompt import ASK_PROMPT
+from minion.main.prompt import ASK_PROMPT, COT_PROBLEM_INSTRUCTION, DOT_PROMPT
 from minion.main.utils import camel_case_to_snake_case, extract_content
+from minion.actions.lmp_action_node import LmpActionNode
+from minion.utils.answer_extraction import math_equal
 
 MINION_REGISTRY = {}
 MINION_ROUTE_DOWNSTREAM = {}
@@ -112,8 +113,47 @@ class Minion(metaclass=SubclassHookMeta):
         return answer
 
     async def execute(self):
-        node = ActionNode(key="answer", expected_type=str, instruction="let's think step by step", example="")
-        node = await node.fill(context=ASK_PROMPT.format(input=self.input), llm=self.brain.llm)
-        self.answer_node = node
-        self.answer = self.input.answer = node.instruct_content.answer
-        return self.answer  # maybe also adds score?
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute(ASK_PROMPT.format(input=self.input))
+        self.answer_node = response
+        self.answer = self.input.answer = response
+        return self.answer
+
+class CotMinion(Minion):
+    async def execute(self):
+        prompt = (COT_PROBLEM_INSTRUCTION + ASK_PROMPT).format(input=self.input)
+        prompt += "\nPlease provide your response in JSON format."
+        context = {"messages": [{"role": "user", "content": prompt}], "images": self.input.images}
+        
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute(context)
+        self.answer_node = response
+
+        if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
+            self.answer = self.extract_python_code(response)
+        else:
+            self.answer = extract_final_answer(response)
+
+        self.input.answer = self.answer
+        self.raw_answer = self.input.raw_answer = response
+        return self.raw_answer
+
+class DotMinion(Minion):
+    async def execute(self):
+        node = LmpActionNode(self.brain.llm)
+        prompt = Template(DOT_PROMPT).render(input=self.input)
+        response = await node.execute(prompt)
+        self.answer_node = response
+        self.answer = self.input.answer = extract_final_answer(response)
+        
+        for _ in range(3):  # try using llm 3 times to extract answer
+            if not self.answer:
+                # try using llm to extract answer
+                node = LmpActionNode(self.brain.llm)
+                response = await node.execute(response)
+                self.answer = self.input.answer = extract_final_answer(response)
+            else:
+                break
+                
+        self.raw_answer = self.input.raw_answer = response
+        return self.answer
