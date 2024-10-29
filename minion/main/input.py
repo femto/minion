@@ -12,9 +12,10 @@ from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from minion.main.answer_extraction import extract_math_answer
+
 from minion.main.symbol_table import SymbolTable
 from minion.main.utils import extract_number_from_string, extract_python
+from minion.utils.answer_extraction import extract_math_answer
 
 
 class PostProcessingType(str, Enum):
