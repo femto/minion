@@ -731,11 +731,7 @@ class IdentifyMinion(Minion):
         prompt = prompt.render(input=self.input)
 
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(prompt)
-        
-        # Parse the response into Identification model
-        identification_data = json.loads(response)
-        identification = Identification(**identification_data)
+        identification = await node.execute(prompt, response_format=Identification)
         
         self.input.complexity = identification.complexity
         self.input.query_range = identification.query_range
@@ -757,15 +753,10 @@ class QaMinion(Minion):
             prompt = prompt.render(question=f"what's {self.input.dataset}")
 
             node = LmpActionNode(self.brain.llm)
-            response = await node.execute(prompt)
+            answer = await node.execute_answer(prompt)
             
-            # Parse the response into QuestionAndAnswer model
-            qa_data = json.loads(response)
-            qa = QuestionAndAnswer(**qa_data)
-            
-            self.answer = self.input.dataset_description = qa.answer
+            self.answer = self.input.dataset_description = answer
             return self.answer
-
 
 class RouteMinion(Minion):
     def __init__(self, **kwargs):

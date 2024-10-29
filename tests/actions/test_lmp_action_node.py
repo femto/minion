@@ -1,5 +1,6 @@
 import pytest
 from minion.actions.lmp_action_node import LmpActionNode
+from minion.main.worker import IdentifyMinion
 from minion.message_types import Message
 from minion.messages import user, system
 from minion.models.schemas import Answer
@@ -9,6 +10,8 @@ from minion.main.input import Input
 from jinja2 import Template
 from pydantic import BaseModel
 from typing import List, Optional
+from unittest.mock import AsyncMock, patch, MagicMock
+import json
 
 # 定义测试用的 Pydantic model
 class TestResponse(BaseModel):
@@ -131,3 +134,47 @@ async def test_lmp_action_node_with_response_format(lmp_action_node):
 #
 #     # 验证结果是字符串
 #     assert isinstance(result, str)
+
+# 添加新的 fixture 用于 identify minion 测试
+@pytest.fixture
+def mock_brain():
+    brain = MagicMock()
+    brain.llm = create_llm_provider(config.models.get("default"))
+    return brain
+
+@pytest.fixture
+def mock_input():
+    input_obj = Input(query="What is 2+2?")
+    return input_obj
+
+# 添加 IdentifyMinion 相关的测试用例
+@pytest.mark.asyncio
+async def test_lmp_identify_execute(mock_brain, mock_input):
+    # Mock identification response
+    mock_identification = {
+        "complexity": "simple",
+        "query_range": "basic_math",
+        "difficulty": "easy",
+        "field": "mathematics",
+        "subfield": "arithmetic"
+    }
+    
+    # Create and execute IdentifyMinion
+    minion = IdentifyMinion(brain=mock_brain, input=mock_input)
+    result = await minion.execute()
+    
+    # Verify the result
+    assert result == "identified the input query"
+
+@pytest.mark.asyncio
+async def test_lmp_identify_invalid_response(mock_brain, mock_input):
+    # Mock invalid JSON response
+    mock_brain.llm.execute = AsyncMock(return_value="invalid json")
+    
+    # Create IdentifyMinion
+    minion = IdentifyMinion(brain=mock_brain, input=mock_input)
+    
+    # Test that invalid JSON raises an error
+    with pytest.raises(json.JSONDecodeError):
+        await minion.execute()
+
