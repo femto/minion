@@ -38,35 +38,35 @@ ell:
   autocommit:true
   verbose:true
 mem0:
-version: "v1.1"
-llm:
-  provider: "openai"
-  config:
-    model: "gpt-4o-mini"
-    temperature: 0.2
-    max_tokens: 1500
-    top_p: 1.0
+  version: "v1.1"
+  llm:
+    provider: "openai"
+    config:
+      model: "gpt-4o-mini"
+      temperature: 0.2
+      max_tokens: 1500
+      top_p: 1.0
 
-embedder:
-  provider: "ollama"
-  config:
-    model: "nomic-embed-text:latest"
-    ollama_base_url: "http://localhost:11434"
+  embedder:
+    provider: "ollama"
+    config:
+      model: "nomic-embed-text:latest"
+      ollama_base_url: "http://localhost:11434"
 
-vector_store:
-  provider: "qdrant"
-  config:
-    collection_name: "mem0"
-    host: "localhost"
-    port: 6333
-    on_disk: true
-    embedding_model_dims: 768
+  vector_store:
+    provider: "qdrant"
+    config:
+      collection_name: "mem0"
+      host: "localhost"
+      port: 6333
+      on_disk: true
+      embedding_model_dims: 768
 
-graph_store:
-  provider: "neo4j"
-  config:
-    url: "${NEO4J_URL}"
-    username: "${NEO4J_USERNAME}"
-    password: "${NEO4J_PASSWORD}"
+  graph_store:
+    provider: "neo4j"
+    config:
+      url: "${NEO4J_URL}"
+      username: "${NEO4J_USERNAME}"
+      password: "${NEO4J_PASSWORD}"
 
 

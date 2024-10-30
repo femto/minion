@@ -93,17 +93,18 @@ class CotMinion(WorkerMinion):
         context = {"messages": [{"role": "user", "content": prompt}], "images": self.input.images}
         
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute_answer(prompt)
-        self.answer_node = response
+        response = await node.execute(prompt)
+        self.answer_node = node
 
         if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
-            self.answer = self.extract_python_code(response)
+            #self.answer = self.extract_python_code(response) #or we don't do anything, let route minion extract the answer?
+            self.answer = response #we don't do anything, let route minion extract the answer? so route minion has access to answer raw?
         else:
             self.answer = extract_final_answer(response)
 
         self.input.answer = self.answer
-        self.raw_answer = self.input.answer_raw = response
-        return self.raw_answer
+        self.answer_raw = self.input.answer_raw = response
+        return self.answer_raw
 
     def extract_python_code(self, content):
         # Regex pattern to extract code inside ```python ``` blocks
@@ -586,9 +587,6 @@ class ModeratorMinion(Minion):
         preprocessing_minion = PreprocessingMinion(input=self.input, brain=self.brain)
         self.input = await preprocessing_minion.execute()
 
-        # Update input based on the configuration
-        self.input.update_from_config(self.input.execution_config)
-
         if self.input.execution_config.get("ensemble_strategy", {}).get("ensemble_minions"):
             return await self.execute_ensemble()
         else:
@@ -736,6 +734,13 @@ class RouteMinion(Minion):
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
             klass = MINION_REGISTRY.get(klass, CotMinion)
+            
+        # Update execution state before invoking minion
+        self.input.update_execution_state(
+            current_minion=klass.__name__,
+            chosen_minion=klass.__name__
+        )
+        
         self.current_minion = klass(input=self.input, brain=self.brain)
         self.add_followers(self.current_minion)
         await self.current_minion.execute()
@@ -753,7 +758,6 @@ class RouteMinion(Minion):
         if self.input.route:
             name = self.input.route
             logger.info(f"Use enforced route: {self.input.route}")
-            # 直接从 MINION_REGISTRY 获取类,而不是从 filtered_registry
             klass = MINION_REGISTRY[self.input.route]
         else:
             name = meta_plan.name
@@ -761,9 +765,7 @@ class RouteMinion(Minion):
             logger.info(f"Choosing Route: {name}")
             klass = filtered_registry[name]
 
-        self.input.update_execution_state(chosen_minion=name)
         self.save_execution_state()
-
         result = await self.invoke_minion_and_improve(klass, name)
         return result
 
@@ -771,16 +773,16 @@ class RouteMinion(Minion):
         self.input.update_execution_state(current_iteration=0)
         self.save_execution_state()
 
-        raw_answer = await self.invoke_minion(klass)
-        processed_answer = self.input.apply_post_processing(raw_answer)
+        answer_raw = await self.invoke_minion(klass)
+        processed_answer = self.input.apply_post_processing(answer_raw)
 
         self.answer = self.input.answer = processed_answer
-        await self.update_stats(name, processed_answer, raw_answer)
+        await self.update_stats(name, processed_answer, answer_raw)
 
         if not self.input.check:
             return self.answer
 
-        for iteration in int(self.input.check):
+        for iteration in range(int(self.input.check)):
             self.input.update_execution_state(current_iteration=iteration)
             self.save_execution_state()
 
@@ -794,11 +796,11 @@ class RouteMinion(Minion):
                 return self.answer
 
             # If the check fails, try invoking the minion again
-            raw_answer = await self.invoke_minion(klass)
-            processed_answer = self.input.apply_post_processing(raw_answer)
+            answer_raw = await self.invoke_minion(klass)
+            processed_answer = self.input.apply_post_processing(answer_raw)
 
             self.answer = self.input.answer = processed_answer
-            await self.update_stats(name, processed_answer, raw_answer)
+            await self.update_stats(name, processed_answer, answer_raw)
 
         return self.answer
 

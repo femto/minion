@@ -18,11 +18,16 @@ class ActionNode(ABC):
 class LLMActionNode(ActionNode):
     def __init__(self,
                  llm: BaseLLM,
+                 input_parser: Optional[callable] = None,
                  output_parser: Optional[callable] = None):
         self.llm = llm
+        self.input_parser = input_parser
         self.output_parser = output_parser
 
     async def execute(self, messages: List[Message], **kwargs) -> Any:
+        if self.input_parser:
+            messages = self.input_parser(messages)
+
         response = await self.llm.generate(messages)
 
         if self.output_parser:

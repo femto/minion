@@ -48,10 +48,11 @@ class Task(BaseModel):
 
 class ExecutionState(BaseModel):
     current_minion: Optional[str] = None
+    chosen_minion: Optional[str] = None
+
     current_iteration: int = 0
     current_task_index: int = 0
     last_completed_task: Optional[str] = None
-    chosen_minion: Optional[str] = None
     check_result: Optional[Dict[str, Any]] = None
 
 
@@ -91,8 +92,8 @@ class Input(BaseModel):
 
     # Configuration and state
     question_type: str = ""  # Specific question type
-    answer_protocol: str = ""  # Protocol for answer formatting
-    execution_config: dict = {}  # Configuration for execution
+    answer_protocol: str = ""  # Protocol for answer formatting, should we call it answer_format?
+    execution_config: dict = {}  # Configuration for execution, like ensemble stragety etc.
     check: bool = True  # Whether to perform validation
 
     # Metadata
@@ -119,6 +120,45 @@ class Input(BaseModel):
         default=False,
         description="Whether to save state during execution"
     )
+
+    def update_execution_state(self, **kwargs):
+        """Update execution state with the provided key-value pairs.
+        
+        Args:
+            **kwargs: Key-value pairs to update in the execution state
+                current_minion (Optional[str]): Current executing minion name
+                current_iteration (int): Current iteration number
+                current_task_index (int): Current task index
+                last_completed_task (Optional[str]): ID of the last completed task
+                chosen_minion (Optional[str]): Name of the chosen minion
+                check_result (Optional[Dict[str, Any]]): Result from check operation
+        """
+        for key, value in kwargs.items():
+            if hasattr(self.execution_state, key):
+                setattr(self.execution_state, key, value)
+            else:
+                raise ValueError(f"Invalid execution state field: {key}")
+
+    def apply_post_processing(self, answer_raw: str) -> Any:
+        """Apply post-processing to the raw answer based on the post_processing type.
+        
+        Args:
+            answer_raw (str): The raw answer to process
+            
+        Returns:
+            Any: The processed answer
+        """
+        if not answer_raw:
+            return answer_raw
+            
+        if self.post_processing == PostProcessingType.EXTRACT_NUMBER:
+            return extract_number_from_string(answer_raw)
+        elif self.post_processing == PostProcessingType.EXTRACT_MATH_ANSWER:
+            return extract_math_answer(answer_raw)
+        elif self.post_processing == PostProcessingType.EXTRACT_PYTHON:
+            return extract_python(answer_raw)
+        else:  # PostProcessingType.NONE
+            return answer_raw
 
 
 Task.model_rebuild()
