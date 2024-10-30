@@ -56,133 +56,69 @@ class ExecutionState(BaseModel):
 
 
 class Input(BaseModel):
-    long_context: str = Field(default="")
-    short_context: str = ""  # abstract/summarized version
+    # Basic fields
+    long_context: str = Field(default="")  # Full context of the input
+    short_context: str = ""  # Summarized/abstracted version of context
 
-    query: str = ""
-    query_type: str = ""  # generate,question(solve) or execution, requirement
-    query_sub_type: str = ""
-    images: Optional[Union[str, list[str]]] = None
+    query: str = ""  # The actual query or question
+    query_type: str = ""  # Type of query: generate/solve/execute
+    query_sub_type: str = ""  # Specific sub-category of the query
+    images: Optional[Union[str, list[str]]] = None  # Image data if any
 
-    guidance: str = ""
-    constraint: str = ""  # question or requirement
-    instruction: str = ""  # instruction for each step, different step can have different instruction
+    guidance: str = ""  # Additional guidance for processing
+    constraint: str = ""  # Constraints or requirements
+    instruction: str = ""  # Step-by-step instructions
 
-    # identification
-    complexity: str = None  # low,medium,high
-    query_range: str = None  # short range query, or multiple step range like writing a very long novel
-    difficulty: str = None
-    field: str = None
-    subfield: str = None
+    # Answer-related fields
+    answer: str = ""  # The final extracted/processed answer
+    answer_raw: str = ""  # Raw answer including chain of thought
+    answer_code: str = ""  # Answer in code format if applicable
+    answer_full: str = ""  # Complete output including all details
+    feedback: str = ""  # Feedback for improvement
 
-    # plan:str = "" # current plan
-    score_func: Any = None
+    # Ground truth fields for evaluation
+    ground_truth_raw: Optional[str] = None  # Raw ground truth text
+    ground_truth: Any = None  # Processed ground truth
+    extract_ground_truth: Optional[Callable[[Any], Any]] = None  # Function to extract/process ground truth
+    compare_ground_truth: Optional[Callable[[Any, Any], bool]] = None  # Function to compare answer with ground truth
 
-    answer: str = ""  # the extracted final answer
-    answer_code: str = ""  # the extracted final answer
-    full_output: str = ""
-    raw_answer: str = ""  # the complete answer with cot thought
-    feedback: str = ""  # the feedback for improvement
+    # Identification fields
+    complexity: str = None  # Complexity level: low/medium/high
+    query_range: str = None  # Query scope: short/long range
+    difficulty: str = None  # Difficulty level
+    field: str = None  # Main field/domain
+    subfield: str = None  # Specific subfield
 
-    question_type: str = ""  # a query sub type that determines the answer protocol
-    answer_protocol: str = ""
+    # Configuration and state
+    question_type: str = ""  # Specific question type
+    answer_protocol: str = ""  # Protocol for answer formatting
+    execution_config: dict = {}  # Configuration for execution
+    check: bool = True  # Whether to perform validation
 
-    execution_config: dict = {}
-    check: bool = True
+    # Metadata
+    dataset: str = ""  # Source dataset identifier
+    dataset_description: str = ""  # Description of the dataset
+    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  # Unique query identifier
+    run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  # Unique execution identifier
 
-    # plan cache
-    cache_plan: str = ""
-    task: Task = None  # current task being executed
-    symbols: SymbolTable = Field(default_factory=SymbolTable)
+    # Processing state
+    processed_minions: int = 0  # Number of minions that processed this
+    metadata: dict = {}  # Additional metadata
+    info: dict = {}  # Additional information
+    route: Optional[str] = ""  # Routing information
+    num_trials: int = 1  # Number of execution trials
+    ensemble_strategy: str = EnsembleStrategyType.EARLY_STOP  # Strategy for ensemble processing
 
-    # metadata
-    query_time: Any = None
-    processed_minions: int = 0  # how many minions processed this
-    metadata: dict = {}
-    info: dict = {}
-    route: Optional[str] = ""  # a tempory solution for routing
-    num_trials: int = 1  # how much times downstream node runs
-    ensemble_strategy: str = EnsembleStrategyType.EARLY_STOP
-
-    dataset: str = ""  # which dataset this is
-    dataset_description: str = ""  # the dataset description
-    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-
-    # for training
-    item_id: Any = None
-    raw_correct_answer: Optional[str] = None
-    correct_answer: Any = None
-    extract_correct_answer: Any = None
-    compare_answer: Any = None
-
-    # 新增字段
-    execution_state: ExecutionState = Field(default_factory=ExecutionState)
-
+    # Execution state tracking
+    execution_state: ExecutionState = Field(default_factory=ExecutionState)  # Current execution state
     post_processing: PostProcessingType = Field(
-        default=PostProcessingType.NONE, description="The type of post-processing to apply to the answer"
+        default=PostProcessingType.NONE,
+        description="Type of post-processing to apply"
+    )
+    save_state: bool = Field(
+        default=False,
+        description="Whether to save state during execution"
     )
 
-    execution_config: dict = Field(default_factory=dict)
 
-    save_state: bool = Field(default=False, description="Whether to save and load state during execution")
-
-    def exec_save_state(self, file_path: str):
-        """将当前状态保存到文件"""
-        if not self.save_state:
-            return
-        import os
-
-        import dill
-
-        # Create directory if it doesn't exist
-        file_path = os.path.join(os.getcwd(), file_path) if not os.path.isabs(file_path) else file_path
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "wb") as f:
-            dill.dump(self, f)
-
-    @classmethod
-    def exec_load_state(cls, file_path: str) -> "Input":
-        """从文件加载状态"""
-
-        import os
-
-        import dill
-
-        if os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                return dill.load(f)
-
-    def update_execution_state(self, **kwargs):
-        """更新执行状态"""
-        for key, value in kwargs.items():
-            setattr(self.execution_state, key, value)
-
-    @property
-    def context(self):
-        return self.long_context
-
-    @context.setter
-    def context(self, context):
-        self.long_context = context
-
-    def apply_post_processing(self, raw_answer: str) -> Any:
-        """Apply the specified post-processing to the raw answer."""
-        if self.post_processing == PostProcessingType.EXTRACT_NUMBER:
-            return extract_number_from_string(raw_answer)
-        elif self.post_processing == PostProcessingType.EXTRACT_MATH_ANSWER:
-            return extract_math_answer(raw_answer)
-        elif self.post_processing == PostProcessingType.EXTRACT_PYTHON:
-            return extract_python(raw_answer)
-        else:
-            return raw_answer
-
-    def update_from_config(self, config: dict):
-        """Update input fields based on the provided configuration"""
-        self.execution_config = config
-        if "check" in config:
-            self.check = config["check"]
-        # 可能需要处理其他顶级配置项
-
-
-Task.update_forward_refs()
+Task.model_rebuild()

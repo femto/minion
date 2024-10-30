@@ -135,7 +135,7 @@ class CotMinion(Minion):
             self.answer = extract_final_answer(response)
 
         self.input.answer = self.answer
-        self.raw_answer = self.input.raw_answer = response
+        self.raw_answer = self.input.answer_raw = response
         return self.raw_answer
 
 class DotMinion(Minion):
@@ -155,5 +155,5 @@ class DotMinion(Minion):
             else:
                 break
                 
-        self.raw_answer = self.input.raw_answer = response
+        self.raw_answer = self.input.answer_raw = response
         return self.answer
