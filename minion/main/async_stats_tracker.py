@@ -130,7 +130,7 @@ class AsyncStatsTracker:
                         {
                             "minion_name": exp.minion_name,
                             "answer": exp.answer,
-                            "raw_answer": exp.raw_answer,
+                            "raw_answer": exp.answer_raw,
                             "correct_answer": exp.correct_answer,
                             "raw_correct_answer": exp.raw_correct_answer,
                             "outcome": exp.outcome,

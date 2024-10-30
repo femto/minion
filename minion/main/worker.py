@@ -72,7 +72,7 @@ class NativeMinion(Minion):
         context = {"messages": [{"role": "user", "content": ASK_PROMPT.format(input=self.input)}]}
         response = await self.execute_action(self.llm_action, context)
         self.answer = self.input.answer = extract_final_answer(response)
-        self.raw_answer = self.input.raw_answer = response
+        self.raw_answer = self.input.answer_raw = response
         return self.answer
 
 
@@ -96,7 +96,7 @@ class CotMinion(Minion):
             self.answer = extract_final_answer(response)
 
         self.input.answer = self.answer
-        self.raw_answer = self.input.raw_answer = response
+        self.raw_answer = self.input.answer_raw = response
         return self.raw_answer
 
     def extract_python_code(self, content):
@@ -134,7 +134,7 @@ class DotMinion(Minion):
                 self.answer = self.input.answer = node.instruct_content.answer
             else:
                 break
-        self.raw_answer = self.input.raw_answer = node.content
+        self.raw_answer = self.input.answer_raw = node.content
         return self.answer  # maybe also adds score?
 
 
@@ -155,7 +155,7 @@ class DcotMinion(Minion):
         self.answer_node = node
         self.answer = self.input.answer = extract_answer(node.content)
 
-        self.raw_answer = self.input.raw_answer = node.content
+        self.raw_answer = self.input.answer_raw = node.content
         return self.answer  # maybe also adds score?
 
 
