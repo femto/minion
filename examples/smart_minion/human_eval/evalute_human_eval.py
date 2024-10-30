@@ -175,15 +175,13 @@ def load_execution_config(file_path):
         ensemble_logic = json.load(file)
     return ensemble_logic
 
-
-# Sample solver function (you'll replace this with your actual logic)
-async def solve_question(question, route=None):
+async def solve_question(question):
     # Implement your problem-solving logic here
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    ensemble_logic_path = os.path.join(current_dir, "human_eval.json")
+    ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
     obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
     # print(obs)
     return obs
