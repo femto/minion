@@ -8,7 +8,7 @@
 
 import uuid
 from enum import Enum
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, Callable
 
 from pydantic import BaseModel, Field
 

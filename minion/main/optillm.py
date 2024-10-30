@@ -3,40 +3,18 @@ from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI, AzureOpenAI
 from abc import ABC, abstractmethod
 
-logger = logging.getLogger(__name__)
+from minion.main.prompt import ASK_PROMPT
+from minion.main.worker import WorkerMinion
+from minion.utils.answer_extraction import extract_final_answer
 
-class OptillmMinion(ABC):
-    """Base class for all Optillm optimization approaches"""
-    
-    def __init__(self, client: Any, model: str):
-        self.client = client
-        self.model = model
-        
-    @abstractmethod
-    def process(self, system_prompt: str, initial_query: str) -> Tuple[str, int]:
-        """
-        Process the input using specific optimization approach
-        
-        Args:
-            system_prompt: The system prompt
-            initial_query: The user query
-            
-        Returns:
-            Tuple[str, int]: (processed response, completion tokens used)
-        """
-        pass
-    
-    def _call_llm(self, messages: List[Dict[str, str]]) -> Tuple[str, int]:
-        """Helper method to call LLM with proper error handling"""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages
-            )
-            return response.choices[0].message.content, response.usage.completion_tokens
-        except Exception as e:
-            logger.error(f"Error calling LLM: {str(e)}")
-            raise
+
+class OptillmMinion(WorkerMinion):
+    async def execute(self):
+        context = {"messages": [{"role": "user", "content": ASK_PROMPT.format(input=self.input)}]}
+        response = await self.execute_action(self.llm_action, context)
+        self.answer = self.input.answer = extract_final_answer(response)
+        self.raw_answer = self.input.answer_raw = response
+        return self.answer
 
 class CotReflectionMinion(OptillmMinion):
     """Chain of Thought with Reflection implementation"""

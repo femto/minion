@@ -85,14 +85,14 @@ class Minion(metaclass=SubclassHookMeta):
         if self.brain.stats_storer:
             compare_answer_func = self.get_compare_answer_func()
             if compare_answer_func:
-                outcome = "correct" if compare_answer_func(self.input.correct_answer, result) else "incorrect"
+                outcome = "correct" if compare_answer_func(self.input.ground_truth, result) else "incorrect"
                 stats_data = {
                     "item_id": str(self.input.item_id),
                     "minion_name": minion_name,
                     "answer": str(result),
                     "raw_answer": raw_answer,
-                    "raw_correct_answer": self.input.raw_correct_answer,
-                    "correct_answer": self.input.correct_answer,
+                    "raw_correct_answer": self.input.ground_truth_raw,
+                    "correct_answer": self.input.ground_truth,
                     "complexity": self.input.complexity,
                     "query_range": self.input.query_range,
                     "difficulty": self.input.difficulty,
@@ -117,43 +117,4 @@ class Minion(metaclass=SubclassHookMeta):
         response = await node.execute(ASK_PROMPT.format(input=self.input))
         self.answer_node = response
         self.answer = self.input.answer = response
-        return self.answer
-
-class CotMinion(Minion):
-    async def execute(self):
-        prompt = (COT_PROBLEM_INSTRUCTION + ASK_PROMPT).format(input=self.input)
-        prompt += "\nPlease provide your response in JSON format."
-        context = {"messages": [{"role": "user", "content": prompt}], "images": self.input.images}
-        
-        node = LmpActionNode(self.brain.llm)
-        response = await node.execute(context)
-        self.answer_node = response
-
-        if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
-            self.answer = self.extract_python_code(response)
-        else:
-            self.answer = extract_final_answer(response)
-
-        self.input.answer = self.answer
-        self.raw_answer = self.input.answer_raw = response
-        return self.raw_answer
-
-class DotMinion(Minion):
-    async def execute(self):
-        node = LmpActionNode(self.brain.llm)
-        prompt = Template(DOT_PROMPT).render(input=self.input)
-        response = await node.execute(prompt)
-        self.answer_node = response
-        self.answer = self.input.answer = extract_final_answer(response)
-        
-        for _ in range(3):  # try using llm 3 times to extract answer
-            if not self.answer:
-                # try using llm to extract answer
-                node = LmpActionNode(self.brain.llm)
-                response = await node.execute(response)
-                self.answer = self.input.answer = extract_final_answer(response)
-            else:
-                break
-                
-        self.raw_answer = self.input.answer_raw = response
         return self.answer

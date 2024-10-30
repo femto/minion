@@ -77,3 +77,8 @@ class Plan(BaseModel):
         default="{}",
         description="a json dictionary of task parameters and values",
     )
+
+class CheckResult(BaseModel):
+    feedback: str
+    correct: bool
+    score: float
