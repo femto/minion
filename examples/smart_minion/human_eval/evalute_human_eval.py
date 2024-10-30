@@ -6,14 +6,13 @@ from typing import List
 
 import aiofiles
 import numpy as np
-from minion.llm import LLM
-from minion.utils.cost_manager import CostManager
 from tqdm.asyncio import tqdm
 
-from minion.main.answer_extraction import math_equal
+from minion.configs.config import config
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.main.utils import extract_number_from_string
+from minion.providers import create_llm_provider
 
 
 # Load JSONL file
@@ -41,9 +40,7 @@ def extract_answer(answer_str):
         return answer_str  # Return None if no match is found
 
 
-cost_manager = CostManager()
-llm = LLM()
-llm.cost_manager = cost_manager
+
 
 
 async def evaluate_dataset(
@@ -186,47 +183,21 @@ async def solve_question(question, route=None):
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    ensemble_logic_path = os.path.join(current_dir, "gsm8k_re2.json")
+    ensemble_logic_path = os.path.join(current_dir, "human_eval.json")
     obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
     # print(obs)
     return obs
 
 
-def generate_random_indices(n, n_samples, test=False):
-    """
-    生成随机索引
-    """
-
-    def _set_seed(seed=42):
-        np.random.seed(seed)
-
-    _set_seed()
-    indices = np.arange(n)
-    np.random.shuffle(indices)
-    if test:
-        return indices[n_samples:]
-    else:
-        return indices[:n_samples]
-
-
-async def load_data_sample(file_path: str, samples=1) -> List[dict]:
-    data = []
-    async with aiofiles.open(file_path, mode="r") as file:
-        async for line in file:
-            data.append(json.loads(line))
-    random_indices = generate_random_indices(len(data), samples)
-    data = [data[i] for i in random_indices]
-    return data
-
-
+llm = create_llm_provider(config.models.get("default"))
 async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_name = os.path.join(current_dir, "gsm8k_test.jsonl")
+    file_name = os.path.join(current_dir, "human_eval_test.jsonl")
     data = load_jsonl(file_name)
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_gsm8k_deepseek_re2.json", continue_process=True, concurrency_count=70
+        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=1
     )
 
     print(f"Accuracy: {correct/count:.2%}")
