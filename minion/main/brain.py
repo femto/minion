@@ -29,7 +29,6 @@ class Mind(BaseModel):
     brain: Any = None  # Brain
 
     async def step(self, input):
-        input.short_context = input.context  # first set digested context same as context
 
         moderator = ModeratorMinion(input=input, brain=self.brain)
         answer = await moderator.execute()
