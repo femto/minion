@@ -79,18 +79,19 @@ print(obs)
 
 ### Installation
 
-Minion current depends on metagpt to call llm and response format parsing, so the code resides together
 ```
 git clone https://github.com/femto/minion.git && cd minion && pip install -r requirements.txt
-cp config/config2.yaml ~/.metagpt/config2.yaml
+cp config/config.yaml.example config/config.yaml
 ```
-then edit ~/.metagpt/config2.yaml
+then edit config/config.yaml
 ```
-llm:
-  api_type: "openai"  # or azure / ollama / groq etc. Check LLMType for more options
-  model: "gpt-4-turbo"  # or gpt-3.5-turbo
-  base_url: "https://api.openai.com/v1"  # or forward url / other llm url
-  api_key: "YOUR_API_KEY"
+models:
+  "default":
+    api_type: "openai"
+    base_url: "${DEFAULT_BASE_URL}"
+    api_key: "${DEFAULT_API_KEY}"
+    model: "deepseek-chat"
+    temperature: 0
 ```
 
 ### Other Dependencies
