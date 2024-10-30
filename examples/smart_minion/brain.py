@@ -21,11 +21,10 @@ async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
     llm_config = config.models.get("default")
     llm = create_llm_provider(llm_config)
-    memory_config = {}
     python_env_config = {"port": 3007}  # 同上
 
     brain = Brain(
-        python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), llm=llm, memory_config=memory_config
+        python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), llm=llm
     )
 
     # 示例使用
