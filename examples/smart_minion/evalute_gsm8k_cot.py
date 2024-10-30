@@ -6,8 +6,8 @@ from typing import List
 
 import aiofiles
 import numpy as np
-from metagpt.llm import LLM
-from metagpt.utils.cost_manager import CostManager
+from minion.llm import LLM
+from minion.utils.cost_manager import CostManager
 from tqdm.asyncio import tqdm
 
 from minion.main.answer_extraction import math_equal

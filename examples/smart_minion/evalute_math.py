@@ -4,8 +4,8 @@ import os
 import re
 
 import aiofiles
-from metagpt.llm import LLM
-from metagpt.utils.cost_manager import CostManager
+from minion.llm import LLM
+from minion.utils.cost_manager import CostManager
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm
 

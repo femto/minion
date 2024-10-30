@@ -6,8 +6,8 @@ from collections import Counter
 
 import aiofiles
 from datasets import load_dataset
-from metagpt.llm import LLM
-from metagpt.utils.cost_manager import CostManager
+from minion.llm import LLM
+from minion.utils.cost_manager import CostManager
 from pydantic import BaseModel
 from tqdm.asyncio import tqdm
 
