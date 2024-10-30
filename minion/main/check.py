@@ -7,6 +7,8 @@ from jinja2 import Template
 from minion.logs import logger
 from minion.main.minion import Minion
 from minion.main.prompt import CHECK_PROMPT
+from minion.actions.lmp_action_node import LmpActionNode
+from minion.models.schemas import CheckResult
 
 
 def extract_root_content(text):
@@ -53,14 +55,26 @@ class CheckMinion(Minion):
 
     async def execute(self):
         for _ in range(3):
-            node = ActionNode(
-                key="answer", expected_type=str, instruction="let's think step by step", example="", schema="raw"
-            )
             prompt = Template(CHECK_PROMPT)
             prompt = prompt.render(input=self.input)
-            node = await node.fill(context=prompt, llm=self.brain.llm)
-            self.answer_node = node
-            result = extract_feedback_parts(node.content)
-            self.answer = self.input.feedback = result
+            
+            node = LmpActionNode(self.brain.llm)
+            result = await node.execute(prompt, response_format=CheckResult)
+            
+            self.answer_node = result
+            self.answer = self.input.feedback = {
+                "feedback_content": result.feedback,
+                "correct": result.correct,
+                "score": result.score
+            }
+            
             if result:
-                return self.answer  # maybe also adds score?
+                return self.answer
+
+class ScoreMinion(CheckMinion):
+    async def execute(self):
+        node = LmpActionNode(self.brain.llm)
+        score = await node.execute_answer(
+            ASK_PROMPT + "\nanswer:\n{input.answer}".format(input=self.input)
+        )
+        return float(score)

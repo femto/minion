@@ -58,10 +58,14 @@ from minion.models.schemas import (
     EnsembleLogic,
     Plan
 )
+from minion.utils.answer_extraction import extract_final_answer
 
+
+class WorkerMinion(Minion):
+    pass
 
 @register_route_downstream
-class NativeMinion(Minion):
+class NativeMinion(WorkerMinion):
     """native minion, directly asks llm for answer"""
 
     def __init__(self, **kwargs):
@@ -77,7 +81,7 @@ class NativeMinion(Minion):
 
 
 @register_route_downstream
-class CotMinion(Minion):
+class CotMinion(WorkerMinion):
     """Chain of Thought (CoT) Strategy, Ask the LLM to think step-by-step, explaining each part of the problem to enhance the accuracy of the answer. Please noted you can't access web or user's local computer, so if you need information from the web or from user's local computer, DON'T USE THIS STRATEGY."""
 
     def __init__(self, **kwargs):
@@ -87,8 +91,10 @@ class CotMinion(Minion):
     async def execute(self):
         prompt = (COT_PROBLEM_INSTRUCTION + ASK_PROMPT).format(input=self.input)
         context = {"messages": [{"role": "user", "content": prompt}], "images": self.input.images}
-        response = await self.execute_action(self.llm_action, context)
-        self.answer_node = response  # 保留这个属性名以兼容现有代码
+        
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute_answer(prompt)
+        self.answer_node = response
 
         if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
             self.answer = self.extract_python_code(response)
@@ -107,9 +113,7 @@ class CotMinion(Minion):
             return match.group(1).strip()
         return None
 
-
-@register_route_downstream
-class DotMinion(Minion):
+class DotMinion(WorkerMinion):
     """Diagram of Thought (DoT) Strategy"""
 
     def __init__(self, **kwargs):
@@ -117,30 +121,28 @@ class DotMinion(Minion):
         self.input.instruction = "let's think step by step to solve this problem"
 
     async def execute(self):
-        node = ActionNode(key="answer", expected_type=str, instruction="let's think step by step", example="")
         prompt = Template(DOT_PROMPT)
         prompt = prompt.render(input=self.input)
-        node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
-        self.answer_node = node
-        self.answer = self.input.answer = extract_final_answer(node.content)
+        
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute_answer(prompt)
+        self.answer_node = response
+        self.answer = self.input.answer = extract_final_answer(response)
 
         for _ in range(3):  # try using llm 3 times to extract answer
             if not self.answer:
                 # try using llm to extract answer
-                node = ActionNode(
-                    key="answer", expected_type=str, instruction="extract final answer from result", example=""
-                )
-                node = await node.fill(context=node.content, llm=self.brain.llm, schema="json")
-                self.answer = self.input.answer = node.instruct_content.answer
+                node = LmpActionNode(self.brain.llm)
+                response = await node.execute_answer("extract final answer from result")
+                self.answer = self.input.answer = response
             else:
                 break
-        self.raw_answer = self.input.answer_raw = node.content
-        return self.answer  # maybe also adds score?
+        self.raw_answer = self.input.answer_raw = response
+        return self.answer
 
 
 # https://x.com/_philschmid/status/1842846050320544016
-@register_route_downstream
-class DcotMinion(Minion):
+class DcotMinion(WorkerMinion):
     """Dynamic Chain of Thought Strategy"""
 
     def __init__(self, **kwargs):
@@ -160,13 +162,13 @@ class DcotMinion(Minion):
 
 
 @register_route_downstream
-class MultiPlanMinion(Minion):
+class MultiPlanMinion(WorkerMinion):
     "This Strategy will first generate multiple plan, and then compare each plan, see which one is more promising to produce good result, first try most promising plan, then to less promising plan."
     pass
 
 
 @register_route_downstream
-class PlanMinion(Minion):
+class PlanMinion(WorkerMinion):
     "Divide and Conquer Strategy, Divide the problem into smaller subproblems, solve each subproblem independently, and then merge the results for the final solution."
 
     def __init__(self, **kwargs):
@@ -317,7 +319,7 @@ class MathPlanMinion(PlanMinion):
         self.plan_prompt = MATH_PLAN_PROMPT
 
 
-class TaskMinion(Minion):
+class TaskMinion(WorkerMinion):
     def __init__(self, task=None, **kwargs):
         super().__init__(**kwargs)
         self.input.task = task
@@ -329,7 +331,7 @@ class TaskMinion(Minion):
         # filter out smart, since we don't want choose smart following smart again
         # also filter out ScoreMinion
 
-        filtered_registry = {key: value for key, value in MINION_ROUTE_DOWNSTREAM.items()}
+        filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input, task=self.task)
 
         # if self.input.route:
@@ -360,7 +362,7 @@ class TaskMinion(Minion):
 
 
 @register_route_downstream
-class PythonMinion(Minion):
+class PythonMinion(WorkerMinion):
     "This problem requires writing code to solve it, write python code to solve it"
 
     def __init__(self, **kwargs):
@@ -542,6 +544,7 @@ class MathMinion(PythonMinion):
         self.input.instruction = "This is a math problem, write python code to solve it"
 
 
+#do we need this minion?
 class CodeProblemMinion(PlanMinion):
     "This is a coding problem which requires stragety thinking to solve it, you will first explore the stragety space then solve it"
 
@@ -550,27 +553,7 @@ class CodeProblemMinion(PlanMinion):
         self.input.instruction = "This is a coding problem which requires stragety thinking to solve it, you will first explore the stragety space then solve it"
 
 
-class ScoreMinion(Minion):
-    def __init__(self, **kwargs):
-        super(ScoreMinion, self).__init__(**kwargs)
-        self.score = None  # clear self.score to avoid loop
-
-    async def execute(self):
-        # if self.input.score_func, handles that
-        node = ActionNode(key="score", expected_type=float, instruction=SCORE_PROMPT, example="")
-        node = await node.fill(
-            context=ASK_PROMPT
-            + """
-                answer:
-                {input.answer}
-                """.format(
-                input=self.input
-            ),
-            llm=self.brain.llm,
-        )
-        return node.instruct_content.score
-
-
+#the following for moderate, route and identify etc.
 class ModeratorMinion(Minion):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -610,20 +593,6 @@ class ModeratorMinion(Minion):
             return await self.execute_ensemble()
         else:
             return await self.execute_single()
-
-    async def merge_result(self, answer):
-        merge_prompt = Template(MERGE_PROMPT)
-        filled_merge_prompt = merge_prompt.render(input=self.input, answer=answer)
-
-        node = ActionNode(
-            key="answer",
-            expected_type=float,
-            instruction="merge the result according to question",
-            example="",
-            schema="raw",
-        )
-        node = await node.fill(context=filled_merge_prompt, llm=self.brain.llm)
-        return extract_final_answer(node.content)
 
     async def execute_ensemble(self):
         ensemble_strategy = self.input.execution_config.get("ensemble_strategy", {})
@@ -766,7 +735,7 @@ class RouteMinion(Minion):
 
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
-            klass = MINION_ROUTE_DOWNSTREAM.get(klass, CotMinion)
+            klass = MINION_REGISTRY.get(klass, CotMinion)
         self.current_minion = klass(input=self.input, brain=self.brain)
         self.add_followers(self.current_minion)
         await self.current_minion.execute()
@@ -775,7 +744,7 @@ class RouteMinion(Minion):
 
     async def choose_minion_and_run(self):
         choose_template = Template(SMART_PROMPT_TEMPLATE)
-        filtered_registry = {key: value for key, value in MINION_ROUTE_DOWNSTREAM.items()}
+        filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
         node = LmpActionNode(self.brain.llm)
@@ -784,7 +753,8 @@ class RouteMinion(Minion):
         if self.input.route:
             name = self.input.route
             logger.info(f"Use enforced route: {self.input.route}")
-            klass = filtered_registry[self.input.route]
+            # 直接从 MINION_REGISTRY 获取类,而不是从 filtered_registry
+            klass = MINION_REGISTRY[self.input.route]
         else:
             name = meta_plan.name
             name = most_similar_minion(name, filtered_registry.keys())
@@ -838,7 +808,7 @@ class RouteMinion(Minion):
         if self.input.execution_state.chosen_minion:
             # 从上次状态恢复
             name = self.input.execution_state.chosen_minion
-            klass = MINION_ROUTE_DOWNSTREAM.get(name, CotMinion)
+            klass = MINION_REGISTRY.get(name, CotMinion)
             iteration = self.input.execution_state.current_iteration
             await self.invoke_minion_and_improve(klass, name, max_iterations=3 - iteration)
         else:
@@ -879,10 +849,7 @@ class RouteMinion(Minion):
         return dill.loads(bytes.fromhex(func_str))
 
 
-class Worker:
-    def __init__(self):
-        self.max_retries = config.get("max_retries", 3)
-        # ... 其他初始化代码 ...
+
 
 
 
