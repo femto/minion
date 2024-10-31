@@ -70,10 +70,14 @@ class IntercodeEnv(ABC, gym.Env):
         if "preprocess" in self.kwargs:
             self.logger.info("Verifying preprocess function...")
             preprocess = self.kwargs["preprocess"]
-            assert isinstance(preprocess, type(lambda x: x))
-            assert preprocess.__annotations__["return"] == str
-            assert "record" in preprocess.__annotations__
-            assert preprocess.__annotations__["record"] == Dict
+            
+            if not isinstance(preprocess, type(lambda x: x)):
+                raise TypeError("Preprocess function should be a lambda function")
+            if "return" not in preprocess.__annotations__ or preprocess.__annotations__["return"] != str:
+                raise ValueError("Preprocess function must return a string")
+            if "record" not in preprocess.__annotations__ or preprocess.__annotations__["record"] != Dict:
+                raise ValueError("Preprocess function must have a 'record' parameter of type Dict")
+            
             self.preprocess = preprocess
 
         # Record logging directory if provided as a keyword argument
