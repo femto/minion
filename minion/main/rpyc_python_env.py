@@ -53,11 +53,19 @@ class RpycPythonEnv(IntercodeEnv):
         if "preprocess" in self.kwargs:
             self.logger.info("Verifying preprocess function...")
             preprocess = self.kwargs["preprocess"]
-            assert isinstance(preprocess, type(lambda x: x))
-            assert preprocess.__annotations__["return"] == str
-            assert "record" in preprocess.__annotations__
-            assert preprocess.__annotations__["record"] == Dict
-            self.preprocess = preprocess
+            try:
+                if not isinstance(preprocess, type(lambda x: x)):
+                    raise TypeError("Preprocess must be a callable.")
+                if preprocess.__annotations__["return"] != str:
+                    raise ValueError("Preprocess function must return a string.")
+                if "record" not in preprocess.__annotations__:
+                    raise ValueError("Preprocess function annotation must include 'record'.")
+                if preprocess.__annotations__["record"] != Dict:
+                    raise ValueError("Parameter 'record' must be of type Dict.")
+                self.preprocess = preprocess
+            except (TypeError, ValueError) as e:
+                self.logger.error(f"Preprocess function validation failed: {e}")
+                # Optionally handle error, e.g., set a default preprocess or exit
 
         # Record logging directory if provided as a keyword argument
         self.traj_dir = None
