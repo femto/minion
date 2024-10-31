@@ -1,15 +1,14 @@
 {
-    "ensemble_strategy": {
-        "ensemble_minions": [
-            {
-                "name": "cot",
-                "count": 1,
-                "post_processing": "extract_python"
-            }
-        ],
-        "ensemble_logic": {
-            "type": "majority_voting"
-        }
-    },
-    "check": false
+  "type": "ensemble",
+
+  "workers": [
+    {
+      "name": "cot",
+      "count": 1,
+      "post_processing": "extract_python"
+    }
+  ],
+  "aggregator": {
+    "name": "majority_voting"
+  }
 }
