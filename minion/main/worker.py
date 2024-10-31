@@ -555,141 +555,23 @@ class CodeProblemMinion(PlanMinion):
 
 
 #the following for moderate, route and identify etc.
-class ModeratorMinion(Minion):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.execution_state: Dict[str, Any] = {}
-
-    async def invoke_minion(self, minion_name):
-        self.input.run_id = uuid.uuid4()  # a new run id for each run
-        self.input.route = minion_name
-
-        route_minion = RouteMinion(input=self.input, brain=self.brain)
-        result = await route_minion.execute()
-        self.answer = self.input.answer = result
-        return result
-
-    def majority_voting(self, results):
-        # Perform majority voting on the results
-        counter = Counter(results)
-        try:
-            most_common_result, count = counter.most_common(1)[0]
-            logger.info(f"Ensemble Result: {counter}")
-            return most_common_result
-        except:
-            return None
-
-    async def choose_minion_and_run(self):
-        identification = IdentifyMinion(input=self.input, brain=self.brain)
-        await identification.execute()
-
-        # preprocessing
-        preprocessing_minion = PreprocessingMinion(input=self.input, brain=self.brain)
-        self.input = await preprocessing_minion.execute()
-
-        if self.input.execution_config.get("ensemble_strategy", {}).get("ensemble_minions"):
-            return await self.execute_ensemble()
-        else:
-            return await self.execute_single()
-
-    async def execute_ensemble(self):
-        ensemble_strategy = self.input.execution_config.get("ensemble_strategy", {})
-
-        if ensemble_strategy.get("ensemble_logic", {}).get("type") == "majority_voting":
-            # calculate majority_count
-            total = 0
-            for minion in ensemble_strategy["ensemble_minions"]:
-                count = minion["count"]
-                weight = minion.get("weight", 1)
-                total += count * weight
-            majority_count = total // 2 + 1
-
-            results = {}
-
-            for minion in ensemble_strategy["ensemble_minions"]:
-                minion_name = minion["name"]
-                count = minion["count"]
-
-                for i in range(count):
-                    self.execution_state["current_minion"] = minion_name
-                    self.execution_state["current_iteration"] = i
-                    self.save_execution_state()
-
-                    raw_answer = await self.invoke_minion(minion_name)
-                    processed_answer = raw_answer  # already handled in route minion?
-                    # processed_answer = self.input.apply_post_processing(raw_answer)
-
-                    weight = minion.get("weight", 1)
-
-                    await self.update_stats(minion_name, processed_answer, raw_answer)
-
-                    if True:  # 考虑如何处理 processed_answer 为 None 的情况
-                        if processed_answer in results:
-                            results[processed_answer] += weight
-                        else:
-                            results[processed_answer] = weight
-
-                        # 短路逻辑
-                        if (
-                            self.input.execution_config["ensemble_strategy"].get("short_circuit", True)
-                            and results[processed_answer] >= majority_count
-                        ):
-                            self.answer = self.input.answer = processed_answer
-                            return processed_answer
-
-            # No result reached majority; find the result with the highest weight
-            most_weight = max(results.values())
-            most_weight_result = max(results, key=results.get)
-
-            if most_weight < majority_count:
-                print(
-                    f"Warning: No result reached the majority count,most_weight is {most_weight}, most_weight_result is {most_weight_result}"
-                )
-
-            # Return the result with the highest weight
-            self.answer = self.input.answer = most_weight_result
-            return self.answer
-
-    async def execute_single(self):
-        return await self.invoke_minion(self.input.route)
-
-    async def execute(self):
-        self.load_execution_state()
-
-        if self.input.execution_state.current_minion:
-            # 从上次态恢复
-            if self.input.execution_config.get("ensemble_strategy", {}).get("ensemble_minions"):
-                await self.execute_ensemble()
-            else:
-                await self.execute_single()
-        else:
-            # 开始新的执行
-            await self.choose_minion_and_run()
-
-        # clean up python env
-        self.brain.cleanup_python_env(input=self.input)
-        return self.answer
-
-    def save_execution_state(self):
-        """保存执行状态"""
-        if self.input.save_state:
-            self.input.exec_save_state(f"state_{self.input.query_id}.pkl")
-
-    def load_execution_state(self):
-        """加载执行状态"""
-        if self.input.save_state:
-            loaded_input = Input.exec_load_state(f"state_{self.input.query_id}.pkl")
-            if loaded_input:
-                self.input = loaded_input
-
-    def pause(self):
-        """暂停执行并保存当前状态"""
-        self.save_execution_state()
-
-    async def resume(self):
-        """从上次保存的状态恢复执行"""
-        self.load_execution_state()
-        await self.execute()
+class ModeratorMinion:
+    def __init__(self, input, brain):
+        self.input = input
+        self.brain = brain
+        
+    def process(self, minion_config):
+        # Create a new Input object with overridden config
+        input_with_config = copy.deepcopy(self.input)
+        input_with_config.config.update(minion_config)
+        
+        # Pass the new input object to RouteMinion
+        route_minion = RouteMinion(
+            input=input_with_config,
+            brain=self.brain
+        )
+        
+        return route_minion.process()
 
 
 class IdentifyMinion(Minion):

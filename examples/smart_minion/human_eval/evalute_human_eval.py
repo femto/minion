@@ -142,20 +142,22 @@ async def evaluate_dataset(
 
 
 async def solve_single_question(item, route="cot"):
-    question = item["question"]
-    correct_answer_str = item["answer"]
+    question = item["prompt"]
+    #ground_truth_raw = item["answer"]
+    canonical_solution = item["canonical_solution"]
+    entry_point = item["entry_point"]
+    test = item["test"]
     item_id = item.get("idx", -1)  # Extract the ID or use a default value
 
     # Extract the correct answer after '####'
 
-    correct_answer = extract_answer(correct_answer_str)
+    #correct_answer = extract_answer(ground_truth_raw)
 
     # Your solver logic
-    user_answer_str = await solve_question(question, route=route)
-    user_answer = extract_number_from_string(user_answer_str)
+    answer = await solve_question(question)
 
-    if math_equal(user_answer, correct_answer):
-        return {"result": 1, "item_id": item_id, "question": question, "user_answer": user_answer, "idx": item_id}
+    if check_solution(answer, test, entry_point):
+        return {"result": 1, "item_id": item_id, "question": question, "answer": answer, "idx": item_id}
 
     else:
         # Append the mismatched item to the JSONL file
@@ -163,8 +165,9 @@ async def solve_single_question(item, route="cot"):
             "result": 0,
             "item_id": item_id,
             "question": question,
-            "correct_answer": correct_answer_str,
-            "user_answer": user_answer,
+            "canonical_solution": canonical_solution,
+            "test": test,
+            "answer": answer,
             "idx": item_id,
         }
 
@@ -175,7 +178,7 @@ def load_execution_config(file_path):
         ensemble_logic = json.load(file)
     return ensemble_logic
 
-async def solve_question(question):
+async def solve_question(question, route=None):
     # Implement your problem-solving logic here
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
