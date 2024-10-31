@@ -1,0 +1,14 @@
+{
+  "type": "ensemble",
+
+  "workers": [
+    {
+      "name": "cot",
+      "count": 5,
+      "post_processing": "extract_number_from_string"
+    }
+  ],
+  "aggregator": {
+    "name": "majority_voting"
+  }
+} 
