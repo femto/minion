@@ -62,21 +62,19 @@ class MyService(rpyc.Service):
             if command == "RESET_CONTAINER_SPECIAL_KEYWORD":
                 namespace.clear()
                 namespace.update(ORIGINAL_GLOBAL)
+            
+            elif command == "CUSTOM_LOGIC_1":
+                # Handle custom logic 1
+                result = "Handled logic 1"
 
-            output_buffer = StringIO()
-            error_buffer = StringIO()
-            sys.stdout = output_buffer
-            sys.stderr = error_buffer
+            elif command == "CUSTOM_LOGIC_2":
+                # Handle custom logic 2
+                result = "Handled logic 2"
 
-            with lock:
-                exec(command, namespace)
+            else:
+                result = "Unknown command"
 
-            sys.stdout = sys.__stdout__
-            sys.stderr = sys.__stderr__
-            output = output_buffer.getvalue().strip()
-            error = error_buffer.getvalue().strip()
-
-            return {"output": output, "error": error}
+            return {"output": result, "error": ""}
         except Exception as e:
             stack_trace = traceback.format_exc()
             return {"error": f"Error: {str(e)}\nStack trace:\n{stack_trace}"}
