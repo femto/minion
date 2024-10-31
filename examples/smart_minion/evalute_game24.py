@@ -240,7 +240,36 @@ def extract_solution(solution_str):
     return expr
 
 
+import re
+from collections import Counter
+
+# Helper function to safely evaluate arithmetic expressions with basic operators
+# Assumes input already validated to contain only numbers and '+', '-', '*', and '/' operators
+def safe_evaluate(expr: str) -> float:
+    tokens = re.findall(r"\d+|[+\-*/]", expr)
+    if not tokens:
+        return None
+
+    total = float(tokens[0])
+    i = 1
+    while i < len(tokens):
+        operator = tokens[i]
+        value = float(tokens[i+1])
+        if operator == '+':
+            total += value
+        elif operator == '-':
+            total -= value
+        elif operator == '*':
+            total *= value
+        elif operator == '/':
+            total /= value
+        i += 2
+
+    return total
+
+
 def evaluate_expression(expr, numbers):
+    import re
     # Convert all numbers to integers
     numbers = [int(num) for num in numbers]
 
@@ -256,7 +285,7 @@ def evaluate_expression(expr, numbers):
 
     # Evaluate the expression
     try:
-        result = eval(expr)
+        result = safe_evaluate(expr_clean)
         return abs(result - 24) < 1e-6  # Allow for small floating-point errors
     except:
         return False
