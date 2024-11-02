@@ -1,6 +1,6 @@
 [![Documentation Status](https://img.shields.io/badge/documentation-brightgreen)](https://github.com/femto/minion) 
 [![Install](https://img.shields.io/badge/get_started-blue)](https://github.com/femto/minion#get-started) 
-[![Discord](https://dcbadge.limes.pink/api/server/BgB2rgVm?style=flat)](https://discord.gg/BgB2rgVm)
+[![Discord](https://dcbadge.limes.pink/api/server/BgB2rgVm?style=flat)](https://discord.gg/HUC6xEK9aT)
 [![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)
 
 # Minion README
@@ -123,7 +123,7 @@ make sure container name intercode-python_ic_ctr is listening on 3006
 
 Join our Discord community to connect with other Minion users, get support, and stay updated on the latest developments:
 
-[![Discord](https://dcbadge.limes.pink/api/server/BgB2rgVm?style=flat)](https://discord.gg/BgB2rgVm)
+[![Discord](https://dcbadge.limes.pink/api/server/BgB2rgVm?style=flat)](https://discord.gg/HUC6xEK9aT)
 
 Follow the project creator on Twitter for announcements and insights:
 

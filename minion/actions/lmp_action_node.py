@@ -11,16 +11,19 @@ from minion.messages import user
 from minion.providers import create_llm_provider
 from minion.models.schemas import Answer  # Import the Answer model
 
-@ell.complex(model="gpt-4o-mini")
-def ell_call(ret):
-    """You are a helpful assistant."""
-    return ret
+# @ell.complex(model="gpt-4o-mini")
+# def ell_call(ret):
+#     """You are a helpful assistant."""
+#     return ret
 class LmpActionNode(LLMActionNode):
     def __init__(self, llm, input_parser=None, output_parser=None):
         super().__init__(llm, input_parser, output_parser)
         ell.init(**config.ell, default_client=self.llm.client_ell)
 
-
+    @ell.complex(model="gpt-4o-mini")
+    def ell_call(self, ret):
+        """You are a helpful assistant."""
+        return ret
 
     async def execute(self, messages: Union[str, Message, List[Message]], response_format: Optional[Union[Type[BaseModel], dict]] = None, **kwargs) -> Any:
         # 添加 input_parser 处理
@@ -54,7 +57,7 @@ class LmpActionNode(LLMActionNode):
             # If response_format is a dictionary, pass it as is
             api_params['response_format'] = response_format
 
-        response = ell_call(messages, client=self.llm.client_ell, api_params=api_params)
+        response = self.ell_call(messages, client=self.llm.client_ell, api_params=api_params)
         response = response.text
 
         if original_response_format and isinstance(original_response_format, type) and issubclass(original_response_format, BaseModel):
