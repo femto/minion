@@ -16,27 +16,27 @@ from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.main.utils import replace_placeholders_with_env
 from minion.providers import create_llm_provider
 
-
 async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
     llm_config = config.models.get("default")
+    
     llm = create_llm_provider(llm_config)
-    python_env_config = {"port": 3007}  # 同上
+
+    python_env_config = {"port": 3007}
 
     brain = Brain(
-        python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), llm=llm
+        python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), 
+        llm=llm
     )
 
     # 示例使用
     obs, score, *_ = await brain.step(
         query='''
 from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
-        route="cot",
+        route="optillm-bon",
         post_processing="extract_python",
     )
     print(obs)
-
-    # 其他示例代码...
 
 
 if __name__ == "__main__":

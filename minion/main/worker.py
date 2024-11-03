@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, List
 import dill
 import networkx as nx
 from jinja2 import Template
+from .optillm import execute_single_approach
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_none
 
@@ -59,7 +60,6 @@ from minion.models.schemas import (
     Plan
 )
 from minion.utils.answer_extraction import extract_final_answer
-
 
 class WorkerMinion(Minion):
     pass
@@ -515,8 +515,8 @@ Previous error:
 
     def extract_file_structure(self, text):
         # 从LLM输出中提取项目结构和文件内容
-        # 这需要根据LLM的输出格式进行定制
-        # 返回一个字典，键为文件路径，值为文件内容
+        # 这需要根据LLM的出格式进行定���
+        # 返回一个字典键为文件路，值为文件内容
         structure = {}
         current_file = None
         for line in text.split("\n"):
@@ -563,93 +563,66 @@ class ModeratorMinion(Minion):
     async def invoke_minion(self, minion_name):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
-
         route_minion = RouteMinion(input=self.input, brain=self.brain)
-        result = await route_minion.execute()
-        self.answer = self.input.answer = result
-        return result
+        answer_raw = await route_minion.execute()
 
-    def majority_voting(self, results):
-        # Perform majority voting on the results
-        counter = Counter(results)
-        try:
-            most_common_result, count = counter.most_common(1)[0]
-            logger.info(f"Ensemble Result: {counter}")
-            return most_common_result
-        except:
-            return None
+        # Apply post-processing if specified
+        if self.input.post_processing:
+            processed_answer = self.input.apply_post_processing(answer_raw)
+        else:
+            processed_answer = answer_raw
+
+        self.answer = self.input.answer = processed_answer
+        return processed_answer
 
     async def choose_minion_and_run(self):
-        identification = IdentifyMinion(input=self.input, brain=self.brain)
-        await identification.execute()
-
-        # preprocessing
-        preprocessing_minion = PreprocessingMinion(input=self.input, brain=self.brain)
-        self.input = await preprocessing_minion.execute()
-
-        if self.input.execution_config.get("workers"):
+        # Check if we have ensemble configuration
+        if hasattr(self.input, 'type') and self.input.type == "ensemble":
             return await self.execute_ensemble()
         else:
             return await self.execute_single()
 
     async def execute_ensemble(self):
-        config = self.input.execution_config
+        if not hasattr(self.input, 'workers'):
+            return await self.execute_single()
 
-        if config.get("aggregator", {}).get("name") == "majority_voting":
-            # calculate majority_count
-            total = 0
-            for minion in config["minions"]:
-                count = minion["count"]
-                weight = minion.get("weight", 1)
-                total += count * weight
-            majority_count = total // 2 + 1
+        results = {}
+        total_count = sum(worker["count"] for worker in self.input.workers)
+        majority_count = total_count // 2 + 1
 
-            results = {}
+        for worker in self.input.workers:
+            minion_name = worker["name"]
+            count = worker["count"]
+            post_processing = worker.get("post_processing")
 
-            for minion in config["minions"]:
-                minion_name = minion["name"]
-                count = minion["count"]
+            for i in range(count):
+                self.execution_state["current_minion"] = minion_name
+                self.execution_state["current_iteration"] = i
+                self.save_execution_state()
 
-                for i in range(count):
-                    self.execution_state["current_minion"] = minion_name
-                    self.execution_state["current_iteration"] = i
-                    self.save_execution_state()
+                answer_raw = await self.invoke_minion(minion_name)
+                
+                # Apply post-processing if specified
+                if post_processing:
+                    self.input.post_processing = post_processing
+                    processed_answer = self.input.apply_post_processing(answer_raw)
+                else:
+                    processed_answer = answer_raw
 
-                    answer_raw = await self.invoke_minion(minion_name)
-                    processed_answer = answer_raw  # already handled in route minion?
-                    #self.input.post_processing = minion["post_processing"]
-                    #processed_answer = self.input.apply_post_processing(answer_raw)
+                if processed_answer in results:
+                    results[processed_answer] += 1
+                else:
+                    results[processed_answer] = 1
 
-                    weight = minion.get("weight", 1)
+                # Check for majority
+                if results[processed_answer] >= majority_count:
+                    self.answer = self.input.answer = processed_answer
+                    return processed_answer
 
-                    await self.update_stats(minion_name, processed_answer, answer_raw)
-
-                    if True:  # 考虑如何处理 processed_answer 为 None 的情况
-                        if processed_answer in results:
-                            results[processed_answer] += weight
-                        else:
-                            results[processed_answer] = weight
-
-                        # 短路逻辑
-                        if (
-                            config.get("short_circuit", True)
-                            and results[processed_answer] >= majority_count
-                        ):
-                            self.answer = self.input.answer = processed_answer
-                            return processed_answer
-
-            # No result reached majority; find the result with the highest weight
-            most_weight = max(results.values())
-            most_weight_result = max(results, key=results.get)
-
-            if most_weight < majority_count:
-                print(
-                    f"Warning: No result reached the majority count,most_weight is {most_weight}, most_weight_result is {most_weight_result}"
-                )
-
-            # Return the result with the highest weight
-            self.answer = self.input.answer = most_weight_result
-            return self.answer
+        # No majority reached, return most common result
+        most_voted_result = max(results.items(), key=lambda x: x[1])[0]
+        self.answer = self.input.answer = most_voted_result
+        return most_voted_result
 
     async def execute_single(self):
         return await self.invoke_minion(self.input.route)
@@ -658,16 +631,16 @@ class ModeratorMinion(Minion):
         self.load_execution_state()
 
         if self.input.execution_state.current_minion:
-            # 从上次态恢复
-            if self.input.execution_config.get("ensemble_strategy", {}).get("ensemble_minions"):
+            # Resume from previous state
+            if hasattr(self.input, 'type') and self.input.type == "ensemble":
                 await self.execute_ensemble()
             else:
                 await self.execute_single()
         else:
-            # 开始新的执行
+            # Start new execution
             await self.choose_minion_and_run()
 
-        # clean up python env
+        # Clean up python env
         self.brain.cleanup_python_env(input=self.input)
         return self.answer
 
@@ -736,7 +709,6 @@ class RouteMinion(Minion):
         if isinstance(klass, str):
             klass = MINION_REGISTRY.get(klass, CotMinion)
             
-        # Update execution state before invoking minion
         self.input.update_execution_state(
             current_minion=klass.__name__,
             chosen_minion=klass.__name__
@@ -745,40 +717,54 @@ class RouteMinion(Minion):
         self.current_minion = klass(input=self.input, brain=self.brain)
         self.add_followers(self.current_minion)
         await self.current_minion.execute()
-        self.answer = self.input.answer = self.current_minion.answer
-        return self.current_minion.answer
+        
+        answer_raw = self.current_minion.answer
+        
+        # Apply post-processing if specified
+        if self.input.post_processing:
+            processed_answer = self.input.apply_post_processing(answer_raw)
+        else:
+            processed_answer = answer_raw
+            
+        self.answer = self.input.answer = processed_answer
+        return processed_answer
 
     async def choose_minion_and_run(self):
-        choose_template = Template(SMART_PROMPT_TEMPLATE)
-        filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
-        filled_template = choose_template.render(minions=filtered_registry, input=self.input)
-
-        node = LmpActionNode(self.brain.llm)
-        meta_plan = await node.execute(filled_template, response_format=MetaPlan)
-        
-        if self.input.route:
-            name = self.input.route
-            logger.info(f"Use enforced route: {self.input.route}")
-            klass = MINION_REGISTRY[self.input.route]
+        # 检查是否是optillm路由
+        if self.input.route and self.input.route.startswith("optillm-"):
+            klass = OptillmMinion
+            approach = self.input.route.split("-", 1)[1]  # 提取 approach 名称
+            logger.info(f"Using OptillmMinion with approach: {approach}")
         else:
-            name = meta_plan.name
+            # 原有的minion选择逻辑
+            choose_template = Template(SMART_PROMPT_TEMPLATE)
+            filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
+            filled_template = choose_template.render(minions=filtered_registry, input=self.input)
+
+            node = LmpActionNode(self.brain.llm)
+            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+
+            name = self.input.route or meta_plan.name
             name = most_similar_minion(name, filtered_registry.keys())
             logger.info(f"Choosing Route: {name}")
             klass = filtered_registry[name]
 
-        self.save_execution_state()
-        result = await self.invoke_minion_and_improve(klass, name)
-        return result
+        # 创建并执行选择的minion
+        minion = klass(input=self.input, brain=self.brain)
+        self.add_followers(minion)
+        await minion.execute()
+
+        self.answer = self.input.answer
+        return self.answer
 
     async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
         self.input.update_execution_state(current_iteration=0)
         self.save_execution_state()
 
         answer_raw = await self.invoke_minion(klass)
-        processed_answer = self.input.apply_post_processing(answer_raw)
 
-        self.answer = self.input.answer = processed_answer
-        await self.update_stats(name, processed_answer, answer_raw)
+        self.answer = self.input.answer = answer_raw
+        await self.update_stats(name, answer_raw)
 
         if not self.input.check:
             return self.answer
@@ -798,10 +784,8 @@ class RouteMinion(Minion):
 
             # If the check fails, try invoking the minion again
             answer_raw = await self.invoke_minion(klass)
-            processed_answer = self.input.apply_post_processing(answer_raw)
-
-            self.answer = self.input.answer = processed_answer
-            await self.update_stats(name, processed_answer, answer_raw)
+            self.answer = self.input.answer = answer_raw
+            await self.update_stats(name, answer_raw)
 
         return self.answer
 
@@ -850,6 +834,31 @@ class RouteMinion(Minion):
     def deserialize_function(func_str: str) -> Callable:
         """Deserialize a function from a string."""
         return dill.loads(bytes.fromhex(func_str))
+
+@register_route_downstream
+class OptillmMinion(WorkerMinion):
+    """Minion that uses Optillm approaches"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.approach = None
+        
+    def extract_approach(self):
+        """从route中提取optillm的approach"""
+        if self.input.route and self.input.route.startswith("optillm-"):
+            self.approach = self.input.route.split("-", 1)[1]
+            return True
+        return False
+        
+    async def execute(self):
+        if not self.extract_approach():
+            raise ValueError("Invalid optillm route format")
+
+        response, tokens = execute_single_approach(self.approach, self.input.system_prompt, self.input.query, self.brain.llm.client_ell, self.brain.llm.config.model)
+        
+        self.answer = self.input.answer = response
+
+        return self.answer
 
 
 

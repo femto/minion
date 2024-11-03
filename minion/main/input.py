@@ -121,6 +121,12 @@ class Input(BaseModel):
         description="Whether to save state during execution"
     )
 
+    # 添加system_prompt字段
+    system_prompt: str = Field(
+        default="",
+        description="System prompt for LLM models"
+    )
+
     def update_execution_state(self, **kwargs):
         """Update execution state with the provided key-value pairs.
         
