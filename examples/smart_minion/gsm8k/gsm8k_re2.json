@@ -1,25 +1,20 @@
 {
-    "preprocessing": {
-        "cognitive_enhancements": [
-            {
-                "type": "re2",
-                "apply_to": ["query", "short_context", "instruction"],
-                "repeat": 1,
-                "description": "Enhance attention through repeated reading"
-            }
-        ]
+  "type": "ensemble",
+  "workers": [
+    {
+      "name": "cot",
+      "count": 2,
+      "post_processing": "extract_number"
     },
-    "ensemble_strategy": {
-        "ensemble_minions": [
-            {
-                "name": "cot",
-                "count": 5,
-                "post_processing": "extract_number_from_string"
-            }
-        ],
-        "ensemble_logic": {
-            "type": "majority_voting"
-        }
-    },
-    "check": false
+    {
+      "name": "math_plan",
+      "count": 1, 
+      "post_processing": "extract_number"
+    }
+  ],
+  "aggregator": {
+    "name": "majority_voting"
+  },
+  "dataset": "gsm8k",
+  "dataset_description": "GSM8K (Grade School Math 8K) is a dataset of 8.5K high quality linguistically diverse grade school math word problems. The dataset was created to support research into language model approaches to question answering on mathematical problems."
 }
