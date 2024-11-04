@@ -15,8 +15,7 @@ from typing import Any, Callable, Dict, List
 import dill
 import networkx as nx
 from jinja2 import Template
-from .optillm import execute_single_approach, execute_combined_approaches, load_plugins
-from pydantic import BaseModel, Field
+from optillm import execute_single_approach, execute_combined_approaches, load_plugins, execute_parallel_approaches
 from tenacity import retry, stop_after_attempt, wait_none
 
 from minion.actions.action_node import ActionNode
