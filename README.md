@@ -82,6 +82,7 @@ print(obs)
 ```
 git clone https://github.com/femto/minion.git && cd minion && pip install -r requirements.txt
 cp config/config.yaml.example config/config.yaml
+cp config/.env.example config/.env
 ```
 then edit config/config.yaml
 ```
@@ -92,6 +93,12 @@ models:
     api_key: "${DEFAULT_API_KEY}"
     model: "deepseek-chat"
     temperature: 0
+```
+then config/.env
+```
+DEFAULT_API_KEY=sk-xxx
+DEFAULT_BASE_URL=base_url
+DEFAULT_MODEL=deepseek-chat
 ```
 
 ### Other Dependencies
