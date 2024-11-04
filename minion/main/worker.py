@@ -59,7 +59,8 @@ from minion.models.schemas import (
     EnsembleLogic,
     Plan
 )
-from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python
+from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python, \
+    extract_answer
 
 
 class WorkerMinion(Minion):
@@ -152,14 +153,13 @@ class DcotMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        node = ActionNode(key="answer", expected_type=str, instruction="", example="")
+        node = LmpActionNode(llm=self.brain.llm)
         prompt = Template(DCOT_PROMPT)
         prompt = prompt.render(input=self.input)
-        node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
-        self.answer_node = node
-        self.answer = self.input.answer = extract_answer(node.content)
+        response = node.execute_answer(prompt)
+        self.answer = self.input.answer = extract_answer(response)
 
-        self.raw_answer = self.input.answer_raw = node.content
+        self.answer_raw = self.input.answer_raw = response
         return self.answer  # maybe also adds score?
 
 
