@@ -37,6 +37,9 @@ async def smart_brain():
     #     post_processing="extract_python",
     # )
     # print(obs)
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8",
+                                      route="plan")
+    print(obs)
     obs, score, *_ = await brain.step(
         query='''
         ['https://en.wikipedia.org/wiki/President_of_the_United_States', 'https://en.wikipedia.org/wiki/James_Buchanan', 'https://en.wikipedia.org/wiki/Harriet_Lane', 'https://en.wikipedia.org/wiki/List_of_presidents_of_the_United_States_who_died_in_office', 'https://en.wikipedia.org/wiki/James_A._Garfield']

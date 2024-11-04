@@ -70,6 +70,9 @@ class Input(BaseModel):
     constraint: str = ""  # Constraints or requirements
     instruction: str = ""  # Step-by-step instructions
 
+    cache_plan: str = None
+    system_prompt: str = ""
+
     # Answer-related fields
     answer: str = ""  # The final extracted/processed answer
     answer_raw: str = ""  # Raw answer including chain of thought

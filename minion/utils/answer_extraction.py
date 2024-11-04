@@ -5,6 +5,7 @@
 @Author  : femto Zheng
 @File    : brain.py
 """
+import json
 import multiprocessing
 import re
 from math import isclose
@@ -14,6 +15,9 @@ import regex
 from sympy import N, simplify
 from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
+
+from minion.utils.custom_decoder import CustomDecoder
+
 
 def extract_final_answer(text):
     # Match for <final_answer> tag

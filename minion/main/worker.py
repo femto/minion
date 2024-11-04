@@ -59,7 +59,8 @@ from minion.models.schemas import (
     EnsembleLogic,
     Plan
 )
-from minion.utils.answer_extraction import extract_final_answer
+from minion.utils.answer_extraction import extract_final_answer, extract_json_from_string
+
 
 class WorkerMinion(Minion):
     pass
@@ -174,6 +175,7 @@ class PlanMinion(WorkerMinion):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plan_prompt = PLAN_PROMPT
+        self.plan = None
         self.execution_state: Dict[str, Any] = {}
 
     def write_json_to_cache(self, file, data):
@@ -250,9 +252,9 @@ class PlanMinion(WorkerMinion):
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
             filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
-            plan = await ActionNode.from_pydantic(Plan).fill(context=filled_template, llm=self.brain.llm, schema="raw")
+            response = await LmpActionNode(llm=self.brain.llm).execute(filled_template)
 
-            json = extract_json_from_string(plan.content)
+            json = extract_json_from_string(response)
 
             try:
                 self.validate_json_plan(json)
@@ -734,6 +736,11 @@ class RouteMinion(Minion):
             klass = OptillmMinion
             approach = self.input.route.split("-", 1)[1]  # 提取 approach 名称
             logger.info(f"Using OptillmMinion with approach: {approach}")
+        elif self.input.route:
+            filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
+            name = self.input.route
+            logger.info(f"Use enforced route: {self.input.route}")
+            klass = filtered_registry[self.input.route]
         else:
             # 原有的minion选择逻辑
             choose_template = Template(SMART_PROMPT_TEMPLATE)
