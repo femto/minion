@@ -130,7 +130,7 @@ class AsyncStatsTracker:
                         {
                             "minion_name": exp.minion_name,
                             "answer": exp.answer,
-                            "raw_answer": exp.answer_raw,
+                            "answer_raw": exp.answer_raw,
                             "correct_answer": exp.ground_truth,
                             "raw_correct_answer": exp.ground_truth_raw,
                             "outcome": exp.outcome,
@@ -153,7 +153,7 @@ async def main():
     #     item_id=self.input.item_id,
     #     minion_name=minion_name,
     #     result=result,
-    #     raw_answer=raw_answer,
+    #     answer_raw=answer_raw,
     #     correct_answer=self.input.correct_answer,
     #     complexity=self.input.complexity,
     #     query_range=self.input.query_range,

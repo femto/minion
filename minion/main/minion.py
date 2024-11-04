@@ -89,7 +89,7 @@ class Minion(metaclass=SubclassHookMeta):
                     "item_id": str(self.input.item_id),
                     "minion_name": minion_name,
                     "answer": str(result),
-                    "raw_answer": raw_answer,
+                    "answer_raw": raw_answer,
                     "raw_correct_answer": self.input.ground_truth_raw,
                     "correct_answer": self.input.ground_truth,
                     "complexity": self.input.complexity,
