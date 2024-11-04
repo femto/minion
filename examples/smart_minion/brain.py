@@ -38,11 +38,11 @@ async def smart_brain():
     #     post_processing="extract_python",
     # )
     # print(obs)
-    cache_plan = os.path.join(MINION_ROOT/"logs", "game24.1.json")
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8",
-                                      route="plan",
-                                      cache_plan=cache_plan)
-    print(obs)
+    # cache_plan = os.path.join(MINION_ROOT/"logs", "game24.1.json")
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8",
+    #                                   route="python",
+    #                                   cache_plan=cache_plan)
+    # print(obs)
     obs, score, *_ = await brain.step(
         query='''
         ['https://en.wikipedia.org/wiki/President_of_the_United_States', 'https://en.wikipedia.org/wiki/James_Buchanan', 'https://en.wikipedia.org/wiki/Harriet_Lane', 'https://en.wikipedia.org/wiki/List_of_presidents_of_the_United_States_who_died_in_office', 'https://en.wikipedia.org/wiki/James_A._Garfield']
@@ -50,7 +50,6 @@ async def smart_brain():
     If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name?
     ''',
         route="optillm-readurls&memory",
-        post_processing="extract_python",
     )
     print(obs)
 
