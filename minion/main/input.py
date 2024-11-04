@@ -73,6 +73,8 @@ class Input(BaseModel):
     cache_plan: str = None
     system_prompt: str = ""
     task: Any = None
+    symbols: Dict[str, Any] = Field(default_factory=dict)
+    task_check: bool = False
 
     # Answer-related fields
     answer: str = ""  # The final extracted/processed answer
