@@ -29,20 +29,25 @@ def get_minion_package_root():
 def get_minion_root():
     """Get the project root directory."""
     # Check if a project root is specified in the environment variable
-    project_root_env = os.getenv("MINION_PROJECT_ROOT")
-    if project_root_env:
-        project_root = Path(project_root_env)
+    minion_root_env = os.getenv("MINION_ROOT")
+    if minion_root_env:
+        minion_root = Path(minion_root_env)
         logger.info(
-            f"{Fore.GREEN}PROJECT_ROOT{Style.RESET_ALL} set from environment variable to {Fore.CYAN}{str(project_root)}{Style.RESET_ALL}"
+            f"{Fore.GREEN}MINION_ROOT{Style.RESET_ALL} set from environment variable to {Fore.CYAN}{str(minion_root)}{Style.RESET_ALL}"
         )
     else:
-        # Fallback to package root if no environment variable is set
-        project_root = get_minion_package_root()
+        # Find project root if no environment variable is set
+        minion_root = get_minion_package_root()
+        # Set the environment variable for future use
+        os.environ["MINION_ROOT"] = str(minion_root)
+        logger.info(
+            f"{Fore.GREEN}MINION_ROOT{Style.RESET_ALL} set to: {Fore.CYAN}{str(minion_root)}{Style.RESET_ALL}"
+        )
 
-    return project_root
+    return minion_root
 
 
-# MINION PROJECT ROOT AND VARS
+# MINION PROJECT ROOT AND VARS 
 CONFIG_ROOT = Path.home() / ".minion"
 MINION_ROOT = get_minion_root()
 MODEL_PRICES_PATH = MINION_ROOT / "minion/utils/model_prices_and_context_window.json"

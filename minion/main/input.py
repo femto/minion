@@ -72,6 +72,7 @@ class Input(BaseModel):
 
     cache_plan: str = None
     system_prompt: str = ""
+    task: Any = None
 
     # Answer-related fields
     answer: str = ""  # The final extracted/processed answer
