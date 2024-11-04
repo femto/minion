@@ -77,6 +77,7 @@ class NativeMinion(WorkerMinion):
         node = LmpActionNode(self.brain.llm)
         response = await node.execute_answer(ASK_PROMPT.format(input=self.input))
         self.raw_answer = self.input.answer_raw = response
+        self.answer = self.input.answer = response
         return self.answer
 
 
@@ -348,7 +349,7 @@ class TaskMinion(WorkerMinion):
         minion = klass(input=self.input, brain=self.brain, task=self.task, task_execution=True)
 
         print("using task level check")
-        for _ in range(3):
+        for _ in range(int(self.input.task_check)):
             result = await minion.execute()
             self.answer = self.task["answer"] = result
             self.input.symbols[self.task["output_key"]] = result
