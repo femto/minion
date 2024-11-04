@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List
 import dill
 import networkx as nx
 from jinja2 import Template
-from .optillm import execute_single_approach
+from .optillm import execute_single_approach, execute_combined_approaches, load_plugins
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_none
 
@@ -73,9 +73,8 @@ class NativeMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        context = {"messages": [{"role": "user", "content": ASK_PROMPT.format(input=self.input)}]}
-        response = await self.execute_action(self.llm_action, context)
-        self.answer = self.input.answer = extract_final_answer(response)
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute_answer(ASK_PROMPT.format(input=self.input))
         self.raw_answer = self.input.answer_raw = response
         return self.answer
 
@@ -515,7 +514,7 @@ Previous error:
 
     def extract_file_structure(self, text):
         # 从LLM输出中提取项目结构和文件内容
-        # 这需要根据LLM的出格式进行定���
+        # 这需要根据LLM的出格式进行定
         # 返回一个字典键为文件路，值为文件内容
         structure = {}
         current_file = None
@@ -835,29 +834,73 @@ class RouteMinion(Minion):
         """Deserialize a function from a string."""
         return dill.loads(bytes.fromhex(func_str))
 
+
 @register_route_downstream
 class OptillmMinion(WorkerMinion):
     """Minion that uses Optillm approaches"""
+    
+    _plugins_loaded = False  # Class variable to track if plugins have been loaded
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.approach = None
         
-    def extract_approach(self):
-        """从route中提取optillm的approach"""
-        if self.input.route and self.input.route.startswith("optillm-"):
-            self.approach = self.input.route.split("-", 1)[1]
-            return True
-        return False
+        # Load plugins if not already loaded
+        if not OptillmMinion._plugins_loaded:
+            load_plugins()
+            OptillmMinion._plugins_loaded = True
+        
+    def parse_approach(self):
+        """从route中解析optillm的approach和操作类型"""
+        if not self.input.route or not self.input.route.startswith("optillm-"):
+            raise ValueError("Invalid optillm route format")
+            
+        approach = self.input.route.split("-", 1)[1]
+        operation = 'SINGLE'
+        approaches = []
+        
+        if '&' in approach:
+            operation = 'AND'
+            approaches = approach.split('&')
+        elif '|' in approach:
+            operation = 'OR'
+            approaches = approach.split('|')
+        else:
+            approaches = [approach]
+            
+        return operation, approaches
         
     async def execute(self):
-        if not self.extract_approach():
-            raise ValueError("Invalid optillm route format")
-
-        response, tokens = execute_single_approach(self.approach, self.input.system_prompt, self.input.query, self.brain.llm.client_ell, self.brain.llm.config.model)
+        operation, approaches = self.parse_approach()
         
-        self.answer = self.input.answer = response
+        if operation == 'SINGLE':
+            response, tokens = execute_single_approach(
+                approaches[0], 
+                self.input.system_prompt, 
+                self.input.query, 
+                self.brain.llm.client_ell, 
+                self.brain.llm.config.model
+            )
+        elif operation == 'AND':
+            (response, tokens) = execute_combined_approaches(
+                approaches,
+                self.input.system_prompt,
+                self.input.query,
+                self.brain.llm.client_ell,
+                self.brain.llm.config.model
+            )
+        elif operation == 'OR':
+            response, tokens = execute_parallel_approaches(
+                approaches,
+                self.input.system_prompt,
+                self.input.query,
+                self.brain.llm.client_ell,
+                self.brain.llm.config.model
+            )
+        else:
+            raise ValueError(f"Unknown operation: {operation}")
 
+        self.answer = self.input.answer = response
         return self.answer
 
 

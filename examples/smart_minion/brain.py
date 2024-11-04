@@ -29,6 +29,25 @@ async def smart_brain():
         llm=llm
     )
 
+    # # 示例使用
+    # obs, score, *_ = await brain.step(
+    #     query='''
+    # from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
+    #     route="native",
+    #     post_processing="extract_python",
+    # )
+    # print(obs)
+    obs, score, *_ = await brain.step(
+        query='''
+        ['https://en.wikipedia.org/wiki/President_of_the_United_States', 'https://en.wikipedia.org/wiki/James_Buchanan', 'https://en.wikipedia.org/wiki/Harriet_Lane', 'https://en.wikipedia.org/wiki/List_of_presidents_of_the_United_States_who_died_in_office', 'https://en.wikipedia.org/wiki/James_A._Garfield']
+        
+    If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name?
+    ''',
+        route="optillm-readurls&memory",
+        post_processing="extract_python",
+    )
+    print(obs)
+
     # 示例使用
     obs, score, *_ = await brain.step(
         query='''
