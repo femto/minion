@@ -81,7 +81,10 @@ class Input(BaseModel):
     answer_raw: str = ""  # Raw answer including chain of thought
     answer_code: str = ""  # Answer in code format if applicable
     answer_full: str = ""  # Complete output including all details
-    feedback: str = ""  # Feedback for improvement
+    feedback: Union[str, Dict[str, Any]] = Field(
+        default="",
+        description="Feedback from check operations, can be either string or dictionary"
+    )
 
     # Ground truth fields for evaluation
     ground_truth_raw: Optional[str] = None  # Raw ground truth text

@@ -6,7 +6,7 @@ from jinja2 import Template
 
 from minion.logs import logger
 from minion.main.minion import Minion
-from minion.main.prompt import CHECK_PROMPT
+from minion.main.prompt import CHECK_PROMPT, ASK_PROMPT
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import CheckResult
 
@@ -63,7 +63,7 @@ class CheckMinion(Minion):
             
             self.answer_node = result
             self.answer = self.input.feedback = {
-                "feedback_content": result.feedback,
+                "feedback": result.feedback,
                 "correct": result.correct,
                 "score": result.score
             }
