@@ -333,32 +333,50 @@ class TaskMinion(WorkerMinion):
 
         # filter out smart, since we don't want choose smart following smart again
         # also filter out ScoreMinion
-
         filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input, task=self.task)
-
-        # if self.input.route:
-        #     return filtered_registry[self.input.route]
 
         meta_plan = await LmpActionNode(llm=self.brain.llm).execute(filled_template, response_format=MetaPlan)
 
         name = meta_plan.name
-
         name = most_similar_minion(name, filtered_registry.keys())
         klass = filtered_registry[name]
-        minion = klass(input=self.input, brain=self.brain, task=self.task, task_execution=True)
+        minion = klass(input=self.input, brain=self.brain, task=self.task)
 
-        print("using task level check")
-        for _ in range(int(self.input.task_check)):
-            result = await minion.execute()
-            self.answer = self.task["answer"] = result
-            self.input.symbols[self.task["output_key"]] = result
-            print("#####OUTPUT#####")
-            print(f"{self.task['output_key']}:{result}")
-            check_minion = CheckMinion(input=self.input, brain=self.brain)
-            check_result = await check_minion.execute()
-            if check_result and check_result["correct"]:
-                return self.answer
+        # 确保至少执行一次
+        result = await minion.execute()
+        self.answer = self.task["answer"] = result
+        self.input.symbols[self.task["output_key"]] = result
+        print("#####OUTPUT#####")
+        print(f"{self.task['output_key']}:{result}")
+
+        # 如果需要检查，则进行额外的检查循环
+        if int(self.input.task_check) > 0:
+            for iteration in range(int(self.input.task_check)):
+                check_minion = CheckMinion(input=self.input, brain=self.brain)
+                check_result = await check_minion.execute()
+                
+                if check_result and check_result["correct"]:
+                    return self.answer
+                    
+                # 如果检查失败，添加反馈信息到input中
+                # if check_result:
+                #     self.input.feedback = check_result.get("feedback", "")
+                #     self.input.error = check_result.get("error", "")
+                #     logger.info(f"Check failed on iteration {iteration + 1}. Feedback: {self.input.feedback}")
+                    
+                # 使用反馈信息重新执行
+                result = await minion.execute()
+                self.answer = self.task["answer"] = result
+                self.input.symbols[self.task["output_key"]] = result
+                print("#####OUTPUT#####")
+                print(f"{self.task['output_key']}:{result}")
+
+                # 清除反馈信息，为下一次迭代做准备
+                self.input.feedback = ""
+                self.input.error = ""
+
+        return self.answer
 
     async def execute(self):
         return await self.choose_minion_and_run()
