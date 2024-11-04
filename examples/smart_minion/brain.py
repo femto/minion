@@ -11,6 +11,7 @@ import os
 import yaml
 
 from minion import config
+from minion.const import MINION_ROOT
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.main.utils import replace_placeholders_with_env
@@ -37,8 +38,10 @@ async def smart_brain():
     #     post_processing="extract_python",
     # )
     # print(obs)
+    cache_plan = os.path.join(MINION_ROOT/"logs", "game24.1.json")
     obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8",
-                                      route="plan")
+                                      route="plan",
+                                      cache_plan=cache_plan)
     print(obs)
     obs, score, *_ = await brain.step(
         query='''

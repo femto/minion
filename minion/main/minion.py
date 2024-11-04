@@ -35,7 +35,7 @@ def register_route_downstream(cls):
 
 
 class Minion(metaclass=SubclassHookMeta):
-    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None, task_execution=False, **kwargs):
+    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None, **kwargs):
         if brain is None:
             raise ValueError("The 'brain' parameter cannot be None.")
 
@@ -46,7 +46,6 @@ class Minion(metaclass=SubclassHookMeta):
         self.followers = []
         self.score_func = score_func
         self.task = task
-        self.task_execution = task_execution
 
     def propagate_information(self, other):
         other.input = self.input

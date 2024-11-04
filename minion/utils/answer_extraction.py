@@ -27,7 +27,15 @@ def extract_final_answer(text):
 
     return text
 
-def extract_json_from_string(text):
+def extract_python(text):
+    # Regex pattern to extract code inside ```python ``` blocks
+    pattern = r"```python(.*?)```"
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        # Return the extracted code, strip to remove leading/trailing newlines
+        return match.group(1).strip()
+    return text
+def extract_longest_json_from_string(text):
     # Regular expression pattern to match all content between ```json and ```
     pattern = r"```json\s*([\s\S]*?)\s*```"
 
@@ -45,9 +53,6 @@ def extract_json_from_string(text):
             raise ValueError("Invalid JSON content in the selected block.") from e
     else:
         raise ValueError("No JSON content found.")
-
-
-
 
 
 def extract_answer(text):

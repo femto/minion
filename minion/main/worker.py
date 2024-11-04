@@ -59,7 +59,7 @@ from minion.models.schemas import (
     EnsembleLogic,
     Plan
 )
-from minion.utils.answer_extraction import extract_final_answer, extract_json_from_string
+from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python
 
 
 class WorkerMinion(Minion):
@@ -254,7 +254,7 @@ class PlanMinion(WorkerMinion):
 
             response = await LmpActionNode(llm=self.brain.llm).execute(filled_template)
 
-            json = extract_json_from_string(response)
+            json = extract_longest_json_from_string(response)
 
             try:
                 self.validate_json_plan(json)
@@ -339,9 +339,9 @@ class TaskMinion(WorkerMinion):
         # if self.input.route:
         #     return filtered_registry[self.input.route]
 
-        meta_plan = await ActionNode.from_pydantic(MetaPlan).fill(context=filled_template, llm=self.brain.llm)
+        meta_plan = await LmpActionNode(llm=self.brain.llm).execute(filled_template, response_format=MetaPlan)
 
-        name = meta_plan.instruct_content.name
+        name = meta_plan.name
 
         name = most_similar_minion(name, filtered_registry.keys())
         klass = filtered_registry[name]
@@ -369,7 +369,7 @@ class PythonMinion(WorkerMinion):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.python_env_action = EnvironmentActionNode(self.brain.python_env.step)
+        self.python_env = self.brain.python_env
 
     async def execute(self):
         if self.input.query_type == "calculate":
@@ -384,13 +384,9 @@ class PythonMinion(WorkerMinion):
     async def execute_calculation(self):
         error = ""
         for i in range(5):
-            node = ActionNode(
-                key="code",
-                expected_type=str,
-                instruction="the solution code",
-                example="",
-            )
-            if not self.task_execution:
+            node = LmpActionNode(llm=self.brain.llm)
+
+            if not self.task:
                 prompt = Template(
                     PYTHON_PROMPT
                     + ASK_PROMPT_JINJA
@@ -415,26 +411,18 @@ Previous error:
                 )
                 prompt = prompt.render(input=self.input, task=self.task, error=error)
 
-            node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
-            # code = node.instruct_content.code
-            # print(code)
+            code = await node.execute(prompt)
 
-            def extract_code(text):
-                # Regex pattern to extract code inside ```python ``` blocks
-                pattern = r"```python(.*?)```"
-                match = re.search(pattern, text, re.DOTALL)
-                if match:
-                    # Return the extracted code, strip to remove leading/trailing newlines
-                    return match.group(1).strip()
-                return text
+            code = extract_python(code)
+            print(code)
 
-            # deepseek may still put ```python...``` in the returned json
-            code = extract_code(node.content)
             self.answer_code = self.input.answer_code = code
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
             context = {"code": f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"}
-            result = await self.execute_action(self.python_env_action, context)
+            # Execute the code in the Python environment using step()
+            # The context contains the code with query/run ID tags
+            result = self.python_env.step(context["code"])
             obs = result[0]  # obs
 
             if obs["error"]:
@@ -453,12 +441,7 @@ Previous error:
     async def execute_code_solution(self):
         error = ""
         for i in range(5):
-            node = ActionNode(
-                key="code",
-                expected_type=str,
-                instruction="Generate the complete code solution",
-                example="",
-            )
+            node = LmpActionNode(llm=self.brain.llm)
             prompt = Template(
                 PYTHON_PROMPT
                 + ASK_PROMPT_JINJA
@@ -473,20 +456,15 @@ Previous error:
             )
             prompt = prompt.render(input=self.input, error=error)
 
-            node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
-            code = self.extract_code(node.content)
+            code = await node.execute(prompt)
+            code = extract_python(code)
             self.answer = self.input.answer = code
             return self.answer
 
     async def execute_generation(self):
         error = ""
         for i in range(5):
-            node = ActionNode(
-                key="files",
-                expected_type=str,
-                instruction="Generate the file structure and contents",
-                example="",
-            )
+            node = LmpActionNode(llm=self.brain.llm)
             prompt = Template(
                 PYTHON_PROMPT
                 + ASK_PROMPT_JINJA
@@ -500,19 +478,11 @@ Previous error:
             )
             prompt = prompt.render(input=self.input, error=error)
 
-            node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
-            file_structure = self.extract_file_structure(node.content)
+            file_structure_text = await node.execute(prompt)
+            file_structure = self.extract_file_structure(file_structure_text)
             self.save_files(file_structure)
             self.answer = self.input.answer = "Files generated successfully"
             return self.answer
-
-    def extract_code(self, text):
-        # 提取代码的逻辑，保持不变
-        pattern = r"```python(.*?)```"
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return text
 
     def extract_file_structure(self, text):
         # 从LLM输出中提取项目结构和文件内容
