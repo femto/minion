@@ -26,12 +26,7 @@ class LmpActionNode(LLMActionNode):
         """You are a helpful assistant."""
         return ret
 
-    @retry(
-        stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(Exception),
-        reraise=True
-    )
-    async def execute(self, messages: Union[str, Message, List[Message]], response_format: Optional[Union[Type[BaseModel], dict]] = None, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, **kwargs) -> Any:
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
@@ -66,6 +61,8 @@ class LmpActionNode(LLMActionNode):
         response = self.ell_call(messages, client=self.llm.client_ell, api_params=api_params)
         response = response.text
 
+        if output_raw_parser:
+            response = output_raw_parser(response)
         if original_response_format and isinstance(original_response_format, type) and issubclass(original_response_format, BaseModel):
             response = original_response_format.model_validate_json(response)
             # 判断 response pydantic model 是否只有一个 field
