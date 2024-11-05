@@ -15,7 +15,8 @@ from typing import Any, Callable, Dict, List
 import dill
 import networkx as nx
 from jinja2 import Template
-from optillm import execute_single_approach, execute_combined_approaches, load_plugins, execute_parallel_approaches
+from .optillm import execute_single_approach, execute_combined_approaches, load_plugins
+from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_none
 
 from minion.actions.action_node import ActionNode
@@ -58,8 +59,7 @@ from minion.models.schemas import (
     EnsembleLogic,
     Plan
 )
-from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python, \
-    extract_answer
+from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python
 
 
 class WorkerMinion(Minion):
@@ -75,7 +75,7 @@ class NativeMinion(WorkerMinion):
 
     async def execute(self):
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute_answer(ASK_PROMPT.format(input=self.input))
+        response = await node.execute(ASK_PROMPT.format(input=self.input))
         self.raw_answer = self.input.answer_raw = response
         self.answer = self.input.answer = response
         return self.answer
@@ -152,13 +152,14 @@ class DcotMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        node = LmpActionNode(llm=self.brain.llm)
+        node = ActionNode(key="answer", expected_type=str, instruction="", example="")
         prompt = Template(DCOT_PROMPT)
         prompt = prompt.render(input=self.input)
-        response = node.execute_answer(prompt)
-        self.answer = self.input.answer = extract_answer(response)
+        node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
+        self.answer_node = node
+        self.answer = self.input.answer = extract_answer(node.content)
 
-        self.answer_raw = self.input.answer_raw = response
+        self.raw_answer = self.input.answer_raw = node.content
         return self.answer  # maybe also adds score?
 
 
@@ -549,10 +550,10 @@ class ModeratorMinion(Minion):
         super().__init__(**kwargs)
         self.execution_state: Dict[str, Any] = {}
 
-    async def invoke_minion(self, minion_name):
+    async def invoke_minion(self, minion_name, worker_config=None):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
-        route_minion = RouteMinion(input=self.input, brain=self.brain)
+        route_minion = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
         answer_raw = await route_minion.execute()
 
         # Apply post-processing if specified
@@ -566,13 +567,13 @@ class ModeratorMinion(Minion):
 
     async def choose_minion_and_run(self):
         # Check if we have ensemble configuration
-        if hasattr(self.input, 'type') and self.input.type == "ensemble":
+        if hasattr(self.input, 'execution_config') and self.input.execution_config.get('type') == "ensemble":
             return await self.execute_ensemble()
         else:
             return await self.execute_single()
 
     async def execute_ensemble(self):
-        if not hasattr(self.input, 'workers'):
+        if not hasattr(self.input.execution_config, 'workers'):
             return await self.execute_single()
 
         results = {}
@@ -589,7 +590,7 @@ class ModeratorMinion(Minion):
                 self.execution_state["current_iteration"] = i
                 self.save_execution_state()
 
-                answer_raw = await self.invoke_minion(minion_name)
+                answer_raw = await self.invoke_minion(minion_name, worker)
                 
                 # Apply post-processing if specified
                 if post_processing:
@@ -689,10 +690,11 @@ class QaMinion(Minion):
             return self.answer
 
 class RouteMinion(Minion):
-    def __init__(self, **kwargs):
+    def __init__(self, worker_config=None, **kwargs):
         super().__init__(**kwargs)
         self.execution_state: Dict[str, Any] = {}
         self.current_minion = None
+        self.worker_config = worker_config #worker config from moderatorminion
 
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
@@ -710,8 +712,14 @@ class RouteMinion(Minion):
         answer_raw = self.current_minion.answer
         
         # Apply post-processing if specified
-        if self.input.post_processing:
-            processed_answer = self.input.apply_post_processing(answer_raw)
+        post_processing = None
+        if self.worker_config and hasattr(self.worker_config, 'post_processing'):
+            post_processing = self.worker_config.post_processing
+        elif self.input.post_processing:
+            post_processing = self.input.post_processing
+            
+        if post_processing:
+            processed_answer = self.input.apply_post_processing(answer_raw, post_processing)
         else:
             processed_answer = answer_raw
             
@@ -719,7 +727,15 @@ class RouteMinion(Minion):
         return processed_answer
 
     async def choose_minion_and_run(self):
-        # 检查是否是optillm路由
+        
+        route = self.input.route
+        if self.worker_config and hasattr(self.worker_config, 'name'):
+            route = self.worker_config.name
+            
+        check = self.input.check
+        if self.worker_config and hasattr(self.worker_config, 'check'):
+            check = self.worker_config.check
+
         if self.input.route and self.input.route.startswith("optillm-"):
             klass = OptillmMinion
             approach = self.input.route.split("-", 1)[1]  # 提取 approach 名称
