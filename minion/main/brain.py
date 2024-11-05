@@ -159,4 +159,4 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
         return result
 
 
-Mind.update_forward_refs()
+Mind.model_rebuild()
