@@ -50,8 +50,8 @@ async def test_openai_provider_cost_calculation(openai_provider, mock_openai_cli
         # 验证成本计算
         cost_manager = openai_provider.get_cost()
         assert isinstance(cost_manager, CostManager)
-        assert cost_manager.prompt_tokens == 20
-        assert cost_manager.completion_tokens == 10
+        assert cost_manager.total_prompt_tokens == 20
+        assert cost_manager.total_completion_tokens == 10
 
         # 验证 OpenAI API 被正确调用
         mock_openai_client.chat.completions.create.assert_called_once()
@@ -91,8 +91,8 @@ async def test_openai_provider_stream_cost_calculation(openai_provider, mock_ope
         # 验证成本计算
         cost_manager = openai_provider.get_cost()
         assert isinstance(cost_manager, CostManager)
-        assert cost_manager.prompt_tokens == 15
-        assert cost_manager.completion_tokens == 3
+        assert cost_manager.total_prompt_tokens == 15
+        assert cost_manager.total_completion_tokens == 3
 
         # 验证 OpenAI API 被正确调用
         mock_openai_client.chat.completions.create.assert_called_once()
