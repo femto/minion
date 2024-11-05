@@ -573,24 +573,24 @@ class ModeratorMinion(Minion):
             return await self.execute_single()
 
     async def execute_ensemble(self):
-        if not hasattr(self.input.execution_config, 'workers'):
+        if 'workers' not in self.input.execution_config:
             return await self.execute_single()
 
         results = {}
-        total_count = sum(worker["count"] for worker in self.input.workers)
+        total_count = sum(worker["count"] for worker in self.input.execution_config["workers"])
         majority_count = total_count // 2 + 1
 
-        for worker in self.input.workers:
-            minion_name = worker["name"]
-            count = worker["count"]
-            post_processing = worker.get("post_processing")
+        for worker_config in self.input.execution_config["workers"]:
+            minion_name = worker_config["name"]
+            count = worker_config["count"]
+            post_processing = worker_config.get("post_processing")
 
             for i in range(count):
                 self.execution_state["current_minion"] = minion_name
                 self.execution_state["current_iteration"] = i
                 self.save_execution_state()
 
-                answer_raw = await self.invoke_minion(minion_name, worker)
+                answer_raw = await self.invoke_minion(minion_name, worker_config)
                 
                 # Apply post-processing if specified
                 if post_processing:
@@ -694,7 +694,7 @@ class RouteMinion(Minion):
         super().__init__(**kwargs)
         self.execution_state: Dict[str, Any] = {}
         self.current_minion = None
-        self.worker_config = worker_config #worker config from moderatorminion
+        self.worker_config = worker_config #worker config from ModeratorMinion
 
     async def invoke_minion(self, klass):
         if isinstance(klass, str):
@@ -713,8 +713,8 @@ class RouteMinion(Minion):
         
         # Apply post-processing if specified
         post_processing = None
-        if self.worker_config and hasattr(self.worker_config, 'post_processing'):
-            post_processing = self.worker_config.post_processing
+        if self.worker_config and 'post_processing' in self.worker_config:
+            post_processing = self.worker_config['post_processing']
         elif self.input.post_processing:
             post_processing = self.input.post_processing
             
@@ -729,22 +729,17 @@ class RouteMinion(Minion):
     async def choose_minion_and_run(self):
         
         route = self.input.route
-        if self.worker_config and hasattr(self.worker_config, 'name'):
-            route = self.worker_config.name
+        if self.worker_config and 'name' in self.worker_config:
+            route = self.worker_config["name"]
             
-        check = self.input.check
-        if self.worker_config and hasattr(self.worker_config, 'check'):
-            check = self.worker_config.check
-
-        if self.input.route and self.input.route.startswith("optillm-"):
+        if route and route.startswith("optillm-"):
             klass = OptillmMinion
-            approach = self.input.route.split("-", 1)[1]  # 提取 approach 名称
+            approach = route.split("-", 1)[1]  # 提取 approach 名称
             logger.info(f"Using OptillmMinion with approach: {approach}")
-        elif self.input.route:
+        elif route:
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
-            name = self.input.route
-            logger.info(f"Use enforced route: {self.input.route}")
-            klass = filtered_registry[self.input.route]
+            logger.info(f"Use enforced route: {route}")
+            klass = filtered_registry[route]
         else:
             # 原有的minion选择逻辑
             choose_template = Template(SMART_PROMPT_TEMPLATE)
@@ -762,9 +757,9 @@ class RouteMinion(Minion):
         # 创建并执行选择的minion
         minion = klass(input=self.input, brain=self.brain)
         self.add_followers(minion)
-        await minion.execute()
+        answer = await minion.execute()
 
-        self.answer = self.input.answer
+        self.answer = self.input.answer = answer
         return self.answer
 
     async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
@@ -776,10 +771,14 @@ class RouteMinion(Minion):
         self.answer = self.input.answer = answer_raw
         await self.update_stats(name, answer_raw)
 
-        if not self.input.check:
+        check = self.input.check
+        if self.worker_config and hasattr(self.worker_config, 'check'):
+            check = self.worker_config.check
+
+        if not check:
             return self.answer
 
-        for iteration in range(int(self.input.check)):
+        for iteration in range(int(check)):
             self.input.update_execution_state(current_iteration=iteration)
             self.save_execution_state()
 
