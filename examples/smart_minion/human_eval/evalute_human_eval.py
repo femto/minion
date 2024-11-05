@@ -107,7 +107,7 @@ async def evaluate_dataset(
         for i, item in enumerate(data):
             item_id = i
             item["idx"] = i
-            if last_processed_id and item_id <= last_processed_id:
+            if last_processed_id is not None and item_id <= last_processed_id:
                 continue
             if start_id and item_id < start_id:
                 continue

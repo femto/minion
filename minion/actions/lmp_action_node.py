@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import json
 
 import ell
+from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
 from minion.configs.config import config
 from minion.message_types import Message
@@ -25,6 +26,11 @@ class LmpActionNode(LLMActionNode):
         """You are a helpful assistant."""
         return ret
 
+    @retry(
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type(Exception),
+        reraise=True
+    )
     async def execute(self, messages: Union[str, Message, List[Message]], response_format: Optional[Union[Type[BaseModel], dict]] = None, **kwargs) -> Any:
         # 添加 input_parser 处理
         if self.input_parser:
