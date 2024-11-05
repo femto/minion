@@ -41,6 +41,7 @@ def main():
         return
 
     try:
+        from minion.providers import create_llm_provider
         llm = create_llm_provider(llm_config)
         print("Created LLM provider:", llm)
         # 使用 llm 进行生成或流式生成

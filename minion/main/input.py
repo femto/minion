@@ -81,10 +81,8 @@ class Input(BaseModel):
     answer_raw: str = ""  # Raw answer including chain of thought
     answer_code: str = ""  # Answer in code format if applicable
     answer_full: str = ""  # Complete output including all details
-    feedback: Union[str, Dict[str, Any]] = Field(
-        default="",
-        description="Feedback from check operations, can be either string or dictionary"
-    )
+    feedback: str = ""  # Feedback for improvement
+    error: str = ""  # error for improvement
 
     # Ground truth fields for evaluation
     ground_truth_raw: Optional[str] = None  # Raw ground truth text
@@ -154,11 +152,12 @@ class Input(BaseModel):
             else:
                 raise ValueError(f"Invalid execution state field: {key}")
 
-    def apply_post_processing(self, answer_raw: str) -> Any:
+    def apply_post_processing(self, answer_raw: str, post_processing=None) -> Any:
         """Apply post-processing to the raw answer based on the post_processing type.
         
         Args:
             answer_raw (str): The raw answer to process
+            post_processing (Optional[PostProcessingType]): Override default post processing type
             
         Returns:
             Any: The processed answer
@@ -166,14 +165,16 @@ class Input(BaseModel):
         if not answer_raw:
             return answer_raw
             
-        if self.post_processing == PostProcessingType.EXTRACT_NUMBER:
+        # Use provided post_processing if specified, otherwise use instance value
+        processing_type = post_processing if post_processing else self.post_processing
+            
+        if processing_type == PostProcessingType.EXTRACT_NUMBER:
             return extract_number_from_string(answer_raw)
-        elif self.post_processing == PostProcessingType.EXTRACT_MATH_ANSWER:
+        elif processing_type == PostProcessingType.EXTRACT_MATH_ANSWER:
             return extract_math_answer(answer_raw)
-        elif self.post_processing == PostProcessingType.EXTRACT_PYTHON:
+        elif processing_type == PostProcessingType.EXTRACT_PYTHON:
             return extract_python(answer_raw)
         else:  # PostProcessingType.NONE
             return answer_raw
-
 
 Task.model_rebuild()

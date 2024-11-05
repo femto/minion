@@ -5,6 +5,7 @@
     {
       "name": "cot",
       "count": 1,
+      "check": false,
       "post_processing": "extract_python"
     }
   ],
