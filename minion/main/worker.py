@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List
 import dill
 import networkx as nx
 from jinja2 import Template
-from .optillm import execute_single_approach, execute_combined_approaches, load_plugins
+
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_none
 
@@ -857,7 +857,8 @@ class OptillmMinion(WorkerMinion):
         self.approach = None
         
         # Load plugins if not already loaded
-        if not OptillmMinion._plugins_loaded:
+        if not OptillmMinion._optillm_loaded:
+            from optillm import load_plugins
             load_plugins()
             OptillmMinion._plugins_loaded = True
         
@@ -882,6 +883,8 @@ class OptillmMinion(WorkerMinion):
         return operation, approaches
         
     async def execute(self):
+        from optillm import execute_single_approach, execute_combined_approaches, load_plugins, \
+            execute_parallel_approaches
         operation, approaches = self.parse_approach()
         
         if operation == 'SINGLE':
