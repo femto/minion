@@ -50,7 +50,7 @@ from minion.main.prompt import (
 )
 from minion.main.symbol_table import Symbol
 from minion.main.task_graph import convert_tasks_to_graph
-from minion.main.utils import most_similar_minion
+from minion.utils.utils import most_similar_minion
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import (
     MetaPlan,
@@ -60,7 +60,6 @@ from minion.models.schemas import (
     Plan
 )
 from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python
-
 
 class WorkerMinion(Minion):
     pass

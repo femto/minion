@@ -1,7 +1,10 @@
 from typing import List, Optional
 
+from openai.types import CompletionUsage
+
 from minion.configs.config import ContentType, ImageDetail, config
 from minion.const import MINION_ROOT
+from minion.logs import log_llm_stream
 from minion.message_types import ImageContent, ImageUtils, Message, MessageContent
 from minion.providers.base_llm import BaseLLM
 from minion.providers.cost import CostManager
@@ -20,13 +23,40 @@ class OpenAIProvider(BaseLLM):
         self.client_ell = openai.OpenAI(**client_kwargs)
         self.client = openai.AsyncOpenAI(**client_kwargs)
 
-    def _prepare_messages(self, messages: List[Message]) -> List[dict]:
-        """准备发送给API的消息格式"""
+    def _prepare_messages(self, messages: List[Message] | Message | str) -> List[dict]:
+        """准备发送给API的消息格式
+        
+        Args:
+            messages: 可以是消息列表、单个消息或字符串
+        Returns:
+            List[dict]: OpenAI API所需的消息格式
+        """
+        # 统一转换为列表格式处理
+        if isinstance(messages, (str, Message)):
+            messages = [messages if isinstance(messages, Message) else Message(role="user", content=messages)]
+        
         prepared_messages = []
         for msg in messages:
             if isinstance(msg.content, str):
                 prepared_messages.append({"role": msg.role, "content": msg.content})
+            elif isinstance(msg.content, list):
+                # 处理content为列表的情况
+                content = []
+                for item in msg.content:
+                    if isinstance(item, str):
+                        content.append({"type": "text", "text": item})
+                    elif hasattr(item, 'type'):
+                        if item.type == ContentType.TEXT:
+                            content.append({"type": "text", "text": item.text})
+                        elif item.type == ContentType.IMAGE_BASE64:
+                            image_data = {
+                                "type": "image_url",
+                                "image_url": {"url": item.image.data, "detail": item.image.detail},
+                            }
+                            content.append(image_data)
+                prepared_messages.append({"role": msg.role, "content": content})
             else:
+                # 处理现有的 MessageContent 情况
                 if msg.content.type == ContentType.TEXT:
                     prepared_messages.append({"role": msg.role, "content": msg.content.text})
                 else:
@@ -73,8 +103,27 @@ class OpenAIProvider(BaseLLM):
         full_content = ""
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content is not None:
+                finish_reason = (
+                    chunk.choices[0].finish_reason if chunk.choices and hasattr(chunk.choices[0],
+                                                                                "finish_reason") else None
+                )
+                if finish_reason:
+                    if hasattr(chunk, "usage") and chunk.usage is not None:
+                        # Some services have usage as an attribute of the chunk, such as Fireworks
+                        if isinstance(chunk.usage, CompletionUsage):
+                            usage = chunk.usage
+                        else:
+                            usage = CompletionUsage(**chunk.usage)
+                    elif hasattr(chunk.choices[0], "usage"):
+                        # The usage of some services is an attribute of chunk.choices[0], such as Moonshot
+                        usage = CompletionUsage(**chunk.choices[0].usage)
+                    # elif "openrouter.ai" in self.config.base_url:
+                    #     # due to it get token cost from api
+                    #     usage = await get_openrouter_tokens(chunk)
                 completion_tokens += 1
-                full_content += chunk.choices[0].delta.content
+                chunk_message = chunk.choices[0].delta.content
+                full_content += chunk_message
+                log_llm_stream(chunk_message)
 
         prompt_tokens, _ = CostManager.calculate(prepared_messages, completion_tokens, model)
         self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)

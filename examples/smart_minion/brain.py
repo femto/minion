@@ -11,10 +11,8 @@ import os
 import yaml
 
 from minion import config
-from minion.const import MINION_ROOT
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
-from minion.main.utils import replace_placeholders_with_env
 from minion.providers import create_llm_provider
 
 async def smart_brain():
@@ -54,10 +52,32 @@ async def smart_brain():
     # print(obs)
 
     # 示例使用
+#     obs, score, *_ = await brain.step(
+#         query='''
+# from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
+#         route="cot",
+#         post_processing="extract_python",
+#     )
+#     print(obs)
+
+    # 示例使用
     obs, score, *_ = await brain.step(
         query='''
-from typing import List def has_close_elements(numbers: List[float], threshold: float) -> bool: """ Check if in given list of numbers, are any two numbers closer to each other than given threshold. >>> has_close_elements([1.0, 2.0, 3.0], 0.5) False >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) True """''',
-        route="optillm-bon",
+    def encode_cyclic(s: str):
+    """
+    returns encoded string by cycling groups of three characters.
+    """
+    # split string to groups. Each of length 3.
+    groups = [s[(3 * i):min((3 * i + 3), len(s))] for i in range((len(s) + 2) // 3)]
+    # cycle elements in each group. Unless group has fewer elements than 3.
+    groups = [(group[1:] + group[0]) if len(group) == 3 else group for group in groups]
+    return "".join(groups)
+def decode_cyclic(s: str):
+    """
+    takes as input string encoded with encode_cyclic function. Returns decoded string.
+    """
+    ''',
+        route="cot",
         post_processing="extract_python",
     )
     print(obs)

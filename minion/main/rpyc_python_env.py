@@ -12,7 +12,7 @@ from intercode.utils import IntercodeDataLoader
 from rich.logging import RichHandler
 
 from .ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
-from .utils import extract_id_and_command
+from minion.utils.utils import extract_id_and_command
 
 TIMEOUT_DURATION = 10
 START_UP_DELAY = 3

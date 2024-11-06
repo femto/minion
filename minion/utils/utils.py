@@ -46,6 +46,18 @@ def replace_placeholders_with_env(config):
     return recursive_replace(config)
 
 
+def extract_json(text):
+    # Regular expression pattern to match all content between ```json and ```
+    pattern = r"```json\s*([\s\S]*?)\s*```"
+
+    # Find all matches in the input text
+    matches = re.findall(pattern, text)
+
+    if matches:
+        return matches[0]
+    else:
+        return text
+
 def extract_last_number(text: str):
     """Clean text and extract a single number"""
     matches = re.findall(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?|\d+\.\d+", text)

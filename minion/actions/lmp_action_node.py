@@ -58,8 +58,9 @@ class LmpActionNode(LLMActionNode):
             # If response_format is a dictionary, pass it as is
             api_params['response_format'] = response_format
 
-        response = self.ell_call(messages, client=self.llm.client_ell, api_params=api_params)
-        response = response.text
+        # response = self.ell_call(messages, client=self.llm.client_ell, api_params=api_params)
+        # response = response.text
+        response = await super().execute(messages, **api_params)
 
         if output_raw_parser:
             response = output_raw_parser(response)
