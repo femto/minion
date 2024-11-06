@@ -2,7 +2,6 @@
     "last_processed_id": 130,
     "matched_ids": [
         0,
-        0,
         1,
         2,
         3,
@@ -380,7 +379,7 @@
         }
     ],
     "correct": 105,
-    "count": 132,
+    "count": 131,
     "correct_percentage": 0.7954545454545454,
     "total_prompt_tokens": 0,
     "total_completion_tokens": 0,

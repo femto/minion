@@ -13,7 +13,6 @@ from tqdm.asyncio import tqdm
 from minion.configs.config import config
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
-from minion.main.utils import extract_number_from_string
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
 
@@ -277,12 +276,30 @@ cost_manager = CostManager()
 llm.cost_manager = cost_manager
 async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 加载原始数据集
     file_name = os.path.join(current_dir, "human_eval_test.jsonl")
-    data = load_jsonl(file_name)
-    # data = await load_data_sample(file_name, samples=1055)
-
+    original_data = load_jsonl(file_name)
+    
+    # 加载包含错误信息的 JSON 文件
+    error_file = os.path.join(current_dir, "run_human_eval_deepseek0.json")
+    with open(error_file, 'r') as f:
+        error_data = json.load(f)
+    
+    # 从错误数据中提取 mismatched_ids
+    mismatched_data = []
+    for item in error_data["mismatched_ids"]:
+        idx = item["idx"]
+        # 从原始数据集中获取对应的完整数据
+        if idx < len(original_data):
+            mismatched_data.append(original_data[idx])
+    
+    # 使用新的数据集运行评估
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=60
+        mismatched_data, 
+        run_filename="run_human_eval_deepseek_retry.json", 
+        continue_process=True, 
+        concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

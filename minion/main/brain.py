@@ -154,7 +154,8 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
 
         # Ensure the result is a valid mind ID
         if result not in self.minds:
-            raise ValueError(f"Invalid mind ID returned: {result}")
+            result = "left_mind"
+            #raise ValueError(f"Invalid mind ID returned: {result}")
 
         return result
 
