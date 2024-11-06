@@ -7,6 +7,7 @@ from tenacity import retry, stop_after_attempt, retry_if_exception_type
 from minion.message_types import Message
 from minion.models.schemas import Answer
 from minion.providers import BaseLLM
+from minion.utils.utils import extract_json
 
 
 class ActionNode(ABC):
@@ -31,7 +32,7 @@ class LLMActionNode(ActionNode):
         if self.input_parser:
             messages = self.input_parser(messages)
 
-        response = await self.llm.generate(messages)
+        response = await self.llm.generate_stream(messages)
 
         if self.output_parser:
             return self.output_parser(response)
@@ -51,14 +52,17 @@ class LLMActionNode(ActionNode):
         # 如果响应是字符串，尝试解析为JSON
         if isinstance(response, str):
             response_is_str = True
+            response_str = extract_json(response)
             try:
-                response = json.loads(response)
+                response = json.loads(response_str)
             except json.JSONDecodeError:
                 # 如果解析失败，将字符串作为answer的值返回
                 return response
 
         # 如果响应已经是简单格式
         if "answer" in response:
+            if response_is_str:
+                return response_str
             return response
 
         # 如果响应是schema格式

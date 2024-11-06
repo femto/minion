@@ -275,7 +275,7 @@ async def main():
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=1
+        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

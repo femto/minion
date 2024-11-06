@@ -18,11 +18,9 @@ from minion import config
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.input import Input
 from minion.main.python_env import PythonEnv
-from minion.main.utils import process_image
+from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
-from minion.models.schemas import Answer
 from minion.providers import create_llm_provider
-
 
 class Mind(BaseModel):
     id: str = "UnnamedMind"
