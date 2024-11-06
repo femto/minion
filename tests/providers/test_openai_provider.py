@@ -61,9 +61,37 @@ async def test_openai_provider_cost_calculation(openai_provider, mock_openai_cli
 async def test_openai_provider_stream_cost_calculation(openai_provider, mock_openai_client):
     # Create mock chunks as a list of AsyncMock objects
     mock_chunks = [
-        AsyncMock(choices=[AsyncMock(delta=AsyncMock(content="Test "))]),
-        AsyncMock(choices=[AsyncMock(delta=AsyncMock(content="response "))]),
-        AsyncMock(choices=[AsyncMock(delta=AsyncMock(content="stream."))]),
+        AsyncMock(
+            choices=[
+                AsyncMock(
+                    delta=AsyncMock(content="Test "),
+                    finish_reason=None
+                )
+            ],
+            usage=None
+        ),
+        AsyncMock(
+            choices=[
+                AsyncMock(
+                    delta=AsyncMock(content="response "),
+                    finish_reason=None
+                )
+            ],
+            usage=None
+        ),
+        AsyncMock(
+            choices=[
+                AsyncMock(
+                    delta=AsyncMock(content="stream."),
+                    finish_reason="stop"
+                )
+            ],
+            usage={
+                "prompt_tokens": 15,
+                "completion_tokens": 3,
+                "total_tokens": 18
+            }
+        ),
     ]
 
     # Create an async generator function that will yield our mock chunks
