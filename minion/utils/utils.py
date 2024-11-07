@@ -5,10 +5,13 @@ import os
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Optional
 
 import aiofiles
 from nltk.corpus import wordnet
 from PIL import Image
+
+from minion.utils.sanitize import sanitize
 
 
 def extract_id_and_command(full_command):
@@ -239,16 +242,6 @@ def process_image(image_input):
 
     # If we've reached here, the input is not in a recognized format
     raise ValueError("Input is not a recognized image format (base64 string, file path, or PIL Image)")
-
-
-def extract_python(text: str) -> str:
-    """Extract Python code from text, typically enclosed in triple backticks."""
-    pattern = r"```python\s*(.*?)```"
-    matches = re.findall(pattern, text, re.DOTALL)
-    if matches:
-        return matches[0].strip()
-    return text  # assume we already extracted
-
 
 def main():
     result = get_synonyms("Trigonometry")

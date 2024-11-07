@@ -9,7 +9,7 @@ import json
 import multiprocessing
 import re
 from math import isclose
-from typing import Union
+from typing import Union, Optional
 
 import regex
 from sympy import N, simplify
@@ -17,6 +17,7 @@ from sympy.parsing.latex import parse_latex
 from sympy.parsing.sympy_parser import parse_expr
 
 from minion.utils.custom_decoder import CustomDecoder
+from minion.utils.sanitize import sanitize
 
 
 def extract_final_answer(text):
@@ -27,14 +28,15 @@ def extract_final_answer(text):
 
     return text
 
-def extract_python(text):
+def extract_python(code: str, entrypoint: Optional[str] = None):
+    return sanitize(code, entrypoint)
     # Regex pattern to extract code inside ```python ``` blocks
-    pattern = r"```python(.*?)```"
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        # Return the extracted code, strip to remove leading/trailing newlines
-        return match.group(1).strip()
-    return text
+    # pattern = r"```python(.*?)```"
+    # match = re.search(pattern, text, re.DOTALL)
+    # if match:
+    #     # Return the extracted code, strip to remove leading/trailing newlines
+    #     return match.group(1).strip()
+    # return text
 def extract_longest_json_from_string(text):
     # Regular expression pattern to match all content between ```json and ```
     pattern = r"```json\s*([\s\S]*?)\s*```"
