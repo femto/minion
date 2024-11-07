@@ -110,7 +110,10 @@ class Input(BaseModel):
 
     # Processing state
     processed_minions: int = 0  # Number of minions that processed this
-    metadata: dict = {}  # Additional metadata
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional metadata including test cases"
+    )
     info: dict = {}  # Additional information
     route: Optional[str] = ""  # Routing information
     num_trials: int = 1  # Number of execution trials

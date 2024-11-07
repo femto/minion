@@ -80,7 +80,7 @@ class Minion(metaclass=SubclassHookMeta):
             return math_equal
         return None
 
-    async def update_stats(self, minion_name, result, raw_answer):
+    async def update_stats(self, minion_name, result, answer_raw):
         if self.brain.stats_storer:
             compare_answer_func = self.get_compare_answer_func()
             if compare_answer_func:
@@ -89,7 +89,7 @@ class Minion(metaclass=SubclassHookMeta):
                     "item_id": str(self.input.item_id),
                     "minion_name": minion_name,
                     "answer": str(result),
-                    "answer_raw": raw_answer,
+                    "answer_raw": answer_raw,
                     "raw_correct_answer": self.input.ground_truth_raw,
                     "correct_answer": self.input.ground_truth,
                     "complexity": self.input.complexity,
