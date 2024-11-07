@@ -687,52 +687,31 @@ class RouteMinion(Minion):
         self.current_minion = None
         self.worker_config = worker_config #worker config from ModeratorMinion
 
-    async def invoke_minion(self, klass):
-        if isinstance(klass, str):
-            klass = MINION_REGISTRY.get(klass, CotMinion)
-            
-        self.input.update_execution_state(
-            current_minion=klass.__name__,
-            chosen_minion=klass.__name__
-        )
+    async def get_minion_class_and_name(self):
+        """选择要使用的 minion 类和名称"""
+        if self.input.execution_state.chosen_minion:
+            # 从上次状态恢复
+            name = self.input.execution_state.chosen_minion
+            klass = MINION_REGISTRY.get(name, CotMinion)
+            return klass, name
         
-        self.current_minion = klass(input=self.input, brain=self.brain)
-        self.add_followers(self.current_minion)
-        await self.current_minion.execute()
-        
-        answer_raw = self.current_minion.answer
-        
-        # Apply post-processing if specified
-        post_processing = None
-        if self.worker_config and 'post_processing' in self.worker_config:
-            post_processing = self.worker_config['post_processing']
-        elif self.input.post_processing:
-            post_processing = self.input.post_processing
-            
-        if post_processing:
-            processed_answer = self.input.apply_post_processing(answer_raw, post_processing)
-        else:
-            processed_answer = answer_raw
-            
-        self.answer = self.input.answer = processed_answer
-        return processed_answer
-
-    async def choose_minion_and_run(self):
-        
+        # 新的执行流程
         route = self.input.route
         if self.worker_config and 'name' in self.worker_config:
             route = self.worker_config["name"]
             
         if route and route.startswith("optillm-"):
             klass = OptillmMinion
-            approach = route.split("-", 1)[1]  # 提取 approach 名称
+            approach = route.split("-", 1)[1]
             logger.info(f"Using OptillmMinion with approach: {approach}")
+            return klass, route
         elif route:
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
             logger.info(f"Use enforced route: {route}")
             klass = filtered_registry[route]
+            return klass, route
         else:
-            # 原有的minion选择逻辑
+            # 智能选择逻辑
             choose_template = Template(SMART_PROMPT_TEMPLATE)
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
             filled_template = choose_template.render(minions=filtered_registry, input=self.input)
@@ -744,23 +723,63 @@ class RouteMinion(Minion):
             name = most_similar_minion(name, filtered_registry.keys())
             logger.info(f"Choosing Route: {name}")
             klass = filtered_registry[name]
+            return klass, name
 
-        # 创建并执行选择的minion
-        minion = klass(input=self.input, brain=self.brain)
-        self.add_followers(minion)
-        answer = await minion.execute()
-
-        self.answer = self.input.answer = answer
+    async def execute(self):
+        self.load_execution_state()
+        
+        # 获取 minion 类和名称
+        klass, name = await self.get_minion_class_and_name()
+        
+        # 确定最大迭代次数
+        max_iterations = 3
+        if self.input.execution_state.current_iteration:
+            max_iterations = max_iterations - self.input.execution_state.current_iteration
+            
+        # 执行并改进
+        await self.invoke_minion_and_improve(klass, name, max_iterations=max_iterations)
+        
         return self.answer
+
+    async def invoke_minion(self, klass):
+        if isinstance(klass, str):
+            klass = MINION_REGISTRY.get(klass, CotMinion)
+
+        self.input.update_execution_state(
+            current_minion=klass.__name__,
+            chosen_minion=klass.__name__
+        )
+
+        self.current_minion = klass(input=self.input, brain=self.brain)
+        self.add_followers(self.current_minion)
+        await self.current_minion.execute()
+
+        answer_raw = self.current_minion.answer
+
+        # Apply post-processing if specified
+        post_processing = None
+        if self.worker_config and 'post_processing' in self.worker_config:
+            post_processing = self.worker_config['post_processing']
+        elif self.input.post_processing:
+            post_processing = self.input.post_processing
+
+        if post_processing:
+            processed_answer = self.input.apply_post_processing(answer_raw, post_processing)
+        else:
+            processed_answer = answer_raw
+
+        self.answer = self.input.answer = processed_answer
+        self.answer_raw = self.input.answer_raw = answer_raw
+        return processed_answer
 
     async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
         self.input.update_execution_state(current_iteration=0)
         self.save_execution_state()
 
-        answer_raw = await self.invoke_minion(klass)
+        processed_answer = await self.invoke_minion(klass)
 
-        self.answer = self.input.answer = answer_raw
-        await self.update_stats(name, answer_raw)
+        #self.answer = self.input.answer = answer_raw
+        await self.update_stats(name,self.answer, self.answer_raw)
 
         check = self.input.check
         if self.worker_config and hasattr(self.worker_config, 'check'):
@@ -786,21 +805,6 @@ class RouteMinion(Minion):
             answer_raw = await self.invoke_minion(klass)
             self.answer = self.input.answer = answer_raw
             await self.update_stats(name, answer_raw)
-
-        return self.answer
-
-    async def execute(self):
-        self.load_execution_state()
-
-        if self.input.execution_state.chosen_minion:
-            # 从上次状态恢复
-            name = self.input.execution_state.chosen_minion
-            klass = MINION_REGISTRY.get(name, CotMinion)
-            iteration = self.input.execution_state.current_iteration
-            await self.invoke_minion_and_improve(klass, name, max_iterations=3 - iteration)
-        else:
-            # 开始新的执行
-            await self.choose_minion_and_run()
 
         return self.answer
 
