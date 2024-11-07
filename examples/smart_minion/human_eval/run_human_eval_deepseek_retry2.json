@@ -1,0 +1,42 @@
+{
+    "last_processed_id": 20,
+    "matched_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+    ],
+    "mismatched_ids": [
+        {
+            "result": 0,
+            "item_id": 14,
+            "question": "\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
+            "canonical_solution": "    s = str(x)\n    if shift > len(s):\n        return s[::-1]\n    else:\n        return s[len(s) - shift:] + s[:len(s) - shift]\n",
+            "test": "def check(candidate):\n\n    # Check some simple cases\n    assert candidate(100, 2) == \"001\"\n    assert candidate(12, 2) == \"12\"\n    assert candidate(97, 8) == \"79\"\n    assert candidate(12, 1) == \"21\", \"This prints if this assert fails 1 (good for debugging!)\"\n\n    # Check some edge cases that are easy to work out by hand.\n    assert candidate(11, 101) == \"11\", \"This prints if this assert fails 2 (also good for debugging!)\"\n\n",
+            "answer": "def circular_shift(x, shift):\n    # Convert the integer to a string\n    x_str = str(x)\n    \n    # Calculate the number of digits\n    num_digits = len(x_str)\n    \n    # Handle the edge case where shift > number of digits\n    if shift >= num_digits:\n        return x_str[::-1]  # Reverse the string\n    \n    # Perform the circular shift\n    effective_shift = shift % num_digits\n    shifted_str = x_str[-effective_shift:] + x_str[:-effective_shift]\n    \n    # Return the result as a string\n    return shifted_str",
+            "reason": "Error: .\n Solution: def circular_shift(x, shift):\n    # Convert the integer to a string\n    x_str = str(x)\n    \n    # Calculate the number of digits\n    num_digits = len(x_str)\n    \n    # Handle the edge case where shift > number of digits\n    if shift >= num_digits:\n        return x_str[::-1]  # Reverse the string\n    \n    # Perform the circular shift\n    effective_shift = shift % num_digits\n    shifted_str = x_str[-effective_shift:] + x_str[:-effective_shift]\n    \n    # Return the result as a string\n    return shifted_str.\n Test: def check(candidate):\n\n    # Check some simple cases\n    assert candidate(100, 2) == \"001\"\n    assert candidate(12, 2) == \"12\"\n    assert candidate(97, 8) == \"79\"\n    assert candidate(12, 1) == \"21\", \"This prints if this assert fails 1 (good for debugging!)\"\n\n    # Check some edge cases that are easy to work out by hand.\n    assert candidate(11, 101) == \"11\", \"This prints if this assert fails 2 (also good for debugging!)\"\n\n",
+            "idx": 14
+        }
+    ],
+    "correct": 19,
+    "count": 20,
+    "correct_percentage": 0.95,
+    "total_prompt_tokens": 20940,
+    "total_completion_tokens": 19829,
+    "total_cost": 0.008483720000000002
+}
