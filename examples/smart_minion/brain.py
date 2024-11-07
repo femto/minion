@@ -61,22 +61,37 @@ async def smart_brain():
 #     print(obs)
 
     # 示例使用
+#     obs, score, *_ = await brain.step(
+#         query='''
+#         <optillm_approach>leap</optillm_approach>
+#     def encode_cyclic(s: str):
+#     """
+#     returns encoded string by cycling groups of three characters.
+#     """
+#     # split string to groups. Each of length 3.
+#     groups = [s[(3 * i):min((3 * i + 3), len(s))] for i in range((len(s) + 2) // 3)]
+#     # cycle elements in each group. Unless group has fewer elements than 3.
+#     groups = [(group[1:] + group[0]) if len(group) == 3 else group for group in groups]
+#     return "".join(groups)
+# def decode_cyclic(s: str):
+#     """
+#     takes as input string encoded with encode_cyclic function. Returns decoded string.
+#     """
+#     ''',
+#         route="cot",
+#         post_processing="extract_python",
+#     )
+#     print(obs)
+
+    # obs, score, *_ = await brain.step(
+    #     query="from typing import List\n\n\ndef concatenate(strings: List[str]) -> str:\n    \"\"\" Concatenate list of strings into a single string\n    >>> concatenate([])\n    ''\n    >>> concatenate(['a', 'b', 'c'])\n    'abc'\n    \"\"\"\n",
+    #     route="cot",
+    #     post_processing="extract_python",
+    # )
+    # print(obs)
+
     obs, score, *_ = await brain.step(
-        query='''
-    def encode_cyclic(s: str):
-    """
-    returns encoded string by cycling groups of three characters.
-    """
-    # split string to groups. Each of length 3.
-    groups = [s[(3 * i):min((3 * i + 3), len(s))] for i in range((len(s) + 2) // 3)]
-    # cycle elements in each group. Unless group has fewer elements than 3.
-    groups = [(group[1:] + group[0]) if len(group) == 3 else group for group in groups]
-    return "".join(groups)
-def decode_cyclic(s: str):
-    """
-    takes as input string encoded with encode_cyclic function. Returns decoded string.
-    """
-    ''',
+        query="\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
         route="cot",
         post_processing="extract_python",
     )

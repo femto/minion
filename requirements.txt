@@ -6,6 +6,9 @@ tenacity
 pytest
 pytest-asyncio
 
+tree_sitter
+tree_sitter_python
+
 jinja2
 intercode-bench
 rpyc

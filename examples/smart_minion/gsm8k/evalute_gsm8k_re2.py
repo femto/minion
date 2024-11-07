@@ -6,14 +6,13 @@ from typing import List
 
 import aiofiles
 import numpy as np
-from minion.llm import LLM
-from minion.utils.cost_manager import CostManager
 from tqdm.asyncio import tqdm
 
-from minion.main.answer_extraction import math_equal
+from minion.configs.config import config
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
-from minion.main.utils import extract_number_from_string
+from minion.providers import create_llm_provider
+from minion.providers.cost import CostManager
 
 
 # Load JSONL file
@@ -39,12 +38,6 @@ def extract_answer(answer_str):
         return match.group(1).strip()  # Extract and remove any surrounding whitespace
     else:
         return answer_str  # Return None if no match is found
-
-
-cost_manager = CostManager()
-llm = LLM()
-llm.cost_manager = cost_manager
-
 
 async def evaluate_dataset(
     data,
@@ -218,7 +211,9 @@ async def load_data_sample(file_path: str, samples=1) -> List[dict]:
     data = [data[i] for i in random_indices]
     return data
 
-
+llm = create_llm_provider(config.models.get("default"))
+cost_manager = CostManager()
+llm.cost_manager = cost_manager
 async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     file_name = os.path.join(current_dir, "gsm8k_test.jsonl")

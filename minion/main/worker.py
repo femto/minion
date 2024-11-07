@@ -106,14 +106,6 @@ class CotMinion(WorkerMinion):
         self.answer_raw = self.input.answer_raw = response
         return self.answer_raw
 
-    def extract_python_code(self, content):
-        # Regex pattern to extract code inside ```python ``` blocks
-        pattern = r"```python\s*(.*?)\s*```"
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return None
-
 class DotMinion(WorkerMinion):
     """Diagram of Thought (DoT) Strategy"""
 
@@ -431,7 +423,7 @@ Previous error:
 
             code = await node.execute(prompt)
 
-            code = extract_python(code)
+            code = extract_python(code, self.input.entry_point)
             print(code)
 
             self.answer_code = self.input.answer_code = code
@@ -475,7 +467,7 @@ Previous error:
             prompt = prompt.render(input=self.input, error=error)
 
             code = await node.execute(prompt)
-            code = extract_python(code)
+            code = extract_python(code, self.input.entry_point)
             self.answer = self.input.answer = code
             return self.answer
 

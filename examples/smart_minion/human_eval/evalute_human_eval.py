@@ -166,7 +166,7 @@ def check_solution(solution, test, entry_point):
     print(f"solution: {solution}")
 
     try:
-        # 定义一个包含所有必要模块的全局字典
+        # Define a global dictionary containing all necessary modules
         global_dict = {
             'math': __import__('math'),
             'hashlib': __import__('hashlib'),
@@ -183,33 +183,33 @@ def check_solution(solution, test, entry_point):
             solution = "\n\ndef encode_shift(s: str):\n    \"\"\"\n    returns encoded string by shifting every character by 5 in the alphabet.\n    \"\"\"\n    return \"\".join([chr(((ord(ch) + 5 - ord(\"a\")) % 26) + ord(\"a\")) for ch in s])\n\n\n" + solution
         elif entry_point == "find_zero":
             solution = "\n\ndef poly(xs: list, x: float):\n    return sum(coeff * (x ** i) for i, coeff in enumerate(xs))\n\n" + solution
-        # 执行解决方案
+        # Execute the solution
         exec(solution, global_dict)
 
-        # 确保入口点函数已定义
+        # Ensure the entry point function is defined
         if entry_point not in global_dict:
-            raise ValueError(f"函数 {entry_point} 在解决方案中未定义。")
+            raise ValueError(f"Function {entry_point} is not defined in the solution.")
 
-        # 执行测试用例
+        # Execute test cases
         exec(test, global_dict)
 
-        # 获取检查函数
+        # Get the check function
         check = global_dict["check"]
 
-        # 运行检查函数，设置超时时间为5秒
+        # Run the check function with a timeout of 5 seconds
         result = run_with_timeout(check, (global_dict[entry_point],), 120)
 
         if result is None:
-            result = (PASS, "解决方案通过了所有测试用例。")
+            result = (PASS, "Solution passed all test cases.")
 
     except TimeoutError:
-        result = (FAIL, "执行超时。请检查您的解决方案是否包含无限循环或过于耗时的操作。")
+        result = (FAIL, "Execution timeout. Please check if your solution contains infinite loops or time-consuming operations.")
     except Exception as e:
-        # 记录详细的错误信息
-        error_message = f"错误: {str(e)}.\n 解决方案: {solution}.\n 测试: {test}"
+        # Record detailed error information
+        error_message = f"Error: {str(e)}.\n Solution: {solution}.\n Test: {test}"
         result = (FAIL, error_message)
 
-        # 将错误信息写入error.log文件
+        # Write error information to error.log file
         with open('error.log', 'a', encoding='utf-8') as log_file:
             log_file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {error_message}\n")
 

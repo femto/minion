@@ -12,8 +12,8 @@ from typing import Any, Dict, Optional, Union, Callable
 
 from pydantic import BaseModel, Field
 
-from minion.utils.utils import extract_number_from_string, extract_python
-from minion.utils.answer_extraction import extract_math_answer
+from minion.utils.utils import extract_number_from_string
+from minion.utils.answer_extraction import extract_math_answer, extract_python
 
 
 class PostProcessingType(str, Enum):
@@ -81,6 +81,7 @@ class Input(BaseModel):
     answer_full: str = ""  # Complete output including all details
     feedback: str = ""  # Feedback for improvement
     error: str = ""  # error for improvement
+    entry_point: str = "" #entry_point name of function for code generation
 
     # Ground truth fields for evaluation
     ground_truth_raw: Optional[str] = None  # Raw ground truth text
@@ -171,7 +172,7 @@ class Input(BaseModel):
         elif processing_type == PostProcessingType.EXTRACT_MATH_ANSWER:
             return extract_math_answer(answer_raw)
         elif processing_type == PostProcessingType.EXTRACT_PYTHON:
-            return extract_python(answer_raw)
+            return extract_python(answer_raw, self.entry_point)
         else:  # PostProcessingType.NONE
             return answer_raw
 
