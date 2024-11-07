@@ -7,6 +7,7 @@ from io import StringIO
 from jinja2 import Template
 
 from minion.logs import logger
+from minion.main.check_route import register_check_minion
 from minion.main.minion import Minion
 from minion.main.prompt import CHECK_PROMPT, ASK_PROMPT
 from minion.actions.lmp_action_node import LmpActionNode
@@ -47,7 +48,7 @@ def extract_feedback_parts(xml_string):
         logger.error(e)
         return None
 
-
+@register_check_minion
 class CheckMinion(Minion):
     """Check Minion"""
 
@@ -73,7 +74,7 @@ class CheckMinion(Minion):
             if result:
                 return self.answer
 
-
+@register_check_minion
 class TestMinion(CheckMinion):
     """Test Minion for verifying code solutions with test cases"""
 
@@ -81,77 +82,68 @@ class TestMinion(CheckMinion):
         super().__init__(**kwargs)
         self.test_cases = []
 
-    def extract_doctest(self, query):
-        """Extract test cases from docstring"""
-
-        parser = doctest.DocTestParser()
-        doctests = []
-
-        tests = parser.get_examples(query)
-        doctests.extend(tests)
-
-        return doctests
-
-        # # 使用非贪婪匹配和分组来捕获多行输出
-        # doctest_pattern = r'>>>\s*(.*?)\n\s*([\'"].*?[\'"]|\{[\s\S]*?\}|\[.*?\]|.*?)\n(?=\s*(?:>>>|\Z|[^\s]))'
-        # matches = re.findall(doctest_pattern, query)
-        #
-        # def process_output(output):
-        #     output = output.strip()
-        #
-        #     # 如果输出已经带有引号，直接返回
-        #     if (output.startswith('"') and output.endswith('"')) or \
-        #        (output.startswith("'") and output.endswith("'")):
-        #         return output
-        #
-        #     # 处理列表
-        #     if output.startswith('[') and output.endswith(']'):
-        #         return output
-        #
-        #     # 处理多行字典
-        #     if output.startswith('{') and output.endswith('}'):
-        #         # 保持原始缩进和换行
-        #         lines = output.splitlines()
-        #         if len(lines) > 1:
-        #             # 对于多行字典，保持原始格式
-        #             return output
-        #         return output.strip()
-        #
-        #     # 如果输出包含换行符，保持原格式
-        #     if '\n' in output:
-        #         return output.rstrip()
-        #
-        #     # 如果输出是数字，不加引号
-        #     if output.replace('.', '').replace('-', '').isdigit():
-        #         return output
-        #
-        #     # 其他情况，添加单引号
-        #     return f"'{output}'"
-        #
-        # return [f"assert {m[0]} == {process_output(m[1])}" for m in matches]
-
     async def execute(self):
-        # First try to get test cases from input
-        self.test_cases = self.input.metadata.get('test_cases', [])
-        
-        # If no test cases provided, try to extract from doctest
-        if not self.test_cases and self.input.query:
-            self.test_cases = self.extract_doctest(self.input.query)
-        
-        # If still no test cases, use default checking logic
-        if not self.test_cases:
+        if not self.input.metadata.get('test_cases'):
             return await super().execute()
             
-        return await self._check_with_tests()
-
-    async def _check_with_tests(self):
+        self.test_cases = self.input.metadata['test_cases']
         prompt = Template(CHECK_PROMPT)
         context = {
             'input': self.input,
-            'test_cases': self.test_cases
+            'test_cases': self.test_cases,
+            'test_type': 'test'
         }
         prompt = prompt.render(**context)
         
+        return await self._execute_test(prompt)
+
+    async def _execute_test(self, prompt):
+        """Execute test logic"""
+        node = LmpActionNode(self.brain.llm)
+        result = await node.execute(prompt, response_format=CheckResult)
+        
+        self.answer_node = result
+        self.answer = self.input.feedback = {
+            "feedback": result.feedback,
+            "correct": result.correct,
+            "score": result.score,
+            "test_results": result.test_results if hasattr(result, 'test_results') else None
+        }
+        
+        return self.answer
+
+@register_check_minion
+class DoctestMinion(CheckMinion):
+    """Test Minion for verifying code solutions with doctest examples"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.test_cases = self.extract_doctest(self.input.answer)
+
+    def extract_doctest(self, query):
+        """Extract test cases from docstring"""
+        parser = doctest.DocTestParser()
+        doctests = []
+        tests = parser.get_examples(query)
+        doctests.extend(tests)
+        return doctests
+
+    async def execute(self):
+        if not self.test_cases:
+            return await super().execute()
+            
+        prompt = Template(CHECK_PROMPT)
+        context = {
+            'input': self.input,
+            'test_cases': self.test_cases,
+            'test_type': 'doctest'
+        }
+        prompt = prompt.render(**context)
+        
+        return await self._execute_test(prompt)
+
+    async def _execute_test(self, prompt):
+        """Execute test logic"""
         node = LmpActionNode(self.brain.llm)
         result = await node.execute(prompt, response_format=CheckResult)
         

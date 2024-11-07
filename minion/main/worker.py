@@ -23,6 +23,7 @@ from minion.actions.action_node import ActionNode
 from minion.configs.config import config
 from minion.logs import logger
 from minion.main.check import CheckMinion
+from minion.main.check_route import CheckRouterMinion
 from minion.main.input import Input
 from minion.main.minion import (
     MINION_REGISTRY,
@@ -682,7 +683,7 @@ class QaMinion(Minion):
 
 class RouteMinion(Minion):
     def __init__(self, worker_config=None, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(worker_config=worker_config,**kwargs)
         self.execution_state: Dict[str, Any] = {}
         self.current_minion = None
         self.worker_config = worker_config #worker config from ModeratorMinion
@@ -792,8 +793,8 @@ class RouteMinion(Minion):
             self.input.update_execution_state(current_iteration=iteration)
             self.save_execution_state()
 
-            check_minion = CheckMinion(input=self.input, brain=self.brain)
-            check_result = await check_minion.execute()
+            check_router_minion = CheckRouterMinion(input=self.input, brain=self.brain)
+            check_result = await check_router_minion.execute()
 
             self.input.update_execution_state(check_result=check_result)
             self.save_execution_state()
