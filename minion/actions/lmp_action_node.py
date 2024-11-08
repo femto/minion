@@ -64,6 +64,8 @@ class LmpActionNode(LLMActionNode):
 
         if output_raw_parser:
             response = output_raw_parser(response)
+        elif isinstance(response_format, type) and issubclass(response_format, BaseModel):
+            response = self.normalize_response(response)
         if original_response_format and isinstance(original_response_format, type) and issubclass(original_response_format, BaseModel):
             response = original_response_format.model_validate_json(response)
             # 判断 response pydantic model 是否只有一个 field
