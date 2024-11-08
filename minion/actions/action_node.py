@@ -39,16 +39,8 @@ class LLMActionNode(ActionNode):
 
         return response
 
-    def normalize_response(self, response: Dict[Any, Any] | str) -> Dict[str, str]:
-        """
-        将复杂的JSON schema响应转换为简单的answer格式
+    def normalize_response(self, response: Dict[Any, Any] | str, is_answer_format = False) -> Dict[str, str]:
 
-        Args:
-            response: LLM返回的响应字典或字符串
-
-        Returns:
-            标准化的answer格式字典
-        """
         # 初始化response_is_str标志
         response_is_str = isinstance(response, str)
         
@@ -62,17 +54,18 @@ class LLMActionNode(ActionNode):
                 return response
 
         # 如果响应已经是简单格式
-        if "answer" in response:
-            if response_is_str:
-                return response_str
-            return response
+        if is_answer_format:
+            if "answer" in response:
+                if response_is_str:
+                    return response_str
+                return response
 
-        # 如果响应是schema格式
-        if "properties" in response and "answer" in response["properties"]:
-            answer_value = response["properties"]["answer"].get("default", "")
-            if response_is_str:
-                return json.dumps({"answer": answer_value})
-            return {"answer": answer_value}
+            # 如果响应是schema格式
+            if "properties" in response and "answer" in response["properties"]:
+                answer_value = response["properties"]["answer"].get("default", "")
+                if response_is_str:
+                    return json.dumps({"answer": answer_value})
+                return {"answer": answer_value}
 
         # 如果是其他格式,返回空答案
         if response_is_str:
@@ -84,7 +77,7 @@ class LLMActionNode(ActionNode):
     #     reraise=True
     # )
     async def execute_answer(self, messages, **kwargs):
-        result = await self.execute(messages, response_format=Answer, output_raw_parser=self.normalize_response, **kwargs)
+        result = await self.execute(messages, response_format=Answer, output_raw_parser=lambda x: self.normalize_response(x, is_answer_format=True), **kwargs)
         return result.answer
 
 
