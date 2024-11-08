@@ -12,15 +12,16 @@ class BaseLLM(ABC):
     def __init__(self, config: LLMConfig):
         self.config = config
         self.cost_manager = CostManager()
-        self._setup()
+        self._setup_retry_config()
         self.generate = self.retry_decorator(self.generate)
         self.generate_stream = self.retry_decorator(self.generate_stream)
+        self._setup()
+
 
     @abstractmethod
     def _setup(self) -> None:
         """初始化具体的LLM客户端"""
-        self._setup_retry_config()
-        #pass
+        pass
 
     def _setup_retry_config(self):
         from tenacity import retry_if_exception_type
