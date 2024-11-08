@@ -58,36 +58,79 @@ class CheckRouterMinion(Minion):
     async def choose_checker(self):
         """Choose appropriate checker based on input characteristics"""
         try:
-            # 然后检查 worker_config 中的配置
+            # First check input.check_route
+            if hasattr(self.input, 'check_route') and self.input.check_route:
+                checker_name = most_similar_minion(self.input.check_route, CHECK_MINION_REGISTRY.keys())
+                logger.info(f"Using checker from input.check_route: {checker_name}")
+                return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
+
+            # Then check worker_config
             if hasattr(self, 'worker_config') and self.worker_config.get('check_route', None):
-                checker_name = self.worker_config['check_route']
+                checker_name = most_similar_minion(self.worker_config['check_route'], CHECK_MINION_REGISTRY.keys())
                 logger.info(f"Using checker from worker config: {checker_name}")
                 return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
-            # 首先检查 input.check_route
-            if hasattr(self.input, 'check_route') and self.input.check_route:
-                logger.info(f"Using checker from input.check_route: {self.input.check_route}")
-                return CHECK_MINION_REGISTRY.get(self.input.check_route, CHECK_MINION_REGISTRY.get("check"))
 
-            # 如果都没有指定，则使用 LLM 推荐
+            # Prepare template for LLM recommendation
             choose_template = Template(CHECK_ROUTE_PROMPT)
             filled_template = choose_template.render(
                 minions=CHECK_MINION_REGISTRY,
                 input=self.input
             )
 
-            # Get recommendation from LLM
-            node = LmpActionNode(self.brain.llm)
-            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+            # Try using check_route specific LLMs first
+            if hasattr(self.brain, 'llms'):
+                # First try check_route specific LLMs
+                if 'check_route' in self.brain.llms:
+                    for llm in self.brain.llms['check_route']:
+                        try:
+                            node = LmpActionNode(llm)
+                            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                            checker_name = meta_plan.name
+                            if checker_name in CHECK_MINION_REGISTRY:
+                                logger.info(f"Selected checker using check_route LLM {llm.config.model}: {checker_name}")
+                                return CHECK_MINION_REGISTRY[checker_name]
+                            else:
+                                logger.warning(f"Recommended checker {checker_name} not found, trying next LLM")
+                                continue
+                        except Exception as e:
+                            logger.warning(f"Failed to get checker using check_route LLM {llm.config.model}: {str(e)}")
+                            continue
 
-            # Find closest matching minion name
-            checker_name = meta_plan.name
-            checker_name = most_similar_minion(checker_name, CHECK_MINION_REGISTRY.keys())
+                # If check_route LLMs fail, try route LLMs
+                if 'route' in self.brain.llms:
+                    for llm in self.brain.llms['route']:
+                        try:
+                            node = LmpActionNode(llm)
+                            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                            checker_name = meta_plan.name
+                            if checker_name in CHECK_MINION_REGISTRY:
+                                logger.info(f"Selected checker using route LLM {llm.config.model}: {checker_name}")
+                                return CHECK_MINION_REGISTRY[checker_name]
+                            else:
+                                logger.warning(f"Recommended checker {checker_name} not found, trying next LLM")
+                                continue
+                        except Exception as e:
+                            logger.warning(f"Failed to get checker using route LLM {llm.config.model}: {str(e)}")
+                            continue
 
-            logger.info(
-                f"Selected checker from LLM: {checker_name}, Reason: {meta_plan.reason if hasattr(meta_plan, 'reason') else 'Not provided'}")
+                logger.warning("All configured LLMs failed to recommend a valid checker, falling back to default brain.llm")
 
-            # Get checker class
-            return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
+            # If no specific LLMs configured or all failed, use default brain.llm
+            try:
+                node = LmpActionNode(self.brain.llm)
+                meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                checker_name = meta_plan.name
+                if checker_name in CHECK_MINION_REGISTRY:
+                    logger.info(f"Selected checker using default brain.llm: {checker_name}")
+                    return CHECK_MINION_REGISTRY[checker_name]
+                else:
+                    logger.warning(f"Recommended checker {checker_name} not found, falling back to default check")
+            except Exception as e:
+                logger.error(f"Error getting recommendation from default brain.llm: {e}")
+
+            # If all attempts fail, fall back to default CheckMinion
+            logger.info("Falling back to default check minion")
+            return CHECK_MINION_REGISTRY.get("check")
 
         except Exception as e:
             logger.error(f"Error in checker selection: {e}")

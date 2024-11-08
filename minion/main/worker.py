@@ -726,13 +726,33 @@ class RouteMinion(Minion):
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
             filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
+            # 如果brain.llms中有route配置，则依次尝试每个LLM
+            if hasattr(self.brain, 'llms') and 'route' in self.brain.llms:
+                for llm in self.brain.llms['route']:
+                    try:
+                        node = LmpActionNode(llm)
+                        meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                        
+                        name = self.input.route or meta_plan.name
+                        #name = most_similar_minion(name, filtered_registry.keys())
+                        logger.info(f"Choosing Route: {name} using LLM: {llm.config.model}")
+                        klass = filtered_registry[name]
+                        return klass, name
+                    except Exception as e:
+                        logger.warning(f"Failed to get route using LLM {llm.config.model}: {str(e)}")
+                        continue
+                
+                # 如果所有route LLM都失败了，记录错误
+                logger.error("All route LLMs failed to recommend a route, fallback to using self.brain.llm to recommend a route")
+            
+            # 如果没有route配置或所有route LLM都失败，使用默认的brain.llm
             node = LmpActionNode(self.brain.llm)
             meta_plan = await node.execute(filled_template, response_format=MetaPlan)
-
+            
             name = self.input.route or meta_plan.name
-            name = most_similar_minion(name, filtered_registry.keys())
-            logger.info(f"Choosing Route: {name}")
-            klass = filtered_registry[name]
+            #name = most_similar_minion(name, filtered_registry.keys())
+            logger.info(f"Choosing Route: {name} using self.brain.llm")
+            klass = filtered_registry.get(name,"cot") #fallback to cot
             return klass, name
 
     async def execute(self):

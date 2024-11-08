@@ -93,7 +93,27 @@ Supporting navigation and spatial memory""",
             if memory_config:
                 self.mem = memory = Memory.from_config(memory_config)
 
-        self.llm = llm
+        # Process default llm
+        if isinstance(llm, str):
+            self.llm = create_llm_provider(config.models.get(llm))
+        else:
+            self.llm = llm
+
+        # Process llms dictionary
+        self.llms = {}
+        for key, value in llms.items():
+            if isinstance(value, str):
+                # Single model name
+                self.llms[key] = create_llm_provider(config.models.get(value))
+            elif isinstance(value, list):
+                # List of model names or providers
+                self.llms[key] = [
+                    item if not isinstance(item, str) else create_llm_provider(config.models.get(item))
+                    for item in value
+                ]
+            else:
+                # Assume it's already a provider instance
+                self.llms[key] = value
 
         image_name = "intercode-python"
         self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
