@@ -13,7 +13,7 @@ from tqdm.asyncio import tqdm
 from minion.configs.config import config
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
-from minion.main.utils import extract_number_from_string
+from minion.utils.utils import extract_number_from_string
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
 
@@ -282,7 +282,7 @@ async def main():
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=60
+        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=1
     )
 
     print(f"Accuracy: {correct/count:.2%}")

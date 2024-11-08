@@ -60,7 +60,9 @@ from minion.models.schemas import (
     EnsembleLogic,
     Plan
 )
-from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python
+from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python, \
+    extract_answer
+
 
 class WorkerMinion(Minion):
     pass
@@ -805,7 +807,7 @@ class RouteMinion(Minion):
             # If the check fails, try invoking the minion again
             answer_raw = await self.invoke_minion(klass)
             self.answer = self.input.answer = answer_raw
-            await self.update_stats(name, answer_raw)
+            await self.update_stats(name, self.answer, self.answer_raw)
 
         return self.answer
 
