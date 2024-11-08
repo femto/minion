@@ -121,7 +121,7 @@ async def evaluate_dataset(
                 last_processed_id = last_processed_item["item_id"]
                 tasks = []  # Reset tasks after processing
                 pbar.set_postfix({"Correct": correct, "count": count})
-                pbar.update(6)
+                pbar.update(concurrency_count)
 
                 # Save running information after each batch
                 await save_run_info(filename=run_filename, last_processed_id=last_processed_id)
