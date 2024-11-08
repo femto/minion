@@ -41,6 +41,7 @@ class Brain:
         memory=None,
         memory_config=None,
         llm=create_llm_provider(config.models.get("default")),
+        llms={},
         python_env=None,
         stats_storer=None,
     ):

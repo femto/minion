@@ -87,8 +87,9 @@ class NativeMinion(WorkerMinion):
 class CotMinion(WorkerMinion):
     """Chain of Thought (CoT) Strategy, Ask the LLM to think step-by-step, explaining each part of the problem to enhance the accuracy of the answer. Please noted you can't access web or user's local computer, so if you need information from the web or from user's local computer, DON'T USE THIS STRATEGY."""
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, worker_config=None, **kwargs):
+        super().__init__(worker_config=worker_config, **kwargs)
+        self.worker_config = worker_config
         self.input.instruction = "let's think step by step to solve this problem"
 
     async def execute(self):
@@ -99,9 +100,15 @@ class CotMinion(WorkerMinion):
         response = await node.execute(prompt)
         self.answer_node = node
 
-        if self.input.query_type == "code_solution" or self.input.post_processing == "extract_python":
-            #self.answer = self.extract_python_code(response) #or we don't do anything, let route minion extract the answer?
-            self.answer = response #we don't do anything, let route minion extract the answer? so route minion has access to answer raw?
+        # Check post_processing setting, giving precedence to worker_config
+        post_processing = None
+        if self.worker_config and 'post_processing' in self.worker_config:
+            post_processing = self.worker_config['post_processing']
+        elif self.input.post_processing:
+            post_processing = self.input.post_processing
+
+        if post_processing == "extract_python" or self.input.query_type == "code_solution":
+            self.answer = response  # Let route minion handle extraction
         else:
             self.answer = extract_final_answer(response)
 
@@ -548,13 +555,13 @@ class ModeratorMinion(Minion):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
         route_minion = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
-        answer_raw = await route_minion.execute()
+        answer = await route_minion.execute()
 
         # Apply post-processing if specified
         if self.input.post_processing:
-            processed_answer = self.input.apply_post_processing(answer_raw)
+            processed_answer = self.input.apply_post_processing(answer)
         else:
-            processed_answer = answer_raw
+            processed_answer = answer
 
         self.answer = self.input.answer = processed_answer
         return processed_answer
@@ -753,7 +760,7 @@ class RouteMinion(Minion):
             chosen_minion=klass.__name__
         )
 
-        self.current_minion = klass(input=self.input, brain=self.brain)
+        self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config)
         self.add_followers(self.current_minion)
         await self.current_minion.execute()
 
@@ -785,8 +792,8 @@ class RouteMinion(Minion):
         await self.update_stats(name,self.answer, self.answer_raw)
 
         check = self.input.check
-        if self.worker_config and hasattr(self.worker_config, 'check'):
-            check = self.worker_config.check
+        if self.worker_config and 'check' in self.worker_config:
+            check = self.worker_config["check"]
 
         if not check:
             return self.answer

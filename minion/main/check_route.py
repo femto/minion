@@ -58,7 +58,17 @@ class CheckRouterMinion(Minion):
     async def choose_checker(self):
         """Choose appropriate checker based on input characteristics"""
         try:
-            # Prepare template with registered minions
+            # 然后检查 worker_config 中的配置
+            if hasattr(self, 'worker_config') and self.worker_config.get('check_route', None):
+                checker_name = self.worker_config['check_route']
+                logger.info(f"Using checker from worker config: {checker_name}")
+                return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
+            # 首先检查 input.check_route
+            if hasattr(self.input, 'check_route') and self.input.check_route:
+                logger.info(f"Using checker from input.check_route: {self.input.check_route}")
+                return CHECK_MINION_REGISTRY.get(self.input.check_route, CHECK_MINION_REGISTRY.get("check"))
+
+            # 如果都没有指定，则使用 LLM 推荐
             choose_template = Template(CHECK_ROUTE_PROMPT)
             filled_template = choose_template.render(
                 minions=CHECK_MINION_REGISTRY,
@@ -74,12 +84,10 @@ class CheckRouterMinion(Minion):
             checker_name = most_similar_minion(checker_name, CHECK_MINION_REGISTRY.keys())
 
             logger.info(
-                f"Selected checker: {checker_name}, Reason: {meta_plan.reason if hasattr(meta_plan, 'reason') else 'Not provided'}")
+                f"Selected checker from LLM: {checker_name}, Reason: {meta_plan.reason if hasattr(meta_plan, 'reason') else 'Not provided'}")
 
             # Get checker class
-            checker_class = CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
-
-            return checker_class
+            return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
 
         except Exception as e:
             logger.error(f"Error in checker selection: {e}")
