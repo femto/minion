@@ -49,14 +49,16 @@ class LLMActionNode(ActionNode):
         Returns:
             标准化的answer格式字典
         """
+        # 初始化response_is_str标志
+        response_is_str = isinstance(response, str)
+        
         # 如果响应是字符串，尝试解析为JSON
-        if isinstance(response, str):
-            response_is_str = True
+        if response_is_str:
             response_str = extract_json(response)
             try:
                 response = json.loads(response_str)
             except json.JSONDecodeError:
-                # 如果解析失败，将字符串作为answer的值返回
+                # 如果解析失败，将字符串作为原样返回
                 return response
 
         # 如果响应已经是简单格式
@@ -74,8 +76,8 @@ class LLMActionNode(ActionNode):
 
         # 如果是其他格式,返回空答案
         if response_is_str:
-            return json.dumps({"answer": ""})
-        return {"answer": ""}
+            return json.dumps(response)
+        return response
     # @retry(
     #     stop=stop_after_attempt(3),
     #     retry=retry_if_exception_type(Exception),

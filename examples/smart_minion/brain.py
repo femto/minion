@@ -26,7 +26,8 @@ async def smart_brain():
 
     brain = Brain(
         python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), 
-        llm=llm
+        llm=llm,
+        llms={"route": [ "llama3.2"]}
     )
 
     # # 示例使用
@@ -37,20 +38,20 @@ async def smart_brain():
     #     post_processing="extract_python",
     # )
     # print(obs)
-    cache_plan = os.path.join(MINION_ROOT/"logs", "game24.1.json")
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8",
-                                      route="python",
-                                      cache_plan=cache_plan)
-    print(obs)
-    obs, score, *_ = await brain.step(
-        query='''
-        ['https://en.wikipedia.org/wiki/President_of_the_United_States', 'https://en.wikipedia.org/wiki/James_Buchanan', 'https://en.wikipedia.org/wiki/Harriet_Lane', 'https://en.wikipedia.org/wiki/List_of_presidents_of_the_United_States_who_died_in_office', 'https://en.wikipedia.org/wiki/James_A._Garfield']
-
-    If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name?
-    ''',
-        route="optillm-readurls&memory",
-    )
-    print(obs)
+    # cache_plan = os.path.join(MINION_ROOT/"logs", "game24.1.json")
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8",
+    #                                   route="python",
+    #                                   cache_plan=cache_plan)
+    # print(obs)
+    # obs, score, *_ = await brain.step(
+    #     query='''
+    #     ['https://en.wikipedia.org/wiki/President_of_the_United_States', 'https://en.wikipedia.org/wiki/James_Buchanan', 'https://en.wikipedia.org/wiki/Harriet_Lane', 'https://en.wikipedia.org/wiki/List_of_presidents_of_the_United_States_who_died_in_office', 'https://en.wikipedia.org/wiki/James_A._Garfield']
+    #
+    # If my future wife has the same first name as the 15th first lady of the United States' mother and her surname is the same as the second assassinated president's mother's maiden name, what is my future wife's name?
+    # ''',
+    #     route="optillm-readurls&memory",
+    # )
+    # print(obs)
 
     # 示例使用
 #     obs, score, *_ = await brain.step(
@@ -95,9 +96,8 @@ async def smart_brain():
         query="\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
         route="cot",
         post_processing="extract_python",
-        llms={"route":["default","glm-flash"]},
-        check=False,
-        check_route="doctest"
+
+        #check_route="doctest"
     )
     print(obs)
 

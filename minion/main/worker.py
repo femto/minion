@@ -717,6 +717,7 @@ class RouteMinion(Minion):
             return klass, route
         elif route:
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
+            route = most_similar_minion(route, filtered_registry.keys())
             logger.info(f"Use enforced route: {route}")
             klass = filtered_registry[route]
             return klass, route
@@ -733,11 +734,15 @@ class RouteMinion(Minion):
                         node = LmpActionNode(llm)
                         meta_plan = await node.execute(filled_template, response_format=MetaPlan)
                         
-                        name = self.input.route or meta_plan.name
-                        #name = most_similar_minion(name, filtered_registry.keys())
-                        logger.info(f"Choosing Route: {name} using LLM: {llm.config.model}")
-                        klass = filtered_registry[name]
-                        return klass, name
+                        name = meta_plan.name
+                        if name in filtered_registry:
+                            logger.info(f"Choosing Route: {name} using LLM: {llm.config.model}")
+                            return filtered_registry[name], name
+                        else:
+                            # 尝试找到最相似的名称
+                            #similar_name = most_similar_minion(name, filtered_registry.keys())
+                            logger.warning(f"Recommended worker {name} not found, trying next LLM")
+                            continue
                     except Exception as e:
                         logger.warning(f"Failed to get route using LLM {llm.config.model}: {str(e)}")
                         continue
@@ -746,14 +751,24 @@ class RouteMinion(Minion):
                 logger.error("All route LLMs failed to recommend a route, fallback to using self.brain.llm to recommend a route")
             
             # 如果没有route配置或所有route LLM都失败，使用默认的brain.llm
-            node = LmpActionNode(self.brain.llm)
-            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
-            
-            name = self.input.route or meta_plan.name
-            #name = most_similar_minion(name, filtered_registry.keys())
-            logger.info(f"Choosing Route: {name} using self.brain.llm")
-            klass = filtered_registry.get(name,"cot") #fallback to cot
-            return klass, name
+            try:
+                node = LmpActionNode(self.brain.llm)
+                meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                
+                name = meta_plan.name
+                if name in filtered_registry:
+                    logger.info(f"Choosing Route: {name} using default brain.llm")
+                    return filtered_registry[name], name
+                else:
+                    # 尝试找到最相似的名称
+                    similar_name = most_similar_minion(name, filtered_registry.keys())
+                    logger.warning(f"Recommended route {name} not found, using similar route: {similar_name}")
+                    return filtered_registry[similar_name], similar_name
+            except Exception as e:
+                logger.error(f"Failed to get route using default brain.llm: {str(e)}")
+                # 如果所有尝试都失败，返回默认的CotMinion
+                logger.info("Falling back to default CotMinion")
+                return CotMinion, "cot"
 
     async def execute(self):
         self.load_execution_state()
