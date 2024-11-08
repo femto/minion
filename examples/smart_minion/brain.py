@@ -91,21 +91,23 @@ async def smart_brain():
     # )
     # print(obs)
 
-    # obs, score, *_ = await brain.step(
-    #     query="\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
-    #     route="cot",
-    #     post_processing="extract_python",
-    #     check_route="doctest"
-    # )
-    # print(obs)
-
-
     obs, score, *_ = await brain.step(
-        query="solve \log_{\sqrt{5}}{125\sqrt{5}}",
+        query="\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
         route="cot",
-        check=False
+        post_processing="extract_python",
+        llms={"route":["default","glm-flash"]},
+        check=False,
+        check_route="doctest"
     )
     print(obs)
+
+
+    # obs, score, *_ = await brain.step(
+    #     query="solve \log_{\sqrt{5}}{125\sqrt{5}}",
+    #     route="cot",
+    #     check=False
+    # )
+    # print(obs)
 
 
 if __name__ == "__main__":
