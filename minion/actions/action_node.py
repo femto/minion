@@ -64,7 +64,7 @@ class LLMActionNode(ActionNode):
     #     reraise=True
     # )
     async def execute_answer(self, messages, **kwargs):
-        result = await self.execute(messages, response_format=Answer, output_raw_parser=lambda x: self.normalize_response(x, is_answer_format=True), **kwargs)
+        result = await self.execute(messages, response_format=Answer, **kwargs)
         return result.answer
 
 

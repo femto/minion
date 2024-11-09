@@ -62,16 +62,15 @@ def extract_json(text: str) -> Union[str, dict]:
     text = text.strip()
     
     # 处理被多层 ``` 包裹的情况
-    while text.startswith('```'):
+    if text.startswith('```'):
         # 移除开头的 ```
         text = text[3:]
         # 检查是否有语言标识符（如 json）
         first_line_end = text.find('\n')
-        first_line = text[:first_line_end].strip() if first_line_end != -1 else text
-        if first_line.lower() == 'json' or first_line.startswith('{'):
-            text = text[first_line_end + 1:] if first_line_end != -1 else text
-        else:
-            text = text.strip()
+        if first_line_end != -1:
+            first_line = text[:first_line_end].strip()
+            if first_line.lower() == 'json':
+                text = text[first_line_end + 1:].strip()
         
         # 移除结尾的 ```
         if text.endswith('```'):

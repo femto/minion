@@ -42,16 +42,28 @@ class LmpActionNode(LLMActionNode):
         original_response_format = response_format
 
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
-            # If response_format is a Pydantic model, convert it to JSON schema
+            # 生成 schema
             schema = response_format.model_json_schema()
             schema_with_indent = json.dumps(schema, indent=4)
+            
+            # 创建示例数据
+            example = response_format.model_construct()
+            example_json = example.model_dump_json(indent=4)
+            
             if isinstance(messages, str):
                 messages = [user(messages)]
             elif isinstance(messages, Message):
-                messages.content = [messages]
+                messages = [messages]
 
-            messages.append(user(
-                content=f"Please provide the response in JSON format as per the following schema:\n{schema_with_indent}"))
+            # 添加带有 schema 和示例的提示
+            prompt = (
+                f"Please provide the response in JSON format as per the following schema:\n"
+                f"{schema_with_indent}\n\n"
+                f"Here's an example of the expected format:\n"
+                f"{example_json}\n\n"
+                f"Please ensure your response follows this exact schema format."
+            )
+            messages.append(user(content=prompt))
 
             api_params['response_format'] = { "type": "json_object" }
         elif isinstance(response_format, dict):
@@ -62,9 +74,7 @@ class LmpActionNode(LLMActionNode):
         # response = response.text
         response = await super().execute(messages, **api_params)
 
-        if output_raw_parser:
-            response = output_raw_parser(response)
-        elif isinstance(response_format, type) and issubclass(response_format, BaseModel):
+        if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             response = self.normalize_response(response)
         if original_response_format and isinstance(original_response_format, type) and issubclass(original_response_format, BaseModel):
             response = original_response_format.model_validate_json(response)
