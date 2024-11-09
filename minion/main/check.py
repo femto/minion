@@ -57,22 +57,21 @@ class CheckMinion(Minion):
         self.input.instruction = "let's think step by step to verify this answer"
 
     async def execute(self):
-        for _ in range(3):
-            prompt = Template(CHECK_PROMPT)
-            prompt = prompt.render(input=self.input)
-            
-            node = LmpActionNode(self.brain.llm)
-            result = await node.execute(prompt, response_format=CheckResult)
-            
-            self.answer_node = result
-            self.answer = self.input.feedback = {
-                "feedback": result.feedback,
-                "correct": result.correct,
-                "score": result.score
-            }
-            
-            if result:
-                return self.answer
+        prompt = Template(CHECK_PROMPT)
+        prompt = prompt.render(input=self.input)
+
+        node = LmpActionNode(self.brain.llm)
+        result = await node.execute(prompt, response_format=CheckResult, format="xml_simple")
+
+        self.answer_node = result
+        self.answer = self.input.feedback = {
+            "feedback": result.feedback,
+            "correct": result.correct,
+            "score": result.score
+        }
+
+        if result:
+            return self.answer
 
 @register_check_minion
 class TestMinion(CheckMinion):

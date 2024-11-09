@@ -18,7 +18,9 @@ from minion.providers import create_llm_provider
 
 async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
-    llm_config = config.models.get("default")
+    model = "default"
+    model = "llama3.2"
+    llm_config = config.models.get(model)
     
     llm = create_llm_provider(llm_config)
 
@@ -92,15 +94,69 @@ async def smart_brain():
     # )
     # print(obs)
 
-    obs, score, *_ = await brain.step(
-        query="\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
-        route="cot",
-        post_processing="extract_python",
+    # obs, score, *_ = await brain.step(
+    #     query="\ndef circular_shift(x, shift):\n    \"\"\"Circular shift the digits of the integer x, shift the digits right by shift\n    and return the result as a string.\n    If shift > number of digits, return digits reversed.\n    >>> circular_shift(12, 1)\n    \"21\"\n    >>> circular_shift(12, 2)\n    \"12\"\n    \"\"\"\n",
+    #     route="cot",
+    #     post_processing="extract_python",
+    #
+    #     #check_route="doctest"
+    # )
+    # print(obs)
 
-        #check_route="doctest"
+    obs, score, *_ = await brain.step(
+        query="""extract the feedback from the following:
+        <root>
+  <feedback>
+    The provided solution for the `sort_array` function generally follows the instructions and addresses the problem requirements effectively. However, there are a few areas that could be improved for clarity and robustness.
+
+    1. **Edge Case Handling**: The function correctly handles the edge cases where the array is empty or contains only one element. This is a good practice.
+
+    2. **Sum Calculation and Sorting Logic**: The logic to determine the sum of the first and last elements and then sorting based on whether the sum is odd or even is correctly implemented. This aligns with the problem's requirements.
+
+    3. **Return Value**: The function returns a sorted copy of the array without modifying the original array, which is consistent with the problem's note.
+
+    4. **Clarity and Readability**: The code is clear and readable, with appropriate comments explaining the logic. However, the comments could be more detailed to explain the reasoning behind each step.
+
+    5. **Potential Improvement**: While the current implementation is correct, it could be slightly optimized by avoiding the need to calculate `first_value` and `last_value` separately. Instead, the sum could be calculated directly within the condition. This would make the code slightly more concise.
+
+    Suggested Improvement:
+    ```python
+    def sort_array(array):
+        if len(array) <= 1:
+            return array[:]  # Return a copy of the array if it's empty or has one element
+
+        sum_first_last = array[0] + array[-1]
+
+        if sum_first_last % 2 == 0:
+            # Sum is even, sort in descending order
+            return sorted(array, reverse=True)
+        else:
+            # Sum is odd, sort in ascending order
+            return sorted(array)
+    ```
+
+    This version maintains the same functionality but is slightly more concise.
+
+  </feedback>
+  <correct>true</correct>
+  <score>1.0</score>
+</root>
+        """,
+        route="native",
+        check=False
+
+        # check_route="doctest"
     )
     print(obs)
 
+    obs, score, *_ = await brain.step(
+        query="\ndef sort_array(array):\n    \"\"\"\n    Given an array of non-negative integers, return a copy of the given array after sorting,\n    you will sort the given array in ascending order if the sum( first index value, last index value) is odd,\n    or sort it in descending order if the sum( first index value, last index value) is even.\n\n    Note:\n    * don't change the given array.\n\n    Examples:\n    * sort_array([]) => []\n    * sort_array([5]) => [5]\n    * sort_array([2, 4, 3, 0, 1, 5]) => [0, 1, 2, 3, 4, 5]\n    * sort_array([2, 4, 3, 0, 1, 5, 6]) => [6, 5, 4, 3, 2, 1, 0]\n    \"\"\"\n",
+        route="cot",
+        post_processing="extract_python",
+
+        # check_route="doctest"
+    )
+    print(obs)
 
     # obs, score, *_ = await brain.step(
     #     query="solve \log_{\sqrt{5}}{125\sqrt{5}}",
