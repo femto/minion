@@ -81,34 +81,107 @@ class TestMinion(CheckMinion):
         super().__init__(**kwargs)
         self.test_cases = []
 
+    def _process_test_cases(self, test_cases, entry_point):
+        """Replace 'candidate' with actual function name in test cases"""
+        processed_tests = []
+        for test in test_cases:
+            # 将 candidate 替换为实际的函数名
+            processed_test = test.replace('candidate', entry_point)
+            processed_tests.append(processed_test)
+        return processed_tests
+
     async def execute(self):
         if not self.input.metadata.get('test_cases'):
             return await super().execute()
             
-        self.test_cases = self.input.metadata['test_cases']
-        prompt = Template(CHECK_PROMPT)
-        context = {
-            'input': self.input,
-            'test_cases': self.test_cases,
-            'test_type': 'test'
-        }
-        prompt = prompt.render(**context)
+        # metadata 直接包含测试用例数组
+        raw_test_cases = self.input.metadata['test_cases']
+        self.entry_point = self.input.entry_point # 默认使用 sort_array
         
-        return await self._execute_test(prompt)
+        # 处理测试用例,替换函数名
+        self.test_cases = self._process_test_cases(raw_test_cases, self.entry_point)
+        
+        return await self._execute_test()
 
-    async def _execute_test(self, prompt):
+    async def _execute_test(self):
         """Execute test logic"""
-        node = LmpActionNode(self.brain.llm)
-        result = await node.execute(prompt, response_format=CheckResult)
+        feedback = []
+        passed_count = 0
+        total_tests = len(self.test_cases)
+        test_results = []
         
+        # 获取要测试的代码
+        solution = self.input.answer
+        
+        # 创建本地环境执行测试
+        local_env = {}
+        try:
+            # 执行代码定义函数
+            exec(solution, local_env)
+            
+            # 执行每个测试用例
+            for i, test_case in enumerate(self.test_cases, 1):
+                try:
+                    exec(test_case, local_env)
+                    passed_count += 1
+                    test_results.append({
+                        "test": test_case,
+                        "passed": True
+                    })
+                    logger.info(f"Test {i}/{total_tests} PASSED: {test_case}")
+                except AssertionError as e:
+                    error_msg = f"Test failed: {test_case}\nAssertion Error: {str(e)}"
+                    feedback.append(error_msg)
+                    test_results.append({
+                        "test": test_case,
+                        "passed": False,
+                        "error": error_msg
+                    })
+                    logger.error(f"Test {i}/{total_tests} FAILED: {error_msg}")
+                except Exception as e:
+                    error_msg = f"Test failed: {test_case}\nError: {str(e)}"
+                    feedback.append(error_msg)
+                    test_results.append({
+                        "test": test_case,
+                        "passed": False,
+                        "error": error_msg
+                    })
+                    logger.error(f"Test {i}/{total_tests} ERROR: {error_msg}")
+                    
+        except Exception as e:
+            error_msg = f"Failed to execute solution: {str(e)}"
+            feedback.append(error_msg)
+            test_results.append({
+                "test": "code execution",
+                "passed": False,
+                "error": error_msg
+            })
+            logger.error(f"Code execution failed: {error_msg}")
+            passed_count = 0  # 如果代码执行失败,分数为0
+
+        # 计算得分(通过率)
+        score = passed_count / total_tests if total_tests > 0 else 0.0
+
+        # 记录最终结果
+        if score == 1.0:
+            logger.info(f"All {total_tests} tests PASSED!")
+        else:
+            logger.warning(f"Tests completed: {passed_count}/{total_tests} passed (score: {score:.2f})")
+
+        # 构建结果
+        result = CheckResult(
+            feedback="\n".join(feedback) if feedback else "All tests passed!",
+            correct=(score == 1.0),  # 只有全部通过才算correct
+            score=score,
+        )
+
         self.answer_node = result
         self.answer = self.input.feedback = {
             "feedback": result.feedback,
-            "correct": result.correct,
+            "correct": result.correct, 
             "score": result.score,
-            "test_results": result.test_results if hasattr(result, 'test_results') else None
         }
-        
+
         return self.answer
 
 @register_check_minion

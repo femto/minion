@@ -284,7 +284,7 @@ async def main():
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename=f"run_human_eval_{model}_check.json", continue_process=True, concurrency_count=60
+        data, run_filename=f"run_human_eval_{model}_check_doctest.json", continue_process=True, concurrency_count=1
     )
 
     print(f"Accuracy: {correct/count:.2%}")
