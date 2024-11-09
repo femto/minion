@@ -5,7 +5,7 @@ import os
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import aiofiles
 from nltk.corpus import wordnet
@@ -49,16 +49,49 @@ def replace_placeholders_with_env(config):
     return recursive_replace(config)
 
 
-def extract_json(text):
-    # Regular expression pattern to match all content between ```json and ```
-    pattern = r"```json\s*([\s\S]*?)\s*```"
-
-    # Find all matches in the input text
-    matches = re.findall(pattern, text)
-
-    if matches:
-        return matches[0]
-    else:
+def extract_json(text: str) -> Union[str, dict]:
+    """
+    从文本中提取 JSON 内容，支持处理嵌套的代码块
+    
+    Args:
+        text: 输入文本，可能包含 JSON 字符串或被 ``` 包裹的 JSON
+        
+    Returns:
+        解析后的 JSON 对象或原始字符串
+    """
+    text = text.strip()
+    
+    # 处理被多层 ``` 包裹的情况
+    while text.startswith('```'):
+        # 移除开头的 ```
+        text = text[3:]
+        # 检查是否有语言标识符（如 json）
+        first_line_end = text.find('\n')
+        first_line = text[:first_line_end].strip() if first_line_end != -1 else text
+        if first_line.lower() == 'json' or first_line.startswith('{'):
+            text = text[first_line_end + 1:] if first_line_end != -1 else text
+        else:
+            text = text.strip()
+        
+        # 移除结尾的 ```
+        if text.endswith('```'):
+            text = text[:-3].strip()
+    
+    try:
+        # 尝试解析 JSON
+        return json.dumps(json.loads(text))
+    except json.JSONDecodeError:
+        # 如果解析失败，尝试在文本中查找 JSON 对象
+        start_brace = text.find('{')
+        end_brace = text.rfind('}')
+        
+        if start_brace != -1 and end_brace != -1:
+            try:
+                json_str = text[start_brace:end_brace + 1]
+                return json.dumps(json.loads(json_str))
+            except json.JSONDecodeError:
+                pass
+                
         return text
 
 def extract_last_number(text: str):

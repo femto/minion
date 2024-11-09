@@ -271,8 +271,10 @@ async def solve_question(question, route=None):
     # print(obs)
     return obs
 
+#model = "gpt-4o-mini"
+model = "default"
 
-llm = create_llm_provider(config.models.get("default"))
+llm = create_llm_provider(config.models.get(model))
 cost_manager = CostManager()
 llm.cost_manager = cost_manager
 async def main():
@@ -282,7 +284,7 @@ async def main():
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename="run_human_eval_deepseek.json", continue_process=True, concurrency_count=1
+        data, run_filename=f"run_human_eval_{model}_check.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Union
 import json
 
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
@@ -39,35 +39,22 @@ class LLMActionNode(ActionNode):
 
         return response
 
-    def normalize_response(self, response: Dict[Any, Any] | str, is_answer_format = False) -> Dict[str, str]:
-
-        # 初始化response_is_str标志
-        response_is_str = isinstance(response, str)
-        
-        # 如果响应是字符串，尝试解析为JSON
-        if response_is_str:
+    def normalize_response(self, response: Union[str, dict], is_answer_format: bool = False) -> Union[str, dict]:
+        """规范化响应格式"""
+        response_is_str = False
+        if isinstance(response, str):
+            response_is_str = True
+            # 使用更新后的 extract_json 函数处理响应
             response_str = extract_json(response)
             try:
-                response = json.loads(response_str)
+              response = json.loads(response_str)
             except json.JSONDecodeError:
-                # 如果解析失败，将字符串作为原样返回
-                return response
+              return response_str
 
-        # 如果响应已经是简单格式
-        if is_answer_format:
-            if "answer" in response:
-                if response_is_str:
-                    return response_str
-                return response
-
-            # 如果响应是schema格式
-            if "properties" in response and "answer" in response["properties"]:
-                answer_value = response["properties"]["answer"].get("default", "")
-                if response_is_str:
-                    return json.dumps({"answer": answer_value})
-                return {"answer": answer_value}
-
-        # 如果是其他格式,返回空答案
+        # 处理 schema 格式
+        if is_answer_format and isinstance(response, dict) and "properties" in response:
+            if "answer" in response["properties"]:
+                return {"answer": response["properties"]["answer"].get("default", "")}
         if response_is_str:
             return json.dumps(response)
         return response
