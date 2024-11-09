@@ -19,6 +19,12 @@ class TestResponse(BaseModel):
     items: List[str]
     score: Optional[float] = None
 
+class TestXMLResponse(BaseModel):
+    message: str
+    score: float
+    is_correct: bool
+    feedback: Optional[str] = None
+
 @pytest.fixture
 def lmp_action_node():
     llm = create_llm_provider(config.models.get("default"))
@@ -179,4 +185,86 @@ async def test_lmp_identify_invalid_response(mock_brain, mock_input):
     # Test that invalid JSON raises an error
     with pytest.raises(json.JSONDecodeError):
         await minion.execute()
+
+def test_simple_xml_to_json(lmp_action_node):
+    # 测试简单XML格式的响应，包含特殊字符
+    xml_response = '''<?xml version="1.0" encoding="UTF-8"?>
+<message>Test < with special > characters</message>
+<score>88.5</score>
+<is_correct>true</is_correct>
+<feedback>Good job! Here's some code: if (x < 10) { return true; }</feedback>'''
+    
+    result = lmp_action_node._simple_xml_to_json(TestXMLResponse, xml_response)
+    assert isinstance(result, str)
+    parsed_result = json.loads(result)
+    assert parsed_result["message"] == "Test < with special > characters"
+    assert parsed_result["score"] == 88.5
+    assert parsed_result["is_correct"] is True
+    assert parsed_result["feedback"] == "Good job! Here's some code: if (x < 10) { return true; }"
+
+def test_simple_xml_to_json_without_declaration(lmp_action_node):
+    # 测试没有XML声明的响应
+    xml_response = '''<message>Simple message</message>
+<score>75.0</score>
+<is_correct>false</is_correct>
+<feedback>Test feedback</feedback>'''
+    
+    result = lmp_action_node._simple_xml_to_json(TestXMLResponse, xml_response)
+    assert isinstance(result, str)
+    parsed_result = json.loads(result)
+    assert parsed_result["message"] == "Simple message"
+    assert parsed_result["score"] == 75.0
+    assert parsed_result["is_correct"] is False
+    assert parsed_result["feedback"] == "Test feedback"
+
+@pytest.mark.asyncio
+async def test_execute_with_xml_format(lmp_action_node):
+    xml_response = '''```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<message>Test message</message>
+<score>95.5</score>
+<is_correct>true</is_correct>
+<feedback>Good job!</feedback>
+```'''
+    
+    async def mock_execute(*args, **kwargs):
+        return xml_response
+    
+    lmp_action_node.execute = mock_execute
+    
+    result = await lmp_action_node.execute(
+        "test message",
+        response_format=TestXMLResponse,
+        format="xml_simple"
+    )
+    #result = lmp_action_node._simple_xml_to_json(TestXMLResponse, result)
+    
+    # assert isinstance(result, TestXMLResponse)
+    # assert result.message == "Test message"
+    # assert result.score == 95.5
+    # assert result.is_correct is True
+    # assert result.feedback == "Good job!"
+
+@pytest.mark.asyncio
+async def test_execute_with_xml_special_chars(lmp_action_node):
+    xml_response = '''```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<message>Test with < and > chars</message>
+<score>92.5</score>
+<is_correct>true</is_correct>
+<feedback>Code example: if (x < 10) { return true; }</feedback>
+```'''
+    
+    async def mock_execute(*args, **kwargs):
+        return xml_response
+    
+    lmp_action_node.execute = mock_execute
+    
+    result = await lmp_action_node.execute(
+        "test message",
+        response_format=TestXMLResponse,
+        format="xml_simple"
+    )
+    
+    result = lmp_action_node._simple_xml_to_json(TestXMLResponse, result)
 

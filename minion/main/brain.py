@@ -171,14 +171,17 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
         # Create the filled template
         filled_template = mind_template.render(minds=self.minds.values(), input=input)
 
-        result = await self.lmp_action_node.execute_answer(filled_template)
+        try:
+            result = await self.lmp_action_node.execute_answer(filled_template)
 
-        # Ensure the result is a valid mind ID
-        if result not in self.minds:
-            result = "left_mind"
-            #raise ValueError(f"Invalid mind ID returned: {result}")
+            # Ensure the result is a valid mind ID
+            if result not in self.minds:
+                result = "left_mind"
+                #raise ValueError(f"Invalid mind ID returned: {result}")
 
-        return result
+            return result
+        except Exception as e:
+            return "left_mind" #tmp for llama3.2 which can't return valid json
 
 
 Mind.model_rebuild()
