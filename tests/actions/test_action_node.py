@@ -77,6 +77,29 @@ def test_normalize_response_json_string2(llm_action_node):
     assert "score" in parsed_result
     assert parsed_result["correct"] is True
     assert parsed_result["score"] == 0.9
+def test_normalize_response_json_string3(llm_action_node):
+    # 测试JSON字符串输入
+    json_input = r'''
+    ```json
+{
+    "feedback": "a\(\)",
+    "correct": true,
+    "score": 0.9
+}
+```
+    '''
+
+    result = llm_action_node.normalize_response(json_input)
+    # 验证返回的是提取并格式化后的JSON字符串
+    assert isinstance(result, str)
+    # 确保可以被解析回JSON对象
+    print(result)
+    parsed_result = json.loads(result)
+    assert "feedback" in parsed_result
+    assert "correct" in parsed_result
+    assert "score" in parsed_result
+    assert parsed_result["correct"] is True
+    assert parsed_result["score"] == 0.9
 
 def test_normalize_response_dict_with_answer(llm_action_node):
     # 测试包含answer字段的字典

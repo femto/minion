@@ -79,6 +79,6 @@ class Plan(BaseModel):
     )
 
 class CheckResult(BaseModel):
-    feedback: str
-    correct: bool
-    score: float
+    feedback: str = ""
+    correct: bool = False
+    score: float = 0.0
