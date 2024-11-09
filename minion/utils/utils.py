@@ -11,6 +11,7 @@ import aiofiles
 from nltk.corpus import wordnet
 from PIL import Image
 
+from minion.utils.custom_decoder import CustomDecoder
 from minion.utils.sanitize import sanitize
 
 
@@ -78,7 +79,9 @@ def extract_json(text: str) -> Union[str, dict]:
     
     try:
         # 尝试解析 JSON
-        return json.dumps(json.loads(text))
+        dict = CustomDecoder(strict=False).decode(text)
+        return json.dumps(dict)
+        #return json.dumps(json.loads(text))
     except json.JSONDecodeError:
         # 如果解析失败，尝试在文本中查找 JSON 对象
         start_brace = text.find('{')
@@ -87,7 +90,8 @@ def extract_json(text: str) -> Union[str, dict]:
         if start_brace != -1 and end_brace != -1:
             try:
                 json_str = text[start_brace:end_brace + 1]
-                return json.dumps(json.loads(json_str))
+                dict = CustomDecoder(strict=False).decode(json_str)
+                return json.dumps(dict)
             except json.JSONDecodeError:
                 pass
                 
