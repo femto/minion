@@ -254,12 +254,31 @@ def evaluate_expression(expr, numbers):
     if Counter(expr_numbers) != Counter(numbers):
         return False
 
-    # Evaluate the expression
-    try:
-        result = eval(expr)
-        return abs(result - 24) < 1e-6  # Allow for small floating-point errors
-    except:
-        return False
+    # Define a function to safely evaluate simple expressions
+    def safe_evaluate(expr, allowed_operators={'+', '-', '*', '/'}):
+        try:
+            tokens = re.findall(r'\d+|[+\-*/]', expr)
+            total = int(tokens.pop(0))
+            while tokens:
+                op = tokens.pop(0)
+                if op not in allowed_operators:
+                    return False
+                num = int(tokens.pop(0))
+                if op == '+':
+                    total += num
+                elif op == '-':
+                    total -= num
+                elif op == '*':
+                    total *= num
+                elif op == '/':
+                    total /= num
+            return total
+        except:
+            return False
+
+    # Safely evaluate the expression instead of using eval
+    result = safe_evaluate(expr)
+    return result is not False and abs(result - 24) < 1e-6  # Allow for small floating-point errors
 
 
 def verify_game24_solution(question, user_answer):

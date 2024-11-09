@@ -1,7 +1,7 @@
 import doctest
 import inspect
 import re
-import xml.etree.ElementTree as ET
+from defusedxml.ElementTree import parse
 from io import StringIO
 
 from jinja2 import Template
@@ -30,7 +30,7 @@ def extract_feedback_parts(xml_string):
         xml_file = StringIO(xml_string)
 
         # Parse the XML
-        tree = ET.parse(xml_file)
+        tree = parse(xml_file)
         root = tree.getroot()
 
         # Extract feedback content
