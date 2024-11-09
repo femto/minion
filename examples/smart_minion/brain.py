@@ -27,7 +27,7 @@ async def smart_brain():
     brain = Brain(
         python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), 
         llm=llm,
-        llms={"route": [ "llama3.2"]}
+        llms={"route": [ "llama3.2","llama3.1"]}
     )
 
     # # 示例使用
