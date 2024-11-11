@@ -19,7 +19,7 @@ from minion.providers import create_llm_provider
 async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
     model = "default"
-    model = "llama3.2"
+    #model = "llama3.2"
     llm_config = config.models.get(model)
     
     llm = create_llm_provider(llm_config)
@@ -45,10 +45,10 @@ async def smart_brain():
 
     obs, score, *_ = await brain.step(
         query=test_data["prompt"],
-        route="cot",
+        route="dcot",
         post_processing="extract_python",
         entry_point=test_data["entry_point"],
-        check=3,
+        check=False,
         metadata={"test_cases": test_data["test"]}  # 添加测试用例到 metadata
     )
     print(obs)

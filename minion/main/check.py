@@ -9,7 +9,7 @@ from jinja2 import Template
 from minion.logs import logger
 from minion.main.check_route import register_check_minion
 from minion.main.minion import Minion
-from minion.main.prompt import CHECK_PROMPT, ASK_PROMPT
+from minion.main.prompt import CHECK_PROMPT
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import CheckResult
 
@@ -168,18 +168,12 @@ class TestMinion(CheckMinion):
         else:
             logger.warning(f"Tests completed: {passed_count}/{total_tests} passed (score: {score:.2f})")
 
-        # 构建结果
-        result = CheckResult(
-            feedback="\n".join(feedback) if feedback else "All tests passed!",
-            correct=(score == 1.0),  # 只有全部通过才算correct
-            score=score,
-        )
-
-        self.answer_node = result
+        # 直接构造feedback字典
         self.answer = self.input.feedback = {
-            "feedback": result.feedback,
-            "correct": result.correct, 
-            "score": result.score,
+            "feedback": "\n".join(feedback) if feedback else "All tests passed!",
+            "correct": (score == 1.0),
+            "score": score,
+            "test_results": test_results
         }
 
         return self.answer
@@ -229,11 +223,3 @@ class DoctestMinion(CheckMinion):
         
         return self.answer
 
-
-class ScoreMinion(CheckMinion):
-    async def execute(self):
-        node = LmpActionNode(self.brain.llm)
-        score = await node.execute_answer(
-            ASK_PROMPT + "\nanswer:\n{input.answer}".format(input=self.input)
-        )
-        return float(score)

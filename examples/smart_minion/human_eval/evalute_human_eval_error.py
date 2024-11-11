@@ -43,7 +43,7 @@ def extract_answer(answer_str):
 
 async def evaluate_dataset(
     data,
-    last_processed_id=0,
+    last_processed_id=None,
     start_id=None,
     to_processed_id=None,
     route="cot",
@@ -216,25 +216,40 @@ def check_solution(solution, test, entry_point):
 
 async def solve_single_question(item, route="cot"):
     question = item["prompt"]
-    #ground_truth_raw = item["answer"]
     canonical_solution = item["canonical_solution"]
     entry_point = item["entry_point"]
     test = item["test"]
-    item_id = item.get("idx", -1)  # Extract the ID or use a default value
+    item_id = item.get("idx", -1)
 
-    # Extract the correct answer after '####'
+    brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
-    #correct_answer = extract_answer(ground_truth_raw)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
+    
+    # 加载测试用例
+    test_cases_path = os.path.join(current_dir, "humaneval_public_test.jsonl")
+    test_cases = load_jsonl(test_cases_path)
+    
+    # 查找对应的测试用例
+    metadata = {"test_cases": []}
+    for test_case in test_cases:
+        if test_case["problem_id"] == item["task_id"]:
+            metadata["test_cases"] = test_case.get("test", [])
+            break
 
-    # Your solver logic
-    answer = await solve_question("""Please provide a complete function implementation including:
+    answer, score, *_ = await brain.step(
+        query="""Please provide a complete function implementation including:
 - Full function definition
 - All necessary logic
 - Proper return statement
 - Handle all edge cases
 
 Here is the function to implement:
-""" + question)
+""" + question, 
+        execution_config=load_execution_config(ensemble_logic_path),
+        metadata=metadata
+    )
+
     ret = check_solution(answer, test, entry_point)
     if ret[0] == PASS:
         return {"result": 1, "item_id": item_id, "question": question, "answer": answer, "idx": item_id}
@@ -245,6 +260,7 @@ Here is the function to implement:
             "result": 0,
             "item_id": item_id,
             "question": question,
+            "task_id": item["task_id"],
             "canonical_solution": canonical_solution,
             "test": test,
             "answer": answer,
@@ -259,19 +275,10 @@ def load_execution_config(file_path):
         ensemble_logic = json.load(file)
     return ensemble_logic
 
-async def solve_question(question, route=None):
-    # Implement your problem-solving logic here
-    # For example, this could be a math solver or text parser
-    brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
-
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
-    obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
-    # print(obs)
-    return obs
-
-
-llm = create_llm_provider(config.models.get("default"))
+model = "default"
+#model = "gpt-4o-mini"
+#model = "gpt-4o"
+llm = create_llm_provider(config.models.get(model))
 cost_manager = CostManager()
 llm.cost_manager = cost_manager
 async def main():
@@ -282,7 +289,7 @@ async def main():
     original_data = load_jsonl(file_name)
     
     # 加载包含错误信息的 JSON 文件
-    error_file = os.path.join(current_dir, "run_human_eval_deepseek1.json")
+    error_file = os.path.join(current_dir, "run_human_eval_deepseek0.json")
     with open(error_file, 'r') as f:
         error_data = json.load(f)
     
@@ -297,7 +304,7 @@ async def main():
     # 使用新的数据集运行评估
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
         mismatched_data, 
-        run_filename="run_human_eval_deepseek_retry2.json",
+        run_filename=f"run_human_eval_test_{model}0_noreflect.json",
         continue_process=True, 
         concurrency_count=60
     )
