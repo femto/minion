@@ -17,8 +17,6 @@ query:
 {{input.query}}
 
 {% if input.feedback %}
-solution:
-{{input.solution}}
 answer:
 {{input.answer}}
 feedback:
@@ -38,6 +36,8 @@ feedback:
 {% else %}
 {{ input.feedback }}
 {% endif %}
+reflection:
+Based on the feedback, analyze the approach taken in the solution, noting any limitations, strengths, or improvements needed. Reflect on how the feedback suggests refining the solution to better meet the objectives or address potential oversights.
 {% endif %}
 """
 ASK_PROMPT_META_JINJA = """
