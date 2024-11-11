@@ -4,15 +4,6 @@ respond to the following query within the tags <final_answer></final_answer>.
 COT_PROBLEM_INSTRUCTION = """
 Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion. Clearly express your final conclusion, ensuring that it is directly accessible and requires no further interpretation by presenting it explicitly within the tags <final_answer></final_answer>. Finally, include a verbalized confidence level for your conclusion (e.g., “Confidence: 60% / Medium”) to convey your level of certainty in the analysis and decision-making process.
 """
-ASK_PROMPT = """context:
-{input.short_context}
-instruction:
-{input.instruction}
-query_type:
-{input.query_type}
-query:
-{input.query}
-"""
 
 ASK_PROMPT_JINJA = """
 Current Problem:
@@ -31,7 +22,22 @@ solution:
 answer:
 {{input.answer}}
 feedback:
-{{input.feedback}}
+{% if input.feedback is mapping %}
+{% for key, value in input.feedback.items() %}
+{{ key }}:
+{% if value is string %}
+{{ value }}
+{% elif value is sequence and value is not string %}
+{% for item in value %}
+- {{ item }}
+{% endfor %}
+{% else %}
+{{ value }}
+{% endif %}
+{% endfor %}
+{% else %}
+{{ input.feedback }}
+{% endif %}
 {% endif %}
 """
 ASK_PROMPT_META_JINJA = """
@@ -346,12 +352,6 @@ SCORE_PROMPT = """Given a complex question and its corresponding answer, analyze
 
 """
 
-FINISH_PROMPT = (
-    """
-    [Input Prompt] for the following question and existing answer, determine whether the answer already contains answer to the question without need for furthur processing, Otherwise if it needs furthur processing, This is the List of stragety that you can use:
-    """
-    + ASK_PROMPT
-)
 COMMON_ERROR = """
 please remember I may have not some package installed, like sympy or numpy, so please add in the code like
 ```python
@@ -417,7 +417,22 @@ Answer Code:
 {% endif %}
 
 Answer:
-{{input.answer}}
+{% if input.answer is mapping %}
+{% for key, value in input.answer.items() %}
+{{ key }}:
+{% if value is string %}
+{{ value }}
+{% elif value is sequence and value is not string %}
+{% for item in value %}
+- {{ item }}
+{% endfor %}
+{% else %}
+{{ value }}
+{% endif %}
+{% endfor %}
+{% else %}
+{{ input.answer }}
+{% endif %}
 """
 CHECK_PROMPT = f"""Given the following problem details:
 

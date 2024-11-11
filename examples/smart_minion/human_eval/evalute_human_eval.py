@@ -44,7 +44,7 @@ def extract_answer(answer_str):
 
 async def evaluate_dataset(
     data,
-    last_processed_id=0,
+    last_processed_id=None,
     start_id=None,
     to_processed_id=None,
     route="cot",
@@ -245,6 +245,7 @@ Here is the function to implement:
         return {
             "result": 0,
             "item_id": item_id,
+            "task_id": item["task_id"],
             "question": question,
             "canonical_solution": canonical_solution,
             "test": test,
@@ -279,12 +280,13 @@ cost_manager = CostManager()
 llm.cost_manager = cost_manager
 async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_name = os.path.join(current_dir, "human_eval_test.jsonl")
+    #file_name = os.path.join(current_dir, "human_eval_test.jsonl")
+    file_name = os.path.join(current_dir, "humaneval_validate.jsonl")
     data = load_jsonl(file_name)
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename=f"run_human_eval_{model}_check_doctest.json", continue_process=True, concurrency_count=1
+        data, run_filename=f"run_humaneval_validate_dcot_{model}.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

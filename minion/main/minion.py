@@ -7,7 +7,6 @@
 """
 import uuid
 
-from minion.main.prompt import ASK_PROMPT, COT_PROBLEM_INSTRUCTION, DOT_PROMPT
 from minion.utils.utils import camel_case_to_snake_case, extract_content
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.utils.answer_extraction import math_equal

@@ -31,9 +31,7 @@ from minion.main.minion import (
     Minion,
     register_route_downstream,
 )
-from minion.main.preprocessing import PreprocessingMinion
 from minion.main.prompt import (
-    ASK_PROMPT,
     ASK_PROMPT_JINJA,
     COT_PROBLEM_INSTRUCTION,
     DCOT_PROMPT,
@@ -76,8 +74,11 @@ class NativeMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
+        prompt = Template(ASK_PROMPT_JINJA)
+        prompt = prompt.render(input=self.input)
+        
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(ASK_PROMPT.format(input=self.input))
+        response = await node.execute(prompt)
         self.raw_answer = self.input.answer_raw = response
         self.answer = self.input.answer = response
         return self.answer
@@ -93,9 +94,9 @@ class CotMinion(WorkerMinion):
         self.input.instruction = "let's think step by step to solve this problem"
 
     async def execute(self):
-        prompt = (COT_PROBLEM_INSTRUCTION + ASK_PROMPT).format(input=self.input)
-        context = {"messages": [{"role": "user", "content": prompt}], "images": self.input.images}
-        
+        prompt = Template(COT_PROBLEM_INSTRUCTION + ASK_PROMPT_JINJA)
+        prompt = prompt.render(input=self.input)
+
         node = LmpActionNode(self.brain.llm)
         response = await node.execute(prompt)
         self.answer_node = node
@@ -116,32 +117,32 @@ class CotMinion(WorkerMinion):
         self.answer_raw = self.input.answer_raw = response
         return self.answer_raw
 
-class DotMinion(WorkerMinion):
-    """Diagram of Thought (DoT) Strategy"""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.input.instruction = "let's think step by step to solve this problem"
-
-    async def execute(self):
-        prompt = Template(DOT_PROMPT)
-        prompt = prompt.render(input=self.input)
-        
-        node = LmpActionNode(self.brain.llm)
-        response = await node.execute_answer(prompt)
-        self.answer_node = response
-        self.answer = self.input.answer = extract_final_answer(response)
-
-        for _ in range(3):  # try using llm 3 times to extract answer
-            if not self.answer:
-                # try using llm to extract answer
-                node = LmpActionNode(self.brain.llm)
-                response = await node.execute_answer("extract final answer from result")
-                self.answer = self.input.answer = response
-            else:
-                break
-        self.raw_answer = self.input.answer_raw = response
-        return self.answer
+# class DotMinion(WorkerMinion):
+#     """Diagram of Thought (DoT) Strategy"""
+#
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.input.instruction = "let's think step by step to solve this problem"
+#
+#     async def execute(self):
+#         prompt = Template(DOT_PROMPT)
+#         prompt = prompt.render(input=self.input)
+#
+#         node = LmpActionNode(self.brain.llm)
+#         response = await node.execute_answer(prompt)
+#         self.answer_node = response
+#         self.answer = self.input.answer = extract_final_answer(response)
+#
+#         for _ in range(3):  # try using llm 3 times to extract answer
+#             if not self.answer:
+#                 # try using llm to extract answer
+#                 node = LmpActionNode(self.brain.llm)
+#                 response = await node.execute_answer("extract final answer from result")
+#                 self.answer = self.input.answer = response
+#             else:
+#                 break
+#         self.raw_answer = self.input.answer_raw = response
+#         return self.answer
 
 
 # https://x.com/_philschmid/status/1842846050320544016
@@ -153,15 +154,17 @@ class DcotMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        node = ActionNode(key="answer", expected_type=str, instruction="", example="")
         prompt = Template(DCOT_PROMPT)
         prompt = prompt.render(input=self.input)
-        node = await node.fill(context=prompt, llm=self.brain.llm, schema="raw")
+        
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute(prompt)
+        
         self.answer_node = node
-        self.answer = self.input.answer = extract_answer(node.content)
-
-        self.raw_answer = self.input.answer_raw = node.content
-        return self.answer  # maybe also adds score?
+        self.answer = self.input.answer = extract_answer(response)
+        self.answer_raw = self.input.answer_raw = response
+        
+        return self.answer
 
 
 @register_route_downstream
