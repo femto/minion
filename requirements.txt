@@ -27,3 +27,15 @@ antlr4-python3-runtime
 ell-ai
 optillm
 aiofiles
+
+#ldb dependencies
+jsonlines==3.1.0
+datasets
+astunparse
+transformers
+accelerate
+astor
+graphviz
+#vllm
+astroid
+#ldb dependencies
