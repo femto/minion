@@ -15,6 +15,16 @@ from pydantic import BaseModel, Field
 from minion.utils.utils import extract_number_from_string
 from minion.utils.answer_extraction import extract_math_answer, extract_python
 
+import os
+import sys
+
+# 获取LLMDebugger/programming的绝对路径
+debugger_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'LLMDebugger', 'programming'))
+sys.path.append(debugger_path)
+
+# 现在可以直接导入PyGenerator等模块
+from PyGenerator import xxx
+
 
 class PostProcessingType(str, Enum):
     NONE = "none"
