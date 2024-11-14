@@ -11,7 +11,6 @@ import os
 import yaml
 
 from minion import config
-from minion.const import MINION_ROOT
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
@@ -47,7 +46,7 @@ async def smart_brain():
 
     obs, score, *_ = await brain.step(
         query=test_data["prompt"],
-        route="dcot",
+        route="ldb",
         post_processing="extract_python",
         entry_point=test_data["entry_point"],
         check=False,
