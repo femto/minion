@@ -48,7 +48,7 @@ def register_worker_minion(cls=None, *, name=None):
 
 
 class Minion(metaclass=SubclassHookMeta):
-    def __init__(self, input=None, brain=None, id=None, score_func=None, task=None, **kwargs):
+    def __init__(self, input=None, brain=None, id=None, score_func=None, worker_config=None, task=None, **kwargs):
         if brain is None:
             raise ValueError("The 'brain' parameter cannot be None.")
 
@@ -58,6 +58,8 @@ class Minion(metaclass=SubclassHookMeta):
         self.brain = brain
         self.followers = []
         self.score_func = score_func
+
+        self.worker_config = worker_config
         self.task = task
 
     def propagate_information(self, other):

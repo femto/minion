@@ -395,9 +395,16 @@ class PythonMinion(WorkerMinion):
         self.python_env = self.brain.python_env
 
     async def execute(self):
+        # Check post_processing setting, giving precedence to worker_config
+        post_processing = None
+        if self.worker_config and 'post_processing' in self.worker_config:
+            post_processing = self.worker_config['post_processing']
+        elif self.input.post_processing:
+            post_processing = self.input.post_processing
+
         if self.input.query_type == "calculate":
             return await self.execute_calculation()
-        elif self.input.query_type == "code_solution":
+        elif post_processing == "extract_python" or self.input.query_type == "code_solution":
             return await self.execute_code_solution()
         elif self.input.query_type == "generate":
             return await self.execute_generation()
@@ -840,7 +847,7 @@ class RouteMinion(Minion):
             self.input.update_execution_state(current_iteration=iteration)
             self.save_execution_state()
 
-            check_router_minion = CheckRouterMinion(input=self.input, brain=self.brain)
+            check_router_minion = CheckRouterMinion(input=self.input, brain=self.brain, worker_config=self.worker_config)
             check_result = await check_router_minion.execute()
 
             self.input.update_execution_state(check_result=check_result)
