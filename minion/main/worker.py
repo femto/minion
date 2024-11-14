@@ -230,7 +230,7 @@ class PlanMinion(WorkerMinion):
         self.task_graph = G
         return "All tasks are valid!"
 
-    @retry(stop=stop_after_attempt(5), wait=wait_none())  # Retries up to 5 times
+    #@retry(stop=stop_after_attempt(5), wait=wait_none())  # Retries up to 5 times
     async def get_plan_with_retry(self, cache_filename=None):
         if self.input.cache_plan:
             # Attempt to load the plan from the cache
@@ -720,7 +720,7 @@ class RouteMinion(Minion):
             return klass, route
         elif route:
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
-            route = most_similar_minion(route, filtered_registry.keys())
+            #route = most_similar_minion(route, filtered_registry.keys())
             logger.info(f"Use enforced route: {route}")
             klass = filtered_registry[route]
             return klass, route
