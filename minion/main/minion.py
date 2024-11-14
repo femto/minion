@@ -12,7 +12,7 @@ from minion.actions.lmp_action_node import LmpActionNode
 from minion.utils.answer_extraction import math_equal
 
 MINION_REGISTRY = {}
-MINION_ROUTE_DOWNSTREAM = {}
+WORKER_MINIONS = {}
 
 
 # a dummy score that does nothing, always return 1 to shortcut the score process
@@ -27,10 +27,24 @@ class SubclassHookMeta(type):
         cls._subclassed_hook()
 
 
-def register_route_downstream(cls):
-    # Register the class in the dictionary with its name as the key
-    MINION_ROUTE_DOWNSTREAM[camel_case_to_snake_case(cls.__name__)] = cls
-    return cls
+def register_worker_minion(cls=None, *, name=None):
+    """Decorator to register worker minions.
+    Can be used as @register_worker_minion or @register_worker_minion(name="custom_name")
+
+    Args:
+        cls: The class to register (when used as @register_worker_minion)
+        name: Optional custom name (when used as @register_worker_minion(name="custom_name"))
+    """
+    def decorator(cls):
+        # Use custom name if provided, otherwise convert class name to snake_case
+        register_name = name if name is not None else camel_case_to_snake_case(cls.__name__)
+        WORKER_MINIONS[register_name] = cls
+        return cls
+
+    # Handle both @register_worker_minion and @register_worker_minion(name="custom_name")
+    if cls is None:
+        return decorator
+    return decorator(cls)
 
 
 class Minion(metaclass=SubclassHookMeta):

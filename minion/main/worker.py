@@ -27,9 +27,9 @@ from minion.main.check_route import CheckRouterMinion
 from minion.main.input import Input
 from minion.main.minion import (
     MINION_REGISTRY,
-    MINION_ROUTE_DOWNSTREAM,
+    WORKER_MINIONS,
     Minion,
-    register_route_downstream,
+    register_worker_minion,
 )
 from minion.main.prompt import (
     ASK_PROMPT_JINJA,
@@ -65,7 +65,7 @@ from minion.utils.answer_extraction import extract_final_answer, extract_longest
 class WorkerMinion(Minion):
     pass
 
-@register_route_downstream
+@register_worker_minion
 class NativeMinion(WorkerMinion):
     """native minion, directly asks llm for answer"""
 
@@ -84,7 +84,7 @@ class NativeMinion(WorkerMinion):
         return self.answer
 
 
-@register_route_downstream
+@register_worker_minion
 class CotMinion(WorkerMinion):
     """Chain of Thought (CoT) Strategy, Ask the LLM to think step-by-step, explaining each part of the problem to enhance the accuracy of the answer. Please noted you can't access web or user's local computer, so if you need information from the web or from user's local computer, DON'T USE THIS STRATEGY."""
 
@@ -167,13 +167,13 @@ class DcotMinion(WorkerMinion):
         return self.answer
 
 
-@register_route_downstream
+@register_worker_minion
 class MultiPlanMinion(WorkerMinion):
     "This Strategy will first generate multiple plan, and then compare each plan, see which one is more promising to produce good result, first try most promising plan, then to less promising plan."
     pass
 
 
-@register_route_downstream
+@register_worker_minion
 class PlanMinion(WorkerMinion):
     "Divide and Conquer Strategy, Divide the problem into smaller subproblems, solve each subproblem independently, and then merge the results for the final solution."
 
@@ -319,7 +319,7 @@ class PlanMinion(WorkerMinion):
         await self.execute()
 
 
-@register_route_downstream
+@register_worker_minion
 class MathPlanMinion(PlanMinion):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -386,7 +386,7 @@ class TaskMinion(WorkerMinion):
         return await self.choose_minion_and_run()
 
 
-@register_route_downstream
+@register_worker_minion
 class PythonMinion(WorkerMinion):
     "This problem requires writing code to solve it, write python code to solve it"
 
@@ -529,7 +529,7 @@ Previous error:
                 f.write(content)
 
 
-@register_route_downstream
+@register_worker_minion
 class MathMinion(PythonMinion):
     "This is a problem involve math, you need to use math tool to solve it"
 
@@ -888,7 +888,7 @@ class RouteMinion(Minion):
         return dill.loads(bytes.fromhex(func_str))
 
 
-@register_route_downstream
+@register_worker_minion
 class OptillmMinion(WorkerMinion):
     """Minion that uses Optillm approaches"""
     
