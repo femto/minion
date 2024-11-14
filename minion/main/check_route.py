@@ -58,16 +58,16 @@ class CheckRouterMinion(Minion):
     async def choose_checker(self):
         """Choose appropriate checker based on input characteristics"""
         try:
-            # First check input.check_route
+            # First check worker_config
+            if self.worker_config and self.worker_config.get('check_route', None):
+                checker_name = most_similar_minion(self.worker_config['check_route'], CHECK_MINION_REGISTRY.keys())
+                logger.info(f"Using checker from worker config: {checker_name}")
+                return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
+
+            # Then check input.check_route
             if hasattr(self.input, 'check_route') and self.input.check_route:
                 checker_name = most_similar_minion(self.input.check_route, CHECK_MINION_REGISTRY.keys())
                 logger.info(f"Using checker from input.check_route: {checker_name}")
-                return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
-
-            # Then check worker_config
-            if hasattr(self, 'worker_config') and self.worker_config.get('check_route', None):
-                checker_name = most_similar_minion(self.worker_config['check_route'], CHECK_MINION_REGISTRY.keys())
-                logger.info(f"Using checker from worker config: {checker_name}")
                 return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
 
             # Prepare template for LLM recommendation

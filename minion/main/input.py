@@ -100,6 +100,7 @@ class Input(BaseModel):
     answer_protocol: str = ""  # Protocol for answer formatting, should we call it answer_format?
     execution_config: dict = {}  # Configuration for execution, like ensemble stragety etc.
     check: Union[bool,int] = True  # Whether to perform validation
+    check_route:str = ""  # Whether to perform validation
 
     # Metadata
     dataset: str = ""  # Source dataset identifier

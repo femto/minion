@@ -46,10 +46,12 @@ async def smart_brain():
 
     obs, score, *_ = await brain.step(
         query=test_data["prompt"],
-        route="ldb",
+        route="python",
         post_processing="extract_python",
         entry_point=test_data["entry_point"],
-        check=False,
+        check=10,
+        check_route="ldb_check",
+        dataset="HumanEval",
         metadata={"test_cases": test_data["test"]}  # 添加测试用例到 metadata
     )
     print(obs)
