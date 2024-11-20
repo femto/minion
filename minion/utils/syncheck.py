@@ -4,7 +4,11 @@
 """
 
 import ast
+import threading
 import traceback
+
+import astunparse
+
 
 def syntax_check(code, verbose=False):
     try:
@@ -15,6 +19,45 @@ def syntax_check(code, verbose=False):
             traceback.print_exc()
         return False
 
+class TimeoutError(Exception):
+    pass
+
+def run_with_timeout(func, args, timeout=None):
+    result = []
+    def target():
+        try:
+            result.append(func(*args))
+        except Exception as e:
+            result.append(e)
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise TimeoutError("Function execution timed out")
+    if isinstance(result[0], Exception):
+        raise result[0]
+    return result[0]
+
+def get_call_str(assert_statement: str) -> str:
+    ast_parsed = ast.parse(assert_statement)
+    try:
+        call_str = ast_parsed.body[0].test.left # type: ignore
+    except:
+        call_str = ast_parsed.body[0].test # type: ignore
+
+    return astunparse.unparse(call_str).strip()
+
+def get_output(func: str, assert_statement: str, timeout: int = 2) -> str:
+    try:
+        exec(f"from typing import *\n{func}", globals())
+        func_call = get_call_str(assert_statement)
+        output = run_with_timeout(eval, (func_call, globals()), timeout)
+        return output
+    except TimeoutError:
+        return "TIMEOUT"
+    except Exception as e:
+        return str(e)
 
 def script(
     samples: str, dataset: str, nsample_check: int = None, verbose: bool = False

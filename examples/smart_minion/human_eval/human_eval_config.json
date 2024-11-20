@@ -3,9 +3,10 @@
 
   "workers": [
     {
-      "name": "cot",
+      "name": "python",
       "count": 1,
-      "check": 3,
+      "check": 10,
+      "check_route": "ldb_check",
       "post_processing": "extract_python"
     }
   ],

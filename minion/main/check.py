@@ -12,6 +12,7 @@ from minion.main.minion import Minion
 from minion.main.prompt import CHECK_PROMPT
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import CheckResult
+from minion.utils.syncheck import run_with_timeout
 
 
 def extract_root_content(text):
@@ -115,14 +116,15 @@ class TestMinion(CheckMinion):
         
         # 创建本地环境执行测试
         local_env = {}
+        timeout = None #todo: specify some default timeout?
         try:
             # 执行代码定义函数
-            exec(solution, local_env)
+            run_with_timeout(exec,[solution, local_env],timeout=timeout)
             
             # 执行每个测试用例
             for i, test_case in enumerate(self.test_cases, 1):
                 try:
-                    exec(test_case, local_env)
+                    run_with_timeout(exec, [test_case, local_env], timeout=timeout)
                     passed_count += 1
                     test_results.append({
                         "test": test_case,
