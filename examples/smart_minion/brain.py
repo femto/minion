@@ -44,6 +44,18 @@ async def smart_brain():
                 "assert candidate([2, 4, 3, 0, 1, 5, 6]) == [6, 5, 4, 3, 2, 1, 0]"]
     }
 
+    # obs, score, *_ = await brain.step(
+    #     query="hipa",
+    #     post_processing="extract_python",
+    #     entry_point=test_data["entry_point"],
+    #     route="native",
+    #     check=10,
+    #     check_route="ldb_check",
+    #     dataset="HumanEval",
+    #     metadata={"test_cases": test_data["test"]}  # 添加测试用例到 metadata
+    # )
+    # print(obs)
+
     obs, score, *_ = await brain.step(
         query=test_data["prompt"],
         route="python",

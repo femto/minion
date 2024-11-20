@@ -15,6 +15,7 @@ from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
+from minion.utils.syncheck import run_with_timeout
 
 
 # Load JSONL file
@@ -141,26 +142,6 @@ async def evaluate_dataset(
 PASS = "PASS"
 FAIL = "FAIL"
 
-class TimeoutError(Exception):
-    pass
-
-def run_with_timeout(func, args, timeout):
-    result = []
-    def target():
-        try:
-            result.append(func(*args))
-        except Exception as e:
-            result.append(e)
-
-    thread = threading.Thread(target=target)
-    thread.start()
-    thread.join(timeout)
-    if thread.is_alive():
-        raise TimeoutError("Function execution timed out")
-    if isinstance(result[0], Exception):
-        raise result[0]
-    return result[0]
-
 def check_solution(solution, test, entry_point):
     print(f"solution: {solution}")
 
@@ -214,41 +195,14 @@ def check_solution(solution, test, entry_point):
 
     return result
 
-async def solve_single_question(item, route="cot"):
+async def solve_single_question(item, route="nouse"):
     question = item["prompt"]
     canonical_solution = item["canonical_solution"]
     entry_point = item["entry_point"]
     test = item["test"]
     item_id = item.get("idx", -1)
 
-    brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
-
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
-    
-    # 加载测试用例
-    test_cases_path = os.path.join(current_dir, "humaneval_public_test.jsonl")
-    test_cases = load_jsonl(test_cases_path)
-    
-    # 查找对应的测试用例
-    metadata = {"test_cases": []}
-    for test_case in test_cases:
-        if test_case["problem_id"] == item["task_id"]:
-            metadata["test_cases"] = test_case.get("test", [])
-            break
-
-    answer, score, *_ = await brain.step(
-        query="""Please provide a complete function implementation including:
-- Full function definition
-- All necessary logic
-- Proper return statement
-- Handle all edge cases
-
-Here is the function to implement:
-""" + question, 
-        execution_config=load_execution_config(ensemble_logic_path),
-        metadata=metadata
-    )
+    answer = await solve_question(item)
 
     ret = check_solution(answer, test, entry_point)
     if ret[0] == PASS:
@@ -267,6 +221,36 @@ Here is the function to implement:
             "reason": ret[1],
             "idx": item_id,
         }
+
+
+async def solve_question(item):
+    brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
+    # 加载测试用例
+    test_cases_path = os.path.join(current_dir, "humaneval_public_test.jsonl")
+    test_cases = load_jsonl(test_cases_path)
+    # 查找对应的测试用例
+    metadata = {"test_cases": []}
+    for test_case in test_cases:
+        if test_case["problem_id"] == item["task_id"]:
+            metadata["test_cases"] = test_case.get("test", [])
+            break
+    answer, score, *_ = await brain.step(
+        query="""Please provide a complete function implementation including:
+- Full function definition
+- All necessary logic
+- Proper return statement
+- Handle all edge cases
+
+Here is the function to implement:
+""" + item["prompt"],
+    entry_point=item["entry_point"],
+        dataset="HumanEval",
+        execution_config=load_execution_config(ensemble_logic_path),
+        metadata=metadata
+    )
+    return answer
 
 
 # Load ensemble logic from JSON files
@@ -304,9 +288,9 @@ async def main():
     # 使用新的数据集运行评估
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
         mismatched_data, 
-        run_filename=f"run_human_eval_test3_{model}2.json",
+        run_filename=f"run_human_eval_ldb_{model}0.json",
         continue_process=True, 
-        concurrency_count=60
+        concurrency_count=1
     )
 
     print(f"Accuracy: {correct/count:.2%}")

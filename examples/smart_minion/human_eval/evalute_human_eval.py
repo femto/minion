@@ -13,6 +13,7 @@ from tqdm.asyncio import tqdm
 from minion.configs.config import config
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
+from minion.utils.syncheck import run_with_timeout
 from minion.utils.utils import extract_number_from_string
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
@@ -142,26 +143,6 @@ async def evaluate_dataset(
 PASS = "PASS"
 FAIL = "FAIL"
 
-class TimeoutError(Exception):
-    pass
-
-def run_with_timeout(func, args, timeout):
-    result = []
-    def target():
-        try:
-            result.append(func(*args))
-        except Exception as e:
-            result.append(e)
-
-    thread = threading.Thread(target=target)
-    thread.start()
-    thread.join(timeout)
-    if thread.is_alive():
-        raise TimeoutError("Function execution timed out")
-    if isinstance(result[0], Exception):
-        raise result[0]
-    return result[0]
-
 def check_solution(solution, test, entry_point):
     print(f"solution: {solution}")
 
@@ -227,15 +208,7 @@ async def solve_single_question(item, route="cot"):
 
     #correct_answer = extract_answer(ground_truth_raw)
 
-    # Your solver logic
-    answer = await solve_question("""Please provide a complete function implementation including:
-- Full function definition
-- All necessary logic
-- Proper return statement
-- Handle all edge cases
-
-Here is the function to implement:
-""" + question)
+    answer = await solve_question(item)
     ret = check_solution(answer, test, entry_point)
     if ret[0] == PASS:
         return {"result": 1, "item_id": item_id, "question": question, "answer": answer, "idx": item_id}
@@ -261,14 +234,14 @@ def load_execution_config(file_path):
         ensemble_logic = json.load(file)
     return ensemble_logic
 
-async def solve_question(question, route=None):
+async def solve_question(item, route=None):
     # Implement your problem-solving logic here
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
-    obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
+    obs, score, *_ = await brain.step(query=item["prompt"], execution_config=load_execution_config(ensemble_logic_path))
     # print(obs)
     return obs
 
@@ -280,13 +253,13 @@ cost_manager = CostManager()
 llm.cost_manager = cost_manager
 async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    #file_name = os.path.join(current_dir, "human_eval_test.jsonl")
-    file_name = os.path.join(current_dir, "humaneval_validate.jsonl")
+    file_name = os.path.join(current_dir, "human_eval_test.jsonl")
+    #file_name = os.path.join(current_dir, "humaneval_validate.jsonl")
     data = load_jsonl(file_name)
     # data = await load_data_sample(file_name, samples=1055)
 
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename=f"run_humaneval_validate_dcot_{model}.json", continue_process=True, concurrency_count=60
+        data, run_filename=f"run_humaneval_test_python_{model}.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

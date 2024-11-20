@@ -7,12 +7,15 @@
 """
 import uuid
 
+from minion.main.prompt import ASK_PROMPT_JINJA
 from minion.utils.utils import camel_case_to_snake_case, extract_content
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.utils.answer_extraction import math_equal
+from minion.main.improve_route import ImproveRoute
 
 MINION_REGISTRY = {}
 WORKER_MINIONS = {}
+IMPROVER_MINIONS = {}
 
 
 # a dummy score that does nothing, always return 1 to shortcut the score process
@@ -25,7 +28,6 @@ class SubclassHookMeta(type):
     def __init__(cls, name, bases, clsdict):
         super().__init__(name, bases, clsdict)
         cls._subclassed_hook()
-
 
 def register_worker_minion(cls=None, *, name=None):
     """Decorator to register worker minions.
@@ -42,6 +44,19 @@ def register_worker_minion(cls=None, *, name=None):
         return cls
 
     # Handle both @register_worker_minion and @register_worker_minion(name="custom_name")
+    if cls is None:
+        return decorator
+    return decorator(cls)
+
+def register_improver_minion(cls=None, *, name=None):
+    """Decorator to register improver minions.
+    Can be used as @register_improver_minion or @register_improver_minion(name="custom_name")
+    """
+    def decorator(cls):
+        register_name = name if name is not None else camel_case_to_snake_case(cls.__name__)
+        IMPROVER_MINIONS[register_name] = cls
+        return cls
+
     if cls is None:
         return decorator
     return decorator(cls)
@@ -128,7 +143,24 @@ class Minion(metaclass=SubclassHookMeta):
 
     async def execute(self):
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(ASK_PROMPT.format(input=self.input))
-        self.answer_node = response
+        response = await node.execute(ASK_PROMPT_JINJA.format(input=self.input))
         self.answer = self.input.answer = response
         return self.answer
+
+    async def improve(self):
+        # 获取改进路由
+        route_name = getattr(self.input, 'improve_route', 'feedback')
+        improve_route = ImproveRoute.get_route(route_name)
+        
+        # 获取对应的 improver class
+        improver_cls = IMPROVER_MINIONS.get(improve_route.value)
+        if improver_cls:
+            improver = improver_cls(
+                input=self.input, 
+                brain=self.brain,
+                worker=self
+            )
+            return await improver.execute()
+        
+        # fallback
+        return await self.execute()

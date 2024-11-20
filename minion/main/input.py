@@ -101,6 +101,7 @@ class Input(BaseModel):
     execution_config: dict = {}  # Configuration for execution, like ensemble stragety etc.
     check: Union[bool,int] = True  # Whether to perform validation
     check_route:str = ""  # Whether to perform validation
+    improve_route:str = "feedback"  # default improve stragety according to feedback
 
     # Metadata
     dataset: str = ""  # Source dataset identifier

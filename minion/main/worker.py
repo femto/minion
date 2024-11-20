@@ -796,7 +796,7 @@ class RouteMinion(Minion):
         
         return self.answer
 
-    async def invoke_minion(self, klass):
+    async def invoke_minion(self, klass, improve=False):
         if isinstance(klass, str):
             klass = MINION_REGISTRY.get(klass, CotMinion)
 
@@ -807,7 +807,10 @@ class RouteMinion(Minion):
 
         self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config)
         self.add_followers(self.current_minion)
-        await self.current_minion.execute()
+        if improve:
+            await self.current_minion.improve()
+        else:
+            await self.current_minion.execute()
 
         answer_raw = self.current_minion.answer
 
@@ -857,7 +860,7 @@ class RouteMinion(Minion):
                 return self.answer
 
             # If the check fails, try invoking the minion again
-            answer_raw = await self.invoke_minion(klass)
+            answer_raw = await self.invoke_minion(klass, improve=True)
             self.answer = self.input.answer = answer_raw
             await self.update_stats(name, self.answer, self.answer_raw)
 
