@@ -30,6 +30,7 @@
 {"problem_id": "HumanEval/29", "test": ["assert candidate([], 'a') == []", "assert candidate(['abc', 'bcd', 'cde', 'array'], 'a') == ['abc', 'array']"], "entry_point": "filter_by_prefix"}
 {"problem_id": "HumanEval/30", "test": ["assert candidate([-1, 2, -4, 5, 6]) == [2, 5, 6]", "assert candidate([5, 3, -5, 2, -3, 3, 9, 0, 123, 1, -10]) == [5, 3, 2, 3, 9, 123, 1]"], "entry_point": "get_positive"}
 {"problem_id": "HumanEval/31", "test": ["assert candidate(6) == False", "assert candidate(101) == True", "assert candidate(11) == True", "assert candidate(13441) == True", "assert candidate(61) == True", "assert candidate(4) == False", "assert candidate(1) == False"], "entry_point": "is_prime"}
+{"problem_id": "HumanEval/32", "test": ["assert round(find_zero([1, 2]), 2) == -0.5", "assert round(find_zero([-6, 11, -6, 1]), 2) == 1.0"], "entry_point": "find_zero"}
 {"problem_id": "HumanEval/33", "test": ["assert candidate([1, 2, 3]) == [1, 2, 3]", "assert candidate([5, 6, 3, 4, 8, 9, 2]) == [2, 6, 3, 4, 8, 9, 5"], "entry_point": "sort_third"}
 {"problem_id": "HumanEval/34", "test": ["assert candidate([5, 3, 5, 2, 3, 3, 9, 0, 123]) == [0, 2, 3, 5, 9, 123]"], "entry_point": "unique"}
 {"problem_id": "HumanEval/35", "test": ["assert candidate([1, 2, 3]) == 3", "assert candidate([5, 3, -5, 2, -3, 3, 9, 0, 123, 1, -10]) == 123"], "entry_point": "max_element"}

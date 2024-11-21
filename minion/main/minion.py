@@ -150,17 +150,17 @@ class Minion(metaclass=SubclassHookMeta):
     async def improve(self):
         # 获取改进路由
         route_name = getattr(self.input, 'improve_route', 'feedback')
-        improve_route = ImproveRoute.get_route(route_name)
+        improver_cls = ImproveRoute.get_route(route_name)
         
-        # 获取对应的 improver class
-        improver_cls = IMPROVER_MINIONS.get(improve_route.value)
         if improver_cls:
             improver = improver_cls(
                 input=self.input, 
                 brain=self.brain,
                 worker=self
             )
-            return await improver.execute()
+            self.answer = await improver.execute()
+            return self.answer
         
         # fallback
-        return await self.execute()
+        self.answer = await self.execute()
+        return self.answer

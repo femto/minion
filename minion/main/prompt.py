@@ -405,6 +405,15 @@ PYTHON_PROMPT = (
                 please ensure you correctly indent the code, and don't use // as comment
                 """
 )
+#try not to use sympy
+PYTHON_PROMPT = (
+    """
+    Write python code to solve the problem, also noted the python program must print out answer"""
+    + COMMON_ERROR
+    + """Please ensure all the variables are defined, don't use variables before defining them
+                please ensure you correctly indent the code, and don't use // as comment
+                """
+)
 tmp = """
 {% if input.full_output %}
 Full Output:
