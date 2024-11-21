@@ -39,3 +39,4 @@ graphviz
 #vllm
 astroid
 #ldb dependencies
+#llmdebugger
