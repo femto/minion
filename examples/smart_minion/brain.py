@@ -28,7 +28,7 @@ async def smart_brain():
     brain = Brain(
         python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), 
         llm=llm,
-        llms={"route": [ "llama3.2","llama3.1"]}
+        #llms={"route": [ "llama3.2","llama3.1"]}
     )
     # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
     # print(obs)
