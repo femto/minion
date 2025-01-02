@@ -234,16 +234,34 @@ def load_execution_config(file_path):
         ensemble_logic = json.load(file)
     return ensemble_logic
 
-async def solve_question(item, route=None):
-    # Implement your problem-solving logic here
-    # For example, this could be a math solver or text parser
+async def solve_question(item):
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
-
     current_dir = os.path.dirname(os.path.abspath(__file__))
     ensemble_logic_path = os.path.join(current_dir, "human_eval_config.json")
-    obs, score, *_ = await brain.step(query=item["prompt"], execution_config=load_execution_config(ensemble_logic_path))
-    # print(obs)
-    return obs
+    # 加载测试用例
+    test_cases_path = os.path.join(current_dir, "humaneval_public_test.jsonl")
+    test_cases = load_jsonl(test_cases_path)
+    # 查找对应的测试用例
+    metadata = {"test_cases": []}
+    for test_case in test_cases:
+        if test_case["problem_id"] == item["task_id"]:
+            metadata["test_cases"] = test_case.get("test", [])
+            break
+    answer, score, *_ = await brain.step(
+        query="""Please provide a complete function implementation including:
+- Full function definition
+- All necessary logic
+- Proper return statement
+- Handle all edge cases
+
+Here is the function to implement:
+""" + item["prompt"],
+    entry_point=item["entry_point"],
+        dataset="HumanEval",
+        execution_config=load_execution_config(ensemble_logic_path),
+        metadata=metadata
+    )
+    return answer
 
 #model = "gpt-4o-mini"
 model = "default"
@@ -255,11 +273,21 @@ async def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     file_name = os.path.join(current_dir, "human_eval_test.jsonl")
     #file_name = os.path.join(current_dir, "humaneval_validate.jsonl")
+    #file_name = os.path.join(current_dir, "humaneval_one.jsonl")
     data = load_jsonl(file_name)
     # data = await load_data_sample(file_name, samples=1055)
 
+    # from datasets import load_dataset
+    #
+    # ds = load_dataset("openai/openai_humaneval")
+    #human_eval = ds["test"][38]
+    #human_eval = ds["test"][50]
+    # human_eval = ds["test"][32]
+    #
+    # data = [human_eval] #already a dict
+
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
-        data, run_filename=f"run_humaneval_test_python_{model}.json", continue_process=True, concurrency_count=60
+        data, run_filename=f"run_humaneval_test_python_ldb_{model}1.json", continue_process=True, concurrency_count=60
     )
 
     print(f"Accuracy: {correct/count:.2%}")

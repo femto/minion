@@ -11,6 +11,32 @@ Minion is designed to execute any type of queries, offering a variety of feature
 
 <img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
+## Working Principle
+
+The following flowchart illustrates how Minion collaborates:
+
+```mermaid
+flowchart LR
+    A[Query] --> B[Solution]
+    B --> C{Check}
+    C -->|Not Satisfied| D[Improve]
+    D -->|Callback| B
+    C -->|Satisfied| E[Final Result]
+
+    style A fill:#f96,stroke:#333,stroke-width:2px
+    style B fill:#69f,stroke:#333,stroke-width:2px
+    style C fill:#f69,stroke:#333,stroke-width:2px
+    style D fill:#96f,stroke:#333,stroke-width:2px
+    style E fill:#6f9,stroke:#333,stroke-width:2px
+```
+
+The flowchart demonstrates the complete process from query to final result:
+1. First receives the user query (Query)
+2. System generates a solution (Solution)
+3. Performs solution verification (Check)
+4. If unsatisfactory, makes improvements (Improve) and returns to generate new solutions
+5. If satisfactory, outputs the final result (Final Result)
+
 ## Benchmarks
 
 Minion has achieved impressive results on various benchmarks:
