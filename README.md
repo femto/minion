@@ -15,20 +15,7 @@ Minion is designed to execute any type of queries, offering a variety of feature
 
 The following flowchart illustrates how Minion collaborates:
 
-```mermaid
-flowchart LR
-    A[Query] --> B[Solution]
-    B --> C{Check}
-    C -->|Not Satisfied| D[Improve]
-    D -->|Callback| B
-    C -->|Satisfied| E[Final Result]
-
-    style A fill:#f96,stroke:#333,stroke-width:2px
-    style B fill:#69f,stroke:#333,stroke-width:2px
-    style C fill:#f69,stroke:#333,stroke-width:2px
-    style D fill:#96f,stroke:#333,stroke-width:2px
-    style E fill:#6f9,stroke:#333,stroke-width:2px
-```
+<img src="assets/sci.png" alt="Minion" width="200" align="right">
 
 The flowchart demonstrates the complete process from query to final result:
 1. First receives the user query (Query)
