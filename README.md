@@ -15,7 +15,7 @@ Minion is designed to execute any type of queries, offering a variety of feature
 
 The following flowchart illustrates how Minion collaborates:
 
-<img src="assets/sci.png" alt="Minion" width="200" align="right">
+<img src="assets/sci.png" alt="Minion" align="right">
 
 The flowchart demonstrates the complete process from query to final result:
 1. First receives the user query (Query)
