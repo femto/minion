@@ -24,6 +24,8 @@ from minion.configs.config import config
 from minion.logs import logger
 from minion.main.check import CheckMinion
 from minion.main.check_route import CheckRouterMinion
+from minion.main.improve import ImproverMinion
+from minion.main.improve_route import ImproveRoute
 from minion.main.input import Input
 from minion.main.minion import (
     MINION_REGISTRY,

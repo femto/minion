@@ -322,3 +322,31 @@ def calculate_score(expected_output: str, prediction: str) -> int:
     predicted_answer = extract_answer(prediction)
 
     return 1 if math_equal(predicted_answer, expected_answer) else 0
+# 测试代码
+# test_code = '''
+# A=100
+# def helper_function():
+#     return 42
+#
+# def main_function():
+#     result = helper_function()
+#     return result * 2
+#
+# def another_function():
+#     print("Hello")
+# '''
+#
+# # 让我们测试一下 extract_python 和 sanitize 函数
+# from minion.utils.answer_extraction import extract_python
+# from minion.utils.sanitize import sanitize
+#
+# # 测试 1: entrypoint 为空
+# print("Test 1 - Empty entrypoint:")
+# result1 = extract_python(test_code, entrypoint='')
+# print(result1)
+# print("\n" + "="*50 + "\n")
+#
+# # 测试 2: 指定 entrypoint
+# print("Test 2 - With entrypoint 'main_function':")
+# result2 = extract_python(test_code, entrypoint='main_function')
+# print(result2)

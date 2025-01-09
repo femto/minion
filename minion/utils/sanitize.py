@@ -113,7 +113,7 @@ def extract_target_code_or_empty(code: str, entrypoint: Optional[str] = None) ->
     import_nodes = []
     definition_nodes = []
 
-    for child in root_node.children:
+    for child in root_node.children: #so we don't consider top level if?
         if child.type in IMPORT_TYPE:
             import_nodes.append(child)
         elif child.type == CLASS_TYPE:
@@ -127,7 +127,7 @@ def extract_target_code_or_empty(code: str, entrypoint: Optional[str] = None) ->
             name = get_definition_name(child)
             if not (
                 name in function_names or name in variable_names or name in class_names
-            ) and has_return_statement(child):
+            ): #and has_return_statement(child): #why do we need have return here?
                 definition_nodes.append((name, child))
                 function_names.add(get_definition_name(child))
         elif (
