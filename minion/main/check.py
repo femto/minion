@@ -100,6 +100,7 @@ class TestMinion(CheckMinion):
         self.entry_point = self.input.entry_point # 默认使用 sort_array
         
         # 处理测试用例,替换函数名
+        #humaneval format, using candidate in test case
         self.test_cases = self._process_test_cases(raw_test_cases, self.entry_point)
         
         return await self._execute_test()
