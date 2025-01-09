@@ -60,15 +60,23 @@ class CheckRouterMinion(Minion):
         try:
             # First check worker_config
             if self.worker_config and self.worker_config.get('check_route', None):
-                checker_name = most_similar_minion(self.worker_config['check_route'], CHECK_MINION_REGISTRY.keys())
-                logger.info(f"Using checker from worker config: {checker_name}")
-                return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
+                checker_name = self.worker_config['check_route']
+                if checker_name in CHECK_MINION_REGISTRY:
+                    logger.info(f"Using checker from worker config: {checker_name}")
+                    return CHECK_MINION_REGISTRY[checker_name]
+                else:
+                    logger.warning(f"Specified checker {checker_name} in worker_config not found, falling back to default")
+                    return CHECK_MINION_REGISTRY.get("check")
 
             # Then check input.check_route
             if hasattr(self.input, 'check_route') and self.input.check_route:
-                checker_name = most_similar_minion(self.input.check_route, CHECK_MINION_REGISTRY.keys())
-                logger.info(f"Using checker from input.check_route: {checker_name}")
-                return CHECK_MINION_REGISTRY.get(checker_name, CHECK_MINION_REGISTRY.get("check"))
+                checker_name = self.input.check_route
+                if checker_name in CHECK_MINION_REGISTRY:
+                    logger.info(f"Using checker from input.check_route: {checker_name}")
+                    return CHECK_MINION_REGISTRY[checker_name]
+                else:
+                    logger.warning(f"Specified checker {checker_name} in input.check_route not found, falling back to default")
+                    return CHECK_MINION_REGISTRY.get("check")
 
             # Prepare template for LLM recommendation
             choose_template = Template(CHECK_ROUTE_PROMPT)

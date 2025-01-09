@@ -226,3 +226,129 @@ class DoctestMinion(CheckMinion):
         
         return self.answer
 
+@register_check_minion
+class CodiumCheckMinion(TestMinion):
+    """Test Minion for verifying code solutions with stdin/stdout test cases"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+    def _process_test_cases(self, test_cases, entry_point):
+        """Process test cases from metadata format to internal format"""
+        if not test_cases or not isinstance(test_cases, dict):
+            return []
+            
+        inputs = test_cases.get('input', [])
+        outputs = test_cases.get('output', [])
+        
+        # Ensure we have matching input/output pairs
+        return list(zip(inputs, outputs))
+        
+    async def _execute_test(self):
+        """Execute test logic for input/output based problems"""
+        feedback = []
+        passed_count = 0
+        total_tests = len(self.test_cases)
+        test_results = []
+        
+        # Get the solution code
+        solution = self.input.answer
+        
+        # Create local environment for testing
+        local_env = {}
+        timeout = None  # todo: specify some default timeout?
+        
+        try:
+            # Execute the solution code to define functions
+            run_with_timeout(exec, [solution, local_env], timeout=timeout)
+            
+            # Execute each test case
+            for i, (input_data, expected_output) in enumerate(self.test_cases, 1):
+                try:
+                    # Create StringIO objects for stdin and stdout
+                    import sys
+                    from io import StringIO
+                    
+                    # Redirect stdin and stdout
+                    old_stdin = sys.stdin
+                    old_stdout = sys.stdout
+                    sys.stdin = StringIO(input_data)
+                    sys.stdout = StringIO()
+                    
+                    try:
+                        # Execute the main function
+                        if 'main' in local_env:
+                            run_with_timeout(local_env['main'], [], timeout=timeout)
+                        
+                        # Get the actual output
+                        actual_output = sys.stdout.getvalue()
+                        
+                        # Compare outputs (strip both to handle trailing newlines)
+                        if actual_output.strip() == expected_output.strip():
+                            passed_count += 1
+                            test_results.append({
+                                "test": f"Test {i}",
+                                "input": input_data,
+                                "expected": expected_output,
+                                "actual": actual_output,
+                                "passed": True
+                            })
+                            logger.info(f"Test {i}/{total_tests} PASSED")
+                        else:
+                            error_msg = f"Test failed:\nInput: {input_data}\nExpected: {expected_output}\nGot: {actual_output}"
+                            feedback.append(error_msg)
+                            test_results.append({
+                                "test": f"Test {i}",
+                                "input": input_data,
+                                "expected": expected_output,
+                                "actual": actual_output,
+                                "passed": False,
+                                "error": error_msg
+                            })
+                            logger.error(f"Test {i}/{total_tests} FAILED: {error_msg}")
+                    
+                    finally:
+                        # Restore stdin and stdout
+                        sys.stdin = old_stdin
+                        sys.stdout = old_stdout
+                        
+                except Exception as e:
+                    error_msg = f"Test execution failed: {str(e)}"
+                    feedback.append(error_msg)
+                    test_results.append({
+                        "test": f"Test {i}",
+                        "passed": False,
+                        "error": error_msg
+                    })
+                    logger.error(f"Test {i}/{total_tests} ERROR: {error_msg}")
+                    
+        except Exception as e:
+            error_msg = f"Failed to execute solution: {str(e)}"
+            feedback.append(error_msg)
+            test_results.append({
+                "test": "code execution",
+                "passed": False,
+                "error": error_msg
+            })
+            logger.error(f"Code execution failed: {error_msg}")
+            passed_count = 0
+        
+        # Calculate score
+        score = passed_count / total_tests if total_tests > 0 else 0.0
+        
+        # Log final results
+        if score == 1.0:
+            logger.info(f"All {total_tests} tests PASSED!")
+        else:
+            logger.warning(f"Tests completed: {passed_count}/{total_tests} passed (score: {score:.2f})")
+        
+        # Construct feedback dictionary
+        self.answer = self.input.feedback = {
+            "feedback": "\n".join(feedback) if feedback else "All tests passed!",
+            "correct": (score == 1.0),
+            "score": score,
+            "test_results": test_results
+        }
+        
+        return self.answer
+

@@ -249,7 +249,7 @@ async def solve_question(item):
 - Handle all edge cases
 Here is the function to implement:
 """ + item['description'],
-
+    #entry_point="main", #used in extract_python
         dataset="code_contests",
         execution_config=load_execution_config(ensemble_logic_path),
         metadata=metadata

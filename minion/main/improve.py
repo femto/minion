@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.minion import Minion, register_improver_minion
 
-class ImproverMinion(Minion, ABC):
+class ImproverMinion(Minion):
     """所有 improver minion 的基类"""
     def __init__(self, input=None, brain=None, worker=None, **kwargs):
         super().__init__(input=input, brain=brain, **kwargs)

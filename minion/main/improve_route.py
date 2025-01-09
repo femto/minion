@@ -19,4 +19,4 @@ class ImproveRoute(Enum):
         """
         from minion.main.minion import IMPROVER_MINIONS
         route_name = route_name.lower()
-        return IMPROVER_MINIONS.get(route_name, cls.FEEDBACK)
+        return IMPROVER_MINIONS.get(route_name, IMPROVER_MINIONS.get(cls.FEEDBACK))
