@@ -1,0 +1,16 @@
+{
+  "type": "ensemble",
+
+  "workers": [
+    {
+      "name": "python",
+      "count": 1,
+      "check": 5,
+      "check_route": "codium_check",
+      "post_processing": "extract_python"
+    }
+  ],
+  "aggregator": {
+    "name": "majority_voting"
+  }
+}
