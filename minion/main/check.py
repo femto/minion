@@ -274,6 +274,12 @@ class CodiumCheckMinion(TestMinion):
                     old_stdout = sys.stdout
                     sys.stdin = StringIO(input_data)
                     sys.stdout = StringIO()
+
+                    #this stdin/stdout redirection will affect the whole python process, if this is a concern, use the following:
+                    # from contextlib import redirect_stdout, redirect_stdin
+                    # with StringIO() as new_stdout, StringIO(input_data) as new_stdin:
+                    #     with redirect_stdout(new_stdout), redirect_stdin(new_stdin):
+                    # # Code here will have redirected I/O
                     
                     try:
                         # Execute the main function

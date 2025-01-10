@@ -250,6 +250,7 @@ async def solve_question(item):
 Here is the function to implement:
 """ + item['description'],
     #entry_point="main", #used in extract_python
+        pre_processing="problem_reflect",
         dataset="code_contests",
         execution_config=load_execution_config(ensemble_logic_path),
         metadata=metadata
