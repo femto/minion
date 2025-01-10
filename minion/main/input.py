@@ -122,6 +122,7 @@ class Input(BaseModel):
 
     # Execution state tracking
     execution_state: ExecutionState = Field(default_factory=ExecutionState)  # Current execution state
+    pre_processing: str = ""
     post_processing: PostProcessingType = Field(
         default=PostProcessingType.NONE,
         description="Type of post-processing to apply"
