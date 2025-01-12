@@ -218,10 +218,8 @@ async def solve_single_question(item, route="cot"):
         return {
             "result": 0,
             "item_id": item_id,
-            "task_id": item["task_id"],
+            "item": item,
             "question": question,
-            "canonical_solution": canonical_solution,
-            "test": test,
             "answer": answer,
             "reason": ret[1],
             "idx": item_id,

@@ -615,3 +615,18 @@ By incorporating multi-step reasoning, critical reflection, and adaptive problem
 """
     + ASK_PROMPT_JINJA
 )
+
+PROBLEM_REFLECT_PROMPT = """Please analyze the following problem and provide a detailed reflection:
+
+Problem Description:
+{{input.query}}
+
+Please provide:
+1. Key concepts and requirements
+2. Potential challenges and edge cases
+3. Similar problems you've encountered
+4. Suggested approach and methodology
+5. Any assumptions that need to be validated
+
+Your reflection should help guide the solution process.
+"""
