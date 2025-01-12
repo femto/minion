@@ -1,6 +1,6 @@
 {
   "type": "ensemble",
-
+  "pre_processing": ["problem_reflect"],
   "workers": [
     {
       "name": "python",

@@ -16,6 +16,7 @@ from minion.main.improve_route import ImproveRoute
 MINION_REGISTRY = {}
 WORKER_MINIONS = {}
 IMPROVER_MINIONS = {}
+PRE_PROCESSING_REGISTRY = {}  # New registry for pre-processing minions
 
 
 # a dummy score that does nothing, always return 1 to shortcut the score process
@@ -29,21 +30,21 @@ class SubclassHookMeta(type):
         super().__init__(name, bases, clsdict)
         cls._subclassed_hook()
 
+def register_minion(name):
+    def decorator(cls):
+        MINION_REGISTRY[name] = cls
+        return cls
+    return decorator
+
 def register_worker_minion(cls=None, *, name=None):
     """Decorator to register worker minions.
     Can be used as @register_worker_minion or @register_worker_minion(name="custom_name")
-
-    Args:
-        cls: The class to register (when used as @register_worker_minion)
-        name: Optional custom name (when used as @register_worker_minion(name="custom_name"))
     """
     def decorator(cls):
-        # Use custom name if provided, otherwise convert class name to snake_case
         register_name = name if name is not None else camel_case_to_snake_case(cls.__name__)
         WORKER_MINIONS[register_name] = cls
         return cls
 
-    # Handle both @register_worker_minion and @register_worker_minion(name="custom_name")
     if cls is None:
         return decorator
     return decorator(cls)
@@ -61,6 +62,18 @@ def register_improver_minion(cls=None, *, name=None):
         return decorator
     return decorator(cls)
 
+def register_pre_processing_minion(cls=None, *, name=None):
+    """Decorator to register pre-processing minions.
+    Can be used as @register_pre_processing_minion or @register_pre_processing_minion(name="custom_name")
+    """
+    def decorator(cls):
+        register_name = name if name is not None else camel_case_to_snake_case(cls.__name__).replace('_minion', '')
+        PRE_PROCESSING_REGISTRY[register_name] = cls
+        return cls
+
+    if cls is None:
+        return decorator
+    return decorator(cls)
 
 class Minion(metaclass=SubclassHookMeta):
     def __init__(self, input=None, brain=None, id=None, score_func=None, worker_config=None, task=None, **kwargs):

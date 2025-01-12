@@ -22,6 +22,7 @@ from tenacity import retry, stop_after_attempt, wait_none
 from minion.actions.action_node import ActionNode
 from minion.configs.config import config
 from minion.logs import logger
+from minion.main.pre_processing import PreProcessingMinion
 from minion.main.check import CheckMinion
 from minion.main.check_route import CheckRouterMinion
 from minion.main.improve import ImproverMinion
@@ -562,6 +563,40 @@ class ModeratorMinion(Minion):
         super().__init__(**kwargs)
         self.execution_state: Dict[str, Any] = {}
 
+    async def execute_pre_processing(self):
+        """Execute pre-processing steps if configured"""
+        if not hasattr(self.input, 'execution_config'):
+            return
+            
+        pre_processing_steps = self.input.execution_config.get('pre_processing', [])
+        if not pre_processing_steps:
+            return
+            
+        # Ensure pre_processing_steps is a list
+        if isinstance(pre_processing_steps, str):
+            pre_processing_steps = [pre_processing_steps]
+            
+        # Get pre-processing minion registry
+        from minion.main.minion import PRE_PROCESSING_REGISTRY
+        
+        # Execute each pre-processing step in sequence
+        for step in pre_processing_steps:
+            pre_processing_class = PRE_PROCESSING_REGISTRY.get(step)
+            if not pre_processing_class:
+                logger.warning(f"Pre-processing minion {step} not found")
+                continue
+            self.execution_state["current_pre_processing"] = step
+            self.save_execution_state()
+
+            # Execute pre-processing
+            pre_processing_minion = pre_processing_class(input=self.input, brain=self.brain)
+            await pre_processing_minion.execute()
+            
+            # Update execution state
+
+        self.execution_state["current_pre_processing"] = None
+        self.save_execution_state()
+
     async def invoke_minion(self, minion_name, worker_config=None):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
@@ -587,6 +622,9 @@ class ModeratorMinion(Minion):
     async def execute_ensemble(self):
         if 'workers' not in self.input.execution_config:
             return await self.execute_single()
+
+        # Execute pre-processing first
+        await self.execute_pre_processing()
 
         results = {}
         total_count = sum(worker["count"] for worker in self.input.execution_config["workers"])
@@ -627,6 +665,8 @@ class ModeratorMinion(Minion):
         return most_voted_result
 
     async def execute_single(self):
+        # Execute pre-processing first
+        await self.execute_pre_processing()
         return await self.invoke_minion(self.input.route)
 
     async def execute(self):
@@ -649,12 +689,12 @@ class ModeratorMinion(Minion):
     def save_execution_state(self):
         """保存执行状态"""
         if self.input.save_state:
-            self.input.exec_save_state(f"state_{self.input.query_id}.pkl")
+            self.input.save_state(f"state_{self.input.query_id}.pkl")
 
     def load_execution_state(self):
         """加载执行状态"""
         if self.input.save_state:
-            loaded_input = Input.exec_load_state(f"state_{self.input.query_id}.pkl")
+            loaded_input = Input.load_state(f"state_{self.input.query_id}.pkl")
             if loaded_input:
                 self.input = loaded_input
 
