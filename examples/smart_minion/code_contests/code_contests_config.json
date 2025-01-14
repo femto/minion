@@ -1,11 +1,11 @@
 {
   "type": "ensemble",
-  "pre_processing": ["problem_reflect"],
+  "pre_processing": ["problem_reflect","example_reasoning"],
   "workers": [
     {
       "name": "python",
       "count": 1,
-      "check": 5,
+      "check": 1,
       "check_route": "codium_check",
       "post_processing": "extract_python"
     }

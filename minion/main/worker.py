@@ -49,6 +49,7 @@ from minion.main.prompt import (
     SMART_PROMPT_TEMPLATE,
     TASK_INPUT,
     TASK_ROUTE_PROMPT,
+    WORKER_PROMPT,
 )
 from minion.main.symbol_table import Symbol
 from minion.main.task_graph import convert_tasks_to_graph
@@ -76,7 +77,7 @@ class NativeMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        prompt = Template(ASK_PROMPT_JINJA)
+        prompt = Template(WORKER_PROMPT)
         prompt = prompt.render(input=self.input)
         
         node = LmpActionNode(self.brain.llm)
@@ -96,7 +97,7 @@ class CotMinion(WorkerMinion):
         self.input.instruction = "let's think step by step to solve this problem"
 
     async def execute(self):
-        prompt = Template(COT_PROBLEM_INSTRUCTION + ASK_PROMPT_JINJA)
+        prompt = Template(COT_PROBLEM_INSTRUCTION + WORKER_PROMPT)
         prompt = prompt.render(input=self.input)
 
         node = LmpActionNode(self.brain.llm)
@@ -421,7 +422,7 @@ class PythonMinion(WorkerMinion):
             if not self.task:
                 prompt = Template(
                     PYTHON_PROMPT
-                    + ASK_PROMPT_JINJA
+                    + WORKER_PROMPT
                     + """
 
 also please check previous error, do the modification according to previous error if there's previous error.
@@ -433,7 +434,7 @@ Previous error:
             else:
                 prompt = Template(
                     PYTHON_PROMPT
-                    + ASK_PROMPT_JINJA
+                    + WORKER_PROMPT
                     + TASK_INPUT
                     + """
 
@@ -476,7 +477,7 @@ Previous error:
             node = LmpActionNode(llm=self.brain.llm)
             prompt = Template(
                 PYTHON_PROMPT
-                + ASK_PROMPT_JINJA
+                + WORKER_PROMPT
                 + """
                 Generate a complete Python solution for the given problem.
                 This may include one or more functions, classes, or a full module as needed.
@@ -499,7 +500,7 @@ Previous error:
             node = LmpActionNode(llm=self.brain.llm)
             prompt = Template(
                 PYTHON_PROMPT
-                + ASK_PROMPT_JINJA
+                + WORKER_PROMPT
                 + """
                 Create the necessary file structure and contents for the given task.
                 Include file paths and their contents.

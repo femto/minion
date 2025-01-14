@@ -2,9 +2,12 @@ import asyncio
 import json
 import os
 import re
+import sys
 import threading
 import time
 from typing import List, Dict, Tuple, Optional, Any
+from contextlib import redirect_stdout
+from io import StringIO
 
 import aiofiles
 import numpy as np
@@ -17,7 +20,7 @@ from minion.utils.syncheck import run_with_timeout
 from minion.utils.utils import extract_number_from_string
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
-
+from minion.utils.process import run_code_in_separate_process
 
 # Load JSONL file
 def load_json(file_path):
@@ -143,58 +146,42 @@ async def evaluate_dataset(
 PASS = "PASS"
 FAIL = "FAIL"
 
-def check_solution(solution, test, entry_point):
+def check_solution(solution, test):
     print(f"solution: {solution}")
 
     try:
-        # Define a global dictionary containing all necessary modules
-        global_dict = {
-            'math': __import__('math'),
-            'hashlib': __import__('hashlib'),
-            're': __import__('re'),
-            'List': List,
-            'Dict': Dict,
-            'Tuple': Tuple,
-            'Optional': Optional,
-            'Any': Any
-        }
-        if entry_point == "decode_cyclic":
-            solution = "\n\ndef encode_cyclic(s: str):\n    \"\"\"\n    returns encoded string by cycling groups of three characters.\n    \"\"\"\n    # split string to groups. Each of length 3.\n    groups = [s[(3 * i):min((3 * i + 3), len(s))] for i in range((len(s) + 2) // 3)]\n    # cycle elements in each group. Unless group has fewer elements than 3.\n    groups = [(group[1:] + group[0]) if len(group) == 3 else group for group in groups]\n    return \"\".join(groups)" + "\n\n" + solution
-        elif entry_point == "decode_shift":
-            solution = "\n\ndef encode_shift(s: str):\n    \"\"\"\n    returns encoded string by shifting every character by 5 in the alphabet.\n    \"\"\"\n    return \"\".join([chr(((ord(ch) + 5 - ord(\"a\")) % 26) + ord(\"a\")) for ch in s])\n\n\n" + solution
-        elif entry_point == "find_zero":
-            solution = "\n\ndef poly(xs: list, x: float):\n    return sum(coeff * (x ** i) for i, coeff in enumerate(xs))\n\n" + solution
-        # Execute the solution
-        exec(solution, global_dict)
+        # Get test cases from the dictionary
+        inputs = test.get('input', [])
+        outputs = test.get('output', [])
 
-        # Ensure the entry point function is defined
-        if entry_point not in global_dict:
-            raise ValueError(f"Function {entry_point} is not defined in the solution.")
+        # Run each test case
+        for input_data, expected_output in zip(inputs, outputs):
+            try:
+                # Run the code in a separate process
+                result = run_code_in_separate_process(solution, input_data)
+                
+                if result.stderr:
+                    print(f"Test produced stderr: {result.stderr}")
+                
+                # Compare outputs (strip both to handle trailing newlines)
+                if result.stdout.strip() != expected_output.strip():
+                    return (FAIL, f"Test failed:\nInput: {input_data}\nExpected: {expected_output}\nGot: {result.stdout}\nStderr: {result.stderr if result.stderr else 'None'}")
+            except Exception as e:
+                return (FAIL, f"Test execution failed: {str(e)}")
 
-        # Execute test cases
-        exec(test, global_dict)
-
-        # Get the check function
-        check = global_dict["check"]
-
-        # Run the check function with a timeout of 5 seconds
-        result = run_with_timeout(check, (global_dict[entry_point],), 120)
-
-        if result is None:
-            result = (PASS, "Solution passed all test cases.")
+        return (PASS, "Solution passed all test cases.")
 
     except TimeoutError:
-        result = (FAIL, "Execution timeout. Please check if your solution contains infinite loops or time-consuming operations.")
+        return (FAIL, "Execution timeout. Please check if your solution contains infinite loops or time-consuming operations.")
     except Exception as e:
         # Record detailed error information
         error_message = f"Error: {str(e)}.\n Solution: {solution}.\n Test: {test}"
-        result = (FAIL, error_message)
-
+        
         # Write error information to error.log file
         with open('error.log', 'a', encoding='utf-8') as log_file:
             log_file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {error_message}\n")
-
-    return result
+            
+        return (FAIL, error_message)
 
 async def solve_single_question(item, route="cot"):
     question = item['description']

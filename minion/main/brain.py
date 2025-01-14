@@ -181,7 +181,7 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
 
             return result
         except Exception as e:
-            return "left_mind" #tmp for llama3.2 which can't return valid json
+            return "left_mind" #EXISTING_ANSWER_PROMPT for llama3.2 which can't return valid json
 
 
 Mind.model_rebuild()
