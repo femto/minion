@@ -1,8 +1,10 @@
 import doctest
 import inspect
 import re
+import sys
 import xml.etree.ElementTree as ET
 from io import StringIO
+from contextlib import redirect_stdout
 
 from jinja2 import Template
 
@@ -13,7 +15,7 @@ from minion.main.prompt import CHECK_PROMPT
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import CheckResult
 from minion.utils.syncheck import run_with_timeout
-
+from minion.utils.process import run_code_in_separate_process
 
 def extract_root_content(text):
     pattern = r"(<root>.*?</root>)"
@@ -117,7 +119,7 @@ class TestMinion(CheckMinion):
         
         # 创建本地环境执行测试
         local_env = {}
-        timeout = None #todo: specify some default timeout?
+        timeout = 120 #todo: specify some default timeout?
         try:
             # 执行代码定义函数
             run_with_timeout(exec,[solution, local_env],timeout=timeout)
@@ -254,70 +256,44 @@ class CodiumCheckMinion(TestMinion):
         # Get the solution code
         solution = self.input.answer
         
-        # Create local environment for testing
-        local_env = {}
-        timeout = None  # todo: specify some default timeout?
-        
         try:
-            # Execute the solution code to define functions
-            run_with_timeout(exec, [solution, local_env], timeout=timeout)
-            
             # Execute each test case
             for i, (input_data, expected_output) in enumerate(self.test_cases, 1):
                 try:
-                    # Create StringIO objects for stdin and stdout
-                    import sys
-                    from io import StringIO
+                    # Run the code in a separate process
+                    result = run_code_in_separate_process(solution, input_data)
                     
-                    # Redirect stdin and stdout
-                    old_stdin = sys.stdin
-                    old_stdout = sys.stdout
-                    sys.stdin = StringIO(input_data)
-                    sys.stdout = StringIO()
-
-                    #this stdin/stdout redirection will affect the whole python process, if this is a concern, use the following:
-                    # from contextlib import redirect_stdout, redirect_stdin
-                    # with StringIO() as new_stdout, StringIO(input_data) as new_stdin:
-                    #     with redirect_stdout(new_stdout), redirect_stdin(new_stdin):
-                    # # Code here will have redirected I/O
+                    if result.stderr:
+                        logger.warning(f"Test {i} produced stderr: {result.stderr}")
                     
-                    try:
-                        # Execute the main function
-                        if 'main' in local_env:
-                            run_with_timeout(local_env['main'], [], timeout=timeout)
-                        
-                        # Get the actual output
-                        actual_output = sys.stdout.getvalue()
-                        
-                        # Compare outputs (strip both to handle trailing newlines)
-                        if actual_output.strip() == expected_output.strip():
-                            passed_count += 1
-                            test_results.append({
-                                "test": f"Test {i}",
-                                "input": input_data,
-                                "expected": expected_output,
-                                "actual": actual_output,
-                                "passed": True
-                            })
-                            logger.info(f"Test {i}/{total_tests} PASSED")
-                        else:
-                            error_msg = f"Test failed:\nInput: {input_data}\nExpected: {expected_output}\nGot: {actual_output}"
-                            feedback.append(error_msg)
-                            test_results.append({
-                                "test": f"Test {i}",
-                                "input": input_data,
-                                "expected": expected_output,
-                                "actual": actual_output,
-                                "passed": False,
-                                "error": error_msg
-                            })
-                            logger.error(f"Test {i}/{total_tests} FAILED: {error_msg}")
-                    
-                    finally:
-                        # Restore stdin and stdout
-                        sys.stdin = old_stdin
-                        sys.stdout = old_stdout
-                        
+                    # Compare outputs (strip both to handle trailing newlines)
+                    if result.stdout.strip() == expected_output.strip():
+                        passed_count += 1
+                        test_results.append({
+                            "test": f"Test {i}",
+                            "input": input_data,
+                            "expected": expected_output,
+                            "actual": result.stdout,
+                            "stderr": result.stderr,
+                            "passed": True
+                        })
+                        logger.info(f"Test {i}/{total_tests} PASSED")
+                    else:
+                        error_msg = f"Test failed:\nInput: {input_data}\nExpected: {expected_output}\nGot: {result.stdout}"
+                        if result.stderr:
+                            error_msg += f"\nStderr: {result.stderr}"
+                        feedback.append(error_msg)
+                        test_results.append({
+                            "test": f"Test {i}",
+                            "input": input_data,
+                            "expected": expected_output,
+                            "actual": result.stdout,
+                            "stderr": result.stderr,
+                            "passed": False,
+                            "error": error_msg
+                        })
+                        logger.error(f"Test {i}/{total_tests} FAILED: {error_msg}")
+                
                 except Exception as e:
                     error_msg = f"Test execution failed: {str(e)}"
                     feedback.append(error_msg)

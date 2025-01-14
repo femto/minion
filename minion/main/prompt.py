@@ -15,29 +15,12 @@ query_type:
 {{input.query_type}}
 query:
 {{input.query}}
-
-{% if input.feedback %}
-answer:
-{{input.answer}}
-feedback:
-{% if input.feedback is mapping %}
-{% for key, value in input.feedback.items() %}
-{{ key }}:
-{% if value is string %}
-{{ value }}
-{% elif value is sequence and value is not string %}
-{% for item in value %}
-- {{ item }}
+"""
+ASK_ADDITIONAL_INFO_JINJA = """
+{%- if input.info %}
+{% for key, value in input.info.items() %}
+{{ key }}: {{ value }}
 {% endfor %}
-{% else %}
-{{ value }}
-{% endif %}
-{% endfor %}
-{% else %}
-{{ input.feedback }}
-{% endif %}
-reflection:
-Based on the feedback, analyze the approach taken in the solution, noting any limitations, strengths, or improvements needed. Reflect on how the feedback suggests refining the solution to better meet the objectives or address potential oversights.
 {% endif %}
 """
 ASK_PROMPT_META_JINJA = """
@@ -55,11 +38,19 @@ dataset_description:
 {{input.dataset_description}}
 """
 
+# New template for worker minions that need access to info
+WORKER_PROMPT = (
+    ASK_PROMPT_JINJA
+    + ASK_ADDITIONAL_INFO_JINJA
+    
+)
+
 MERGE_PROMPT = (
     """
     Task: Given the following question:
     """
     + ASK_PROMPT_JINJA
+    + ASK_ADDITIONAL_INFO_JINJA
     + """
 Problem Statement:
 The current answers are spread,. However, a single, coherent answer is required.
@@ -104,6 +95,7 @@ SMART_PROMPT_TEMPLATE = (
     
     """
     + ASK_PROMPT_JINJA
+    + ASK_ADDITIONAL_INFO_JINJA
     + ASK_PROMPT_META_JINJA
 )
 IDENTIFY_PROMPT = (
@@ -415,7 +407,7 @@ PYTHON_PROMPT = (
                 please ensure you correctly indent the code, and don't use // as comment
                 """
 )
-tmp = """
+EXISTING_ANSWER_PROMPT = """
 {% if input.full_output %}
 Full Output:
 {{ input.full_output }}
@@ -447,8 +439,9 @@ Answer:
 CHECK_PROMPT = f"""Given the following problem details:
 
 {ASK_PROMPT_JINJA}
+{ASK_ADDITIONAL_INFO_JINJA}
 
-{tmp}
+{EXISTING_ANSWER_PROMPT}
 
 Critically assess the answer against the problem requirements. Does it follow the instructions, match the query type, and address the context effectively? Evaluate the correctness and relevance of the answer, highlighting any logical inconsistencies, gaps, or errors. Suggest improvements or alternative approaches if necessary, ensuring a thorough analysis.
 
@@ -463,11 +456,13 @@ Your feedback should be structured as follows:
 
 """
 
+#another check prompt, maybe this one is better?
 CHECK_PROMPT1 = f"""Given the following problem details:
 
 {ASK_PROMPT_JINJA}
+{ASK_ADDITIONAL_INFO_JINJA}
 
-{tmp}
+{EXISTING_ANSWER_PROMPT}
 
 Given the complete solution process and final answer above, evaluate:
 
@@ -629,4 +624,18 @@ Please provide:
 5. Any assumptions that need to be validated
 
 Your reflection should help guide the solution process.
+"""
+
+EXAMPLE_REASONING_PROMPT = """
+Given the following input with examples:
+
+{{ input.query }}
+
+Please analyze the examples and provide reasoning about:
+1. The key patterns or principles demonstrated in the examples
+2. How these examples relate to the main problem
+3. What insights can be derived from these examples
+4. How these insights might guide the solution approach
+
+Reasoning:
 """
