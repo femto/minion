@@ -4,13 +4,13 @@
   "workers": [
     {
       "name": "python",
-      "count": 1,
+      "count": 3,
       "check": 1,
       "check_route": "codium_check",
       "post_processing": "extract_python"
     }
   ],
-  "aggregator": {
+  "result_strategy": {
     "name": "majority_voting"
   }
 }

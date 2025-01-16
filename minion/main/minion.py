@@ -17,6 +17,7 @@ MINION_REGISTRY = {}
 WORKER_MINIONS = {}
 IMPROVER_MINIONS = {}
 PRE_PROCESSING_REGISTRY = {}  # New registry for pre-processing minions
+RESULT_STRATEGY_REGISTRY = {}  # Registry for result processing strategies
 
 
 # a dummy score that does nothing, always return 1 to shortcut the score process
@@ -69,6 +70,19 @@ def register_pre_processing_minion(cls=None, *, name=None):
     def decorator(cls):
         register_name = name if name is not None else camel_case_to_snake_case(cls.__name__).replace('_minion', '')
         PRE_PROCESSING_REGISTRY[register_name] = cls
+        return cls
+
+    if cls is None:
+        return decorator
+    return decorator(cls)
+
+def register_result_strategy(cls=None, *, name=None):
+    """Decorator to register result processing strategies.
+    Can be used as @register_result_strategy or @register_result_strategy(name="custom_name")
+    """
+    def decorator(cls):
+        register_name = name if name is not None else camel_case_to_snake_case(cls.__name__).replace('_strategy', '')
+        RESULT_STRATEGY_REGISTRY[register_name] = cls
         return cls
 
     if cls is None:

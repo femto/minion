@@ -27,12 +27,14 @@ from minion.main.check import CheckMinion
 from minion.main.check_route import CheckRouterMinion
 from minion.main.improve import ImproverMinion
 from minion.main.improve_route import ImproveRoute
+from minion.main.result_strategy import ResultStrategy
 from minion.main.input import Input
 from minion.main.minion import (
     MINION_REGISTRY,
     WORKER_MINIONS,
     Minion,
     register_worker_minion,
+    RESULT_STRATEGY_REGISTRY,
 )
 from minion.main.prompt import (
     ASK_PROMPT_JINJA,
@@ -601,8 +603,8 @@ class ModeratorMinion(Minion):
     async def invoke_minion(self, minion_name, worker_config=None):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
-        route_minion = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
-        answer = await route_minion.execute()
+        worker = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
+        answer = await worker.execute()
 
         # Apply post-processing if specified
         if self.input.post_processing:
@@ -610,8 +612,7 @@ class ModeratorMinion(Minion):
         else:
             processed_answer = answer
 
-        self.answer = self.input.answer = processed_answer
-        return processed_answer
+        return worker, processed_answer
 
     async def choose_minion_and_run(self):
         # Check if we have ensemble configuration
@@ -621,17 +622,17 @@ class ModeratorMinion(Minion):
             return await self.execute_single()
 
     async def execute_ensemble(self):
-        if 'workers' not in self.input.execution_config:
+        if 'workers_config' not in self.input.execution_config:
             return await self.execute_single()
 
-        # Execute pre-processing first
-        await self.execute_pre_processing()
-
-        results = {}
-        total_count = sum(worker["count"] for worker in self.input.execution_config["workers"])
-        majority_count = total_count // 2 + 1
-
-        for worker_config in self.input.execution_config["workers"]:
+        # Get the result strategy
+        strategy_config = self.input.execution_config.get("result_strategy", {"name": "majority_voting"})
+        strategy_name = strategy_config["name"]
+        strategy_class = RESULT_STRATEGY_REGISTRY.get(strategy_name, RESULT_STRATEGY_REGISTRY["majority_voting"])
+        
+        workers = []  # List to store actual worker instances
+        
+        for worker_config in self.input.execution_config["workers_config"]:
             minion_name = worker_config["name"]
             count = worker_config["count"]
             post_processing = worker_config.get("post_processing")
@@ -641,46 +642,37 @@ class ModeratorMinion(Minion):
                 self.execution_state["current_iteration"] = i
                 self.save_execution_state()
 
-                answer_raw = await self.invoke_minion(minion_name, worker_config)
-                
-                # Apply post-processing if specified
-                if post_processing:
-                    self.input.post_processing = post_processing
-                    processed_answer = self.input.apply_post_processing(answer_raw)
-                else:
-                    processed_answer = answer_raw
+                worker, _ = await self.invoke_minion(minion_name, worker_config)
+                workers.append(worker)
 
-                if processed_answer in results:
-                    results[processed_answer] += 1
-                else:
-                    results[processed_answer] = 1
-
-                # Check for majority
-                if results[processed_answer] >= majority_count:
-                    self.answer = self.input.answer = processed_answer
-                    return processed_answer
-
-        # No majority reached, return most common result
-        most_voted_result = max(results.items(), key=lambda x: x[1])[0]
-        self.answer = self.input.answer = most_voted_result
-        return most_voted_result
+        # Process results using the selected strategy
+        strategy = strategy_class(
+            input=self.input, 
+            brain=self.brain, 
+            workers=workers
+        )
+        final_result = await strategy.execute()
+        self.answer = self.input.answer = final_result
+        return final_result
 
     async def execute_single(self):
-        # Execute pre-processing first
-        await self.execute_pre_processing()
         return await self.invoke_minion(self.input.route)
 
     async def execute(self):
         self.load_execution_state()
 
         if self.input.execution_state.current_minion:
-            # Resume from previous state
+            # Resume from previous state, assume pre_processing already been done
             if hasattr(self.input, 'type') and self.input.type == "ensemble":
                 await self.execute_ensemble()
             else:
                 await self.execute_single()
         else:
             # Start new execution
+
+            # Execute pre-processing first
+            await self.execute_pre_processing()
+
             await self.choose_minion_and_run()
 
         # Clean up python env
