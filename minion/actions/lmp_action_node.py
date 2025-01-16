@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import json
 import xml.etree.ElementTree as ET
 import re
+import random
 
 import ell
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
@@ -35,7 +36,7 @@ class LmpActionNode(LLMActionNode):
             
         # 从 llm.config 获取配置
         api_params = {
-            "temperature": self.llm.config.temperature,
+            "temperature": self.llm.config.temperature + random.random() * 0.01,
             "model": self.llm.config.model,
         }
         
