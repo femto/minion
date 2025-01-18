@@ -36,7 +36,7 @@ class LmpActionNode(LLMActionNode):
             
         # 从 llm.config 获取配置
         api_params = {
-            "temperature": self.llm.config.temperature + random.random() * 0.01,
+            "temperature": self.llm.config.temperature + random.random() * 0.01, #add random to avoid prompt caching
             "model": self.llm.config.model,
         }
         

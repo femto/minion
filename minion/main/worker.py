@@ -622,7 +622,7 @@ class ModeratorMinion(Minion):
             return await self.execute_single()
 
     async def execute_ensemble(self):
-        if 'workers_config' not in self.input.execution_config:
+        if 'workers' not in self.input.execution_config:
             return await self.execute_single()
 
         # Get the result strategy
@@ -632,7 +632,7 @@ class ModeratorMinion(Minion):
         
         workers = []  # List to store actual worker instances
         
-        for worker_config in self.input.execution_config["workers_config"]:
+        for worker_config in self.input.execution_config["workers"]:
             minion_name = worker_config["name"]
             count = worker_config["count"]
             post_processing = worker_config.get("post_processing")
@@ -663,7 +663,7 @@ class ModeratorMinion(Minion):
 
         if self.input.execution_state.current_minion:
             # Resume from previous state, assume pre_processing already been done
-            if hasattr(self.input, 'type') and self.input.type == "ensemble":
+            if hasattr(self.input, 'execution_config') and self.input.execution_config['type'] == "ensemble":
                 await self.execute_ensemble()
             else:
                 await self.execute_single()
@@ -768,7 +768,7 @@ class RouteMinion(Minion):
         else:
             # 智能选择逻辑
             choose_template = Template(SMART_PROMPT_TEMPLATE)
-            filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
+            filtered_registry = {key: value for key, value in WORKER_MINIONS.items()}
             filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
             # 如果brain.llms中有route配置，则依次尝试每个LLM

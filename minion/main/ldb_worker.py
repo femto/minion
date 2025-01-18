@@ -191,7 +191,7 @@ if HAS_LDB:
                 entry=self.input.entry_point,
                 model=self.model,
                 messages=messages,
-                dataset_type=self.input.dataset,
+                dataset_type=self.input.dataset, #todo: this dataset type is just for prompt
                 level="block"
             )
             self.input.metadata["messages"] = messages
@@ -226,7 +226,7 @@ if HAS_LDB:
                     failed_tests=self.input.metadata["ldb_format_test"] ,
                     num_comps=1,
                     temperature=self.brain.llm.config.temperature,
-                    dataset_type=self.input.dataset
+                    dataset_type=self.input.dataset #todo: this dataset type is just for prompt
                 )
 
                 self.answer = answer
