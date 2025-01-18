@@ -38,5 +38,6 @@ astor
 graphviz
 #vllm
 astroid
+pysnooper
 #ldb dependencies
 #llmdebugger
