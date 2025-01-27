@@ -11,6 +11,6 @@
     }
   ],
   "result_strategy": {
-    "name": "majority_voting"
+    "name": "codium"
   }
 }
