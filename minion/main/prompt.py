@@ -2,7 +2,7 @@ NATIVE_PROBLEM_INSTRUCTION = """
 respond to the following query within the tags <final_answer></final_answer>.
 """
 COT_PROBLEM_INSTRUCTION = """
-Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion. Clearly express your final conclusion, ensuring that it is directly accessible and requires no further interpretation by presenting it explicitly within the tags <final_answer></final_answer>. Finally, include a verbalized confidence level for your conclusion (e.g., “Confidence: 60% / Medium”) to convey your level of certainty in the analysis and decision-making process.
+Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion. Clearly express your final conclusion, ensuring that it is directly accessible and requires no further interpretation by presenting it explicitly within the tags <final_answer></final_answer>. Finally, include a verbalized confidence level for your conclusion (e.g., "Confidence: 60% / Medium") to convey your level of certainty in the analysis and decision-making process.
 """
 
 ASK_PROMPT_JINJA = """
@@ -639,3 +639,24 @@ Please analyze the examples and provide reasoning about:
 
 Reasoning:
 """
+
+IMPROVE_CODE_PROMPT = """You are a code improvement expert. Your task is to improve the given code based on the test cases.
+
+Current code:
+{code}
+
+Test cases:
+{test_cases}
+
+AI-generated test cases:
+{ai_test_cases}
+
+Entry point function: {entry_point}
+
+Please improve the code to make it pass all test cases. The improved code should:
+1. Be more robust and handle edge cases
+2. Follow best practices and be well-structured
+3. Be efficient and maintainable
+4. Pass all test cases
+
+Return only the improved code without any explanations or comments."""
