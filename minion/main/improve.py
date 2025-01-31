@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.minion import Minion, register_improver_minion
-from minion.main.prompt import IMPROVE_CODE_PROMPT
+from minion.main.prompt import IMPROVE_CODE_PROMPT, IMPROVE_PROMPT
+from minion.utils.template import render_template_with_variables
 
 class ImproverMinion(Minion):
     """所有 improver minion 的基类"""
@@ -15,26 +16,26 @@ class ImproverMinion(Minion):
 
 @register_improver_minion(name="feedback")
 class FeedbackMinion(ImproverMinion):
+    """基于反馈进行通用内容改进的 Minion"""
     async def execute(self):
-        # 使用测试用例来改进代码
-        test_cases = self.worker.input.metadata.get("test_cases", [])
-        ai_test_cases = self.worker.input.metadata.get("ai_test_cases", [])
-        
+        """基于反馈进行通用内容改进的执行方法"""
         # 构建改进提示
-        prompt = IMPROVE_CODE_PROMPT.format(
-            code=self.worker.answer,
-            test_cases=test_cases,
-            ai_test_cases=ai_test_cases,
-            entry_point=self.worker.input.entry_point
+        prompt = render_template_with_variables(
+            template_str=IMPROVE_PROMPT,
+            input={
+                "answer": self.worker.input.answer, #todo, maybe stateful agent connections?
+                "feedback": self.worker.input.feedback,
+                **self.worker.input.__dict__  # 包含其他上下文信息
+            }
         )
         
-        # 使用 LLM 改进代码
+        # 使用 LLM 改进内容
         node = LmpActionNode(self.brain.llm)
-        improved_code = await node.execute(prompt)
+        improved_answer = await node.execute(prompt)
         
         # 更新 worker 的答案
-        self.worker.answer = improved_code
-        return improved_code
+        self.worker.answer = improved_answer
+        return improved_answer
 
 @register_improver_minion(name="reasoning")
 class ReasoningMinion(ImproverMinion):

@@ -55,7 +55,7 @@ from minion.main.prompt import (
 )
 from minion.main.symbol_table import Symbol
 from minion.main.task_graph import convert_tasks_to_graph
-from minion.utils.utils import most_similar_minion
+from minion.utils.utils import most_similar_minion, camel_case_to_snake_case
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import (
     MetaPlan,
@@ -746,7 +746,7 @@ class RouteMinion(Minion):
         if self.input.execution_state.chosen_minion:
             # 从上次状态恢复
             name = self.input.execution_state.chosen_minion
-            klass = MINION_REGISTRY.get(name, CotMinion)
+            klass = MINION_REGISTRY.get(camel_case_to_snake_case(name), CotMinion) #todo: tmp fix here, actually is other place's bug to store "CotMinion"
             return klass, name
         
         # 新的执行流程
