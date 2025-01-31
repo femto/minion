@@ -242,8 +242,8 @@ Here is the function to implement:
     )
     return answer
 
-#model = "gpt-4o-mini"
-model = "default"
+model = "gpt-4o"
+#model = "default"
 
 llm = create_llm_provider(config.models.get(model))
 cost_manager = CostManager()
@@ -253,6 +253,7 @@ async def main():
     validation_data = load_dataset("deepmind/code_contests", split='valid')
     test_data = load_dataset("deepmind/code_contests", split='test')
     validation_data = [validation_data[1]]
+    #validation_data = [validation_data[0]]
     correct, count, matched_ids, mismatched_ids = await evaluate_dataset(
         validation_data, run_filename=f"run_code_contests_{model}_hard.json", continue_process=True, concurrency_count=1
     )

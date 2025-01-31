@@ -34,6 +34,7 @@ class ImageDetail(str, Enum):
 class LLMConfig(BaseModel):
     api_type: str = "openai"
     api_key: str
+    api_version: Optional[str] = None
     # base_url: Optional[HttpUrl] = None
     base_url: Optional[str] = None
     model: str

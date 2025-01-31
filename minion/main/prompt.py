@@ -640,6 +640,26 @@ Please analyze the examples and provide reasoning about:
 Reasoning:
 """
 
+IMPROVE_PROMPT = f"""Given the following problem details:
+
+{ASK_PROMPT_JINJA}
+{ASK_ADDITIONAL_INFO_JINJA}
+
+Current answer:
+{{ input.answer }}
+
+Feedback for improvement:
+{{ input.feedback }}
+
+Based on the above feedback, please provide an improved answer. The improved answer should:
+1. Address all points mentioned in the feedback
+2. Maintain the strengths of the original answer
+3. Be clear, accurate, and well-structured
+4. Be complete and self-contained
+
+Return only the improved answer without any explanations or comments.
+"""
+
 IMPROVE_CODE_PROMPT = """You are a code improvement expert. Your task is to improve the given code based on the test cases.
 
 Current code:
