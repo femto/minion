@@ -243,6 +243,7 @@ Here is the function to implement:
     return answer
 
 model = "gpt-4o"
+#model = "claude"
 #model = "default"
 
 llm = create_llm_provider(config.models.get(model))
