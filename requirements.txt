@@ -13,6 +13,7 @@ jinja2
 intercode-bench
 rpyc
 mem0ai
+ollama
 embedchain>=0.1.120
 nltk
 matplotlib

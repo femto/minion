@@ -58,6 +58,7 @@ class Config(BaseModel):
     llm: LLMConfig
     models: Dict[str, LLMConfig]
     ell: Dict[str, Any] = Field(default_factory=dict)
+    mem0: Dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         populate_by_name = True
