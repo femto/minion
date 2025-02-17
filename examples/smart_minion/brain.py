@@ -17,7 +17,8 @@ from minion.providers import create_llm_provider
 
 async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
-    model = "default"
+    model = "gpt-4o"
+    model = "deepseek-r1"
     #model = "llama3.2"
     llm_config = config.models.get(model)
     
@@ -30,8 +31,9 @@ async def smart_brain():
         llm=llm,
         #llms={"route": [ "llama3.2","llama3.1"]}
     )
-    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
-    # print(obs)
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 1 3 4 6", route="python")
+    print(obs)
+
     current_file_dir = os.path.dirname(os.path.abspath(__file__))
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.1.json")
     obs, score, *_ = await brain.step(

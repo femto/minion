@@ -2,7 +2,7 @@ import importlib
 from typing import Type
 
 from minion.configs.config import LLMConfig
-from minion.providers.base_llm import BaseLLM
+from minion.providers.base_provider import BaseProvider
 
 
 class LLMRegistry:
@@ -21,7 +21,7 @@ class LLMRegistry:
 
         return decorator
 
-    def get_provider(self, api_type: str) -> Type[BaseLLM]:
+    def get_provider(self, api_type: str) -> Type[BaseProvider]:
         if api_type not in self.providers:
             # 尝试动态导入
             try:
@@ -40,6 +40,6 @@ class LLMRegistry:
 llm_registry = LLMRegistry()
 
 
-def create_llm_provider(config: LLMConfig) -> BaseLLM:
+def create_llm_provider(config: LLMConfig) -> BaseProvider:
     provider_cls = llm_registry.get_provider(config.api_type)
     return provider_cls(config)

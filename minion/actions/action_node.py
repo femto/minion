@@ -6,7 +6,7 @@ from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
 from minion.message_types import Message
 from minion.models.schemas import Answer
-from minion.providers import BaseLLM
+from minion.providers import BaseProvider
 from minion.utils.utils import extract_json
 
 
@@ -21,7 +21,7 @@ class ActionNode(ABC):
 
 class LLMActionNode(ActionNode):
     def __init__(self,
-                 llm: BaseLLM,
+                 llm: BaseProvider,
                  input_parser: Optional[callable] = None,
                  output_parser: Optional[callable] = None):
         self.llm = llm

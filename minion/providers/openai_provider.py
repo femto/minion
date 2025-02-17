@@ -6,13 +6,14 @@ from minion.configs.config import ContentType, ImageDetail, config
 from minion.const import MINION_ROOT
 from minion.logs import log_llm_stream
 from minion.message_types import ImageContent, ImageUtils, Message, MessageContent
-from minion.providers.base_llm import BaseLLM
+from minion.providers.base_provider import BaseProvider
+
 from minion.providers.cost import CostManager
 from minion.providers.llm_provider_registry import llm_registry
 
 
 @llm_registry.register("openai")
-class OpenAIProvider(BaseLLM):
+class OpenAIProvider(BaseProvider):
     def _setup(self) -> None:
         import openai
         # 创建客户端配置
@@ -23,6 +24,7 @@ class OpenAIProvider(BaseLLM):
         self.client_ell = openai.OpenAI(**client_kwargs)
         self.client = openai.AsyncOpenAI(**client_kwargs)
 
+    #or should we call _convert_messages
     def _prepare_messages(self, messages: List[Message] | Message | str) -> List[dict]:
         """准备发送给API的消息格式
         

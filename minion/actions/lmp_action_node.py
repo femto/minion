@@ -22,7 +22,7 @@ from minion.models.schemas import Answer  # Import the Answer model
 class LmpActionNode(LLMActionNode):
     def __init__(self, llm, input_parser=None, output_parser=None):
         super().__init__(llm, input_parser, output_parser)
-        ell.init(**config.ell, default_client=self.llm.client_ell)
+        #ell.init(**config.ell, default_client=self.llm.client_ell)
 
     @ell.complex(model="gpt-4o-mini")
     def ell_call(self, ret):
@@ -84,11 +84,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                 api_params['response_format'] = { "type": "text" }
 
             if isinstance(messages, str):
-                messages = [user(messages)]
+                messages = [Message(role="user", content=messages)]
             elif isinstance(messages, Message):
                 messages = [messages]
                 
-            messages.append(user(content=prompt))
+            messages.append(Message(role="user", content=prompt))
 
         response = await super().execute(messages, **api_params)
 
