@@ -225,6 +225,7 @@ async def solve_question(item):
 #model = "gpt-4o"
 #model = "claude"
 model = "deepseek-r1"
+#model = "phi-4"
 
 llm = create_llm_provider(config.models.get(model))
 cost_manager = CostManager()

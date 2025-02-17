@@ -70,6 +70,21 @@ from minion.utils.answer_extraction import extract_final_answer, extract_longest
 class WorkerMinion(Minion):
     pass
 
+class RawMinion(WorkerMinion):
+    """Raw minion that directly queries LLM without any prompt processing or modifications"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.input.instruction = ""
+
+    async def execute(self):
+        node = LmpActionNode(self.brain.llm)
+        response = await node.execute(self.input.query)
+
+        self.answer_raw = self.input.answer_raw = response
+        self.answer = self.input.answer = response
+        return self.answer
+
 @register_worker_minion
 class NativeMinion(WorkerMinion):
     """native minion, directly asks llm for answer"""
@@ -1002,22 +1017,6 @@ class OptillmMinion(WorkerMinion):
 
         self.answer = self.input.answer = response
         return self.answer
-
-class RawMinion(WorkerMinion):
-    """Raw minion that directly queries LLM without any prompt processing or modifications"""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.input.instruction = ""
-
-    async def execute(self):
-        node = LmpActionNode(self.brain.llm)
-        response = await node.execute(self.input.query)
-        
-        self.raw_answer = self.input.answer_raw = response
-        self.answer = self.input.answer = response
-        return self.answer
-
 
 
 
