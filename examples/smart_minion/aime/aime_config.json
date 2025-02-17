@@ -1,0 +1,14 @@
+{
+  "type": "ensemble",
+  "pre_processing": ["problem_reflect","example_reasoning"],
+  "workers": [
+    {
+      "name": "raw",
+      "count": 1,
+      "check": 1
+    }
+  ],
+  "result_strategy": {
+    "name": "majority_voting"
+  }
+}

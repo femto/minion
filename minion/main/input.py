@@ -77,7 +77,7 @@ class Input(BaseModel):
     answer: str = ""  # The final extracted/processed answer
     answer_raw: str = ""  # Raw answer including chain of thought
     answer_code: str = ""  # Answer in code format if applicable
-    answer_full: str = ""  # Complete output including all details
+    answer_full: str = ""  # Complete output including all details, or should we call it reasoning_content?
     feedback: str = ""  # Feedback for improvement
     error: str = ""  # error for improvement
     entry_point: str = "" #entry_point name of function for code generation
