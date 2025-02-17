@@ -42,3 +42,5 @@ astroid
 pysnooper
 #ldb dependencies
 #llmdebugger
+azure-identity
+azure-ai-inference

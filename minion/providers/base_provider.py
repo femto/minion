@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, List, Optional
+from typing import AsyncIterator, List, Optional, Any, Generator
 
 
 from minion.configs.config import LLMConfig, config
@@ -8,8 +8,10 @@ from minion.message_types import Message
 from minion.providers.cost import CostManager
 
 
-class BaseLLM(ABC):
-    def __init__(self, config: LLMConfig):
+class BaseProvider(ABC):
+    """Base class for all LLM providers"""
+    
+    def __init__(self, config: Any) -> None:
         self.config = config
         self.cost_manager = CostManager()
         self._setup_retry_config()
@@ -20,7 +22,7 @@ class BaseLLM(ABC):
 
     @abstractmethod
     def _setup(self) -> None:
-        """初始化具体的LLM客户端"""
+        """Setup the LLM provider with configuration"""
         pass
 
     def _setup_retry_config(self):
@@ -51,14 +53,12 @@ class BaseLLM(ABC):
 
     @abstractmethod
     async def generate(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
-        """生成回复"""
+        """Generate completion from messages"""
         pass
 
     @abstractmethod
-    async def generate_stream(
-        self, messages: List[Message], temperature: Optional[float] = None, **kwargs
-    ) -> AsyncIterator[str]:
-        """流式生成回复"""
+    async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Generator[str, None, str]:
+        """Generate streaming completion from messages"""
         pass
 
     def get_cost(self) -> CostManager:

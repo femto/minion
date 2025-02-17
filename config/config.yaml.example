@@ -21,7 +21,7 @@ models:
     api_type: "openai"
     base_url: "${DEFAULT_BASE_URL}"
     api_key: "${DEFAULT_API_KEY}"
-    model: "deepseek-chat"
+    model: "${DEFAULT_MODEL}"
     temperature: 0
   "gpt-4-0125":
     api_type: "openai"
@@ -33,6 +33,12 @@ models:
     base_url: "${CLAUDE_BASE_URL}"
     api_key: "${CLAUDE_API_KEY}"
     temperature: 0.7
+  "deepseek-r1":
+   api_type: "azure_inference"  # or azure / ollama / groq etc.
+   api_key: "YOUR_KEY"
+   base_url: "YOUR_URL"
+   model: "DeepSeek-R1"
+   temperature: 0.1
 ell:
   store: 'logs'
   autocommit:true

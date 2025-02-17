@@ -3,7 +3,8 @@ import warnings
 from typing import AsyncIterator, List, Optional
 
 from minion.message_types import ContentType, Message
-from minion.providers.base_llm import BaseLLM
+
+from minion.providers.base_provider import BaseProvider
 from minion.providers.llm_provider_registry import llm_registry
 
 with warnings.catch_warnings():
@@ -15,7 +16,7 @@ os.environ["LITELLM_LOG"] = "DEBUG"
 
 
 @llm_registry.register("litellm")
-class LiteLLMProvider(BaseLLM):
+class LiteLLMProvider(BaseProvider):
     def _setup(self) -> None:
         # 设置API密钥
         os.environ["OPENAI_API_KEY"] = self.config.api_key

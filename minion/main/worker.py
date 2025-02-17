@@ -465,7 +465,7 @@ Previous error:
                 logger.error(error)
                 continue  # try again?
             output, error = obs["output"], obs["error"]
-            self.answer = self.input.answer = output
+            self.answer = self.input.answer = output #answer is only output
             # print("#####OUTPUT#####")
             # print(output)
             print(f"###solution###:{self.answer}")
@@ -611,7 +611,7 @@ class ModeratorMinion(Minion):
             processed_answer = self.input.apply_post_processing(answer)
         else:
             processed_answer = answer
-
+        self.answer = processed_answer
         return worker, processed_answer
 
     async def choose_minion_and_run(self):
