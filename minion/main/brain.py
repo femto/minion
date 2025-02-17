@@ -119,7 +119,6 @@ Supporting navigation and spatial memory""",
         self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
 
         self.stats_storer = stats_storer
-        self.lmp_action_node = LmpActionNode(llm=self.llm)
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind
@@ -135,10 +134,14 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    async def step(self, input=None, query="", query_type="", **kwargs):
+    async def step(self, input=None, query="", query_type="", system_prompt: str = None, **kwargs):
         input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64
+        
+        # Set system prompt if provided
+        if system_prompt is not None:
+            input.system_prompt = system_prompt
 
         mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
@@ -172,7 +175,8 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
         filled_template = mind_template.render(minds=self.minds.values(), input=input)
 
         try:
-            result = await self.lmp_action_node.execute_answer(filled_template)
+            lmp_action_node = LmpActionNode(llm=self.llm)
+            result = await lmp_action_node.execute_answer(filled_template)
 
             # Ensure the result is a valid mind ID
             if result not in self.minds:
