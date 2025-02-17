@@ -29,14 +29,30 @@ class LmpActionNode(LLMActionNode):
         """You are a helpful assistant."""
         return ret
 
-    async def execute(self, messages: Union[str, Message, List[Message]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", system_prompt: Optional[str] = None, **kwargs) -> Any:
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
             
+        # Convert string/single message to list
+        if isinstance(messages, str):
+            messages = [Message(role="user", content=messages)]
+        elif isinstance(messages, Message):
+            messages = [messages]
+            
+        # Add system prompt with priority:
+        # 1. Explicit system message in messages list
+        # 2. system_prompt parameter
+        # 3. input.system_prompt
+        if not any(msg.role == "system" for msg in messages):
+            if system_prompt is not None:
+                messages.insert(0, Message(role="system", content=system_prompt))
+            elif hasattr(self, 'input') and self.input and self.input.system_prompt:
+                messages.insert(0, Message(role="system", content=self.input.system_prompt))
+            
         # 从 llm.config 获取配置
         api_params = {
-            "temperature": self.llm.config.temperature + random.random() * 0.01, #add random to avoid prompt caching
+            "temperature": self.llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
             "model": self.llm.config.model,
         }
         
@@ -83,11 +99,6 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                 )
                 api_params['response_format'] = { "type": "text" }
 
-            if isinstance(messages, str):
-                messages = [Message(role="user", content=messages)]
-            elif isinstance(messages, Message):
-                messages = [messages]
-                
             messages.append(Message(role="user", content=prompt))
 
         response = await super().execute(messages, **api_params)
