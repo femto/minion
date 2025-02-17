@@ -140,7 +140,7 @@ Supporting navigation and spatial memory""",
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64
 
-        mind_id = await self.choose_mind(input)
+        mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
             self.llm.config.temperature = 0.1
         elif mind_id == "right_mind":

@@ -137,6 +137,10 @@ class Input(BaseModel):
         default="",
         description="System prompt for LLM models"
     )
+    mind_id : str = Field(
+        default="",
+        description="mind if to choose, left_mind/right_mind/hippocampus_mind"
+    )
 
     def update_execution_state(self, **kwargs):
         """Update execution state with the provided key-value pairs.

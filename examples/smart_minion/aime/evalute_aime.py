@@ -218,6 +218,8 @@ async def solve_question(item):
 
     answer, score, *_ = await brain.step(
         query=item["problem"],
+        mind_id="left_mind", #deepseek r1 skips choose mind
+
         execution_config=load_execution_config(ensemble_logic_path),
     )
     return answer
