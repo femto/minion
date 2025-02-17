@@ -1,6 +1,5 @@
 {
   "type": "ensemble",
-  "pre_processing": ["problem_reflect","example_reasoning"],
   "workers": [
     {
       "name": "raw",

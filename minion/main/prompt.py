@@ -7,12 +7,19 @@ Let's approach this problem by systematically breaking it down into distinct, lo
 
 ASK_PROMPT_JINJA = """
 Current Problem:
+{%- if input.short_context %}
 context:
 {{input.short_context}}
+{%- endif %}
+{%- if input.instruction %}
 instruction:
 {{input.instruction}}
+{%- endif %}
+{%- if input.query_type %}
 query_type:
 {{input.query_type}}
+{%- endif %}
+
 query:
 {{input.query}}
 """
