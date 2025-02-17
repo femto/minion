@@ -31,7 +31,10 @@ async def smart_brain():
         llm=llm,
         #llms={"route": [ "llama3.2","llama3.1"]}
     )
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 1 3 4 6", route="python")
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 1 3 4 6", route="python")
+    # print(obs)
+
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2 3 5 12", route="python")
     print(obs)
 
     current_file_dir = os.path.dirname(os.path.abspath(__file__))
