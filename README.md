@@ -32,6 +32,7 @@ Minion has achieved impressive results on various benchmarks:
 - Game of 24: 100% success rate on the 20 most difficult problems
   (These were selected by running the TOT Game24 CSV from the most difficult backwards. The last problem had a 20.70% success rate, and the second to last had a 26.90% success rate.)
 - AIME 2024: 26% success rate (4 out of 15 tasks completed successfully)
+- Humaneval: 98.2% pass@1 rate using gpt-4o
 
 ## Minion Design
 
