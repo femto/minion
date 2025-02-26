@@ -28,10 +28,10 @@ class AzureProvider(OpenAIProvider):
 
     async def generate(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         # 移除 model 参数，因为 Azure 使用 deployment_name
-        kwargs.pop("model", None)
+        #kwargs.pop("model", None)
         return await super().generate(messages, temperature, **kwargs)
 
     async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         # 移除 model 参数，因为 Azure 使用 deployment_name
-        kwargs.pop("model", None)
+        #kwargs.pop("model", None)
         return await super().generate_stream(messages, temperature, **kwargs) 

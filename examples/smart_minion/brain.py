@@ -18,8 +18,8 @@ from minion.providers import create_llm_provider
 async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
     model = "gpt-4o"
-    model = "deepseek-r1"
-    model = "phi-4"
+    # model = "deepseek-r1"
+    # model = "phi-4"
     #model = "llama3.2"
     llm_config = config.models.get(model)
     
