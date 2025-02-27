@@ -57,17 +57,43 @@ async def main():
     order_memories = agent.get_all_memories(filter={"type": "order"})
     print("\nRetrieved Order Memories:")
     for memory in order_memories:
-        print(f"Memory ID: {memory.id}")
-        print(f"Content: {memory.messages[0]['content']}")
-        print(f"Metadata: {memory.metadata}")
+        # Handle memory as a dictionary
+        if isinstance(memory, dict):
+            print(f"Memory ID: {memory.get('id')}")
+            # Check if 'messages' exists and is a list with at least one item
+            if 'messages' in memory and isinstance(memory['messages'], list) and memory['messages']:
+                print(f"Content: {memory['messages'][0].get('content', 'No content')}")
+            elif 'memory' in memory:  # Some memory objects might have a 'memory' field instead
+                print(f"Content: {memory.get('memory', 'No content')}")
+            else:
+                print("Content: No content available")
+            print(f"Metadata: {memory.get('metadata', {})}")
+        else:
+            # Try to handle as an object with attributes (fallback)
+            try:
+                print(f"Memory ID: {memory.id}")
+                print(f"Content: {memory.messages[0]['content']}")
+                print(f"Metadata: {memory.metadata}")
+            except AttributeError as e:
+                print(f"Error accessing memory attributes: {e}")
+                print(f"Memory object: {memory}")
 
-    # Search memories semantically
+    # Search memories semantically (without relations)
     search_results = agent.search_memories(query="order delivery status", top_k=5)
-    print("\nSemantic Search Results:")
+    print("\nSemantic Search Results (without relations):")
     for result in search_results:
         # Handle the case where result might be a string
         if isinstance(result, str):
             print(f"Content: {result}")
+        elif isinstance(result, dict):
+            # Handle result as a dictionary
+            print(f"Score: {result.get('score', 'N/A')}")
+            if 'messages' in result and isinstance(result['messages'], list) and result['messages']:
+                print(f"Content: {result['messages'][0].get('content', 'No content')}")
+            elif 'memory' in result:
+                print(f"Content: {result.get('memory', 'No content')}")
+            else:
+                print("Content: No content available")
         else:
             # Try to access attributes if result is an object
             try:
@@ -75,12 +101,46 @@ async def main():
                 print(f"Content: {result.messages[0]['content']}")
             except AttributeError:
                 print(f"Result: {result}")
+    
+    # Search memories semantically (with relations)
+    search_with_relations = agent.search_memories(query="order delivery status", top_k=5, include_relations=True)
+    print("\nSemantic Search Results (with relations):")
+    if isinstance(search_with_relations, dict) and 'results' in search_with_relations:
+        # Print vector results
+        print("Vector Results:")
+        for result in search_with_relations.get('results', []):
+            if isinstance(result, dict):
+                print(f"  Memory: {result.get('memory', 'N/A')}")
+                print(f"  Metadata: {result.get('metadata', {})}")
+        
+        # Print graph relations if available
+        if 'relations' in search_with_relations:
+            print("\nGraph Relations:")
+            for relation in search_with_relations.get('relations', []):
+                if isinstance(relation, dict):
+                    print(f"  Relation: {relation}")
+    else:
+        # Handle case where relations are not available
+        print("Relations not available in the response or API version doesn't support relations.")
+        print(f"Response type: {type(search_with_relations)}")
+        if isinstance(search_with_relations, list):
+            print(f"Number of results: {len(search_with_relations)}")
 
     # Get conversation history
     conversation_history = agent.get_conversation_history()
     print("\nConversation History from Memory:")
     for message in conversation_history:
-        print(f"Role: {message['role']}, Content: {message['content']}")
+        # Handle different message formats
+        if isinstance(message, dict):
+            role = message.get('role', 'unknown')
+            content = message.get('content', 'No content')
+            print(f"Role: {role}, Content: {content}")
+        else:
+            # Try to handle as an object with attributes
+            try:
+                print(f"Role: {message.role}, Content: {message.content}")
+            except AttributeError:
+                print(f"Message format not recognized: {message}")
     
     print("\nTest completed successfully!")
 
