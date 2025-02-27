@@ -138,25 +138,47 @@ class BaseAgent:
             List[Memory]: 检索到的记忆列表
         """
         if self.brain and self.brain.mem:
-            memories = self.brain.mem.get_all(
+            response = self.brain.mem.get_all(
                 user_id=self.user_id,
                 agent_id=self.agent_id,
                 run_id=self.session_id
             )
             
+            # 处理返回的数据格式，提取results列表
+            memories = []
+            if isinstance(response, dict) and 'results' in response:
+                # 新的API格式 (v1.1)
+                memories = response['results']
+            elif isinstance(response, list):
+                # 旧的API格式
+                memories = response
+            else:
+                return []
+            
             # 如果提供了过滤条件，在Python中进行过滤
             if filter:
                 filtered_memories = []
                 for memory in memories:
-                    # 检查memory是否有metadata属性
-                    if not hasattr(memory, 'metadata'):
+                    # 检查memory是否有metadata属性或字段
+                    metadata = getattr(memory, 'metadata', None)
+                    if metadata is None and isinstance(memory, dict):
+                        metadata = memory.get('metadata')
+                    
+                    if metadata is None:
                         continue
                         
                     match = True
                     for key, value in filter.items():
-                        if memory.metadata.get(key) != value:
-                            match = False
-                            break
+                        # 处理metadata可能是属性或字典的情况
+                        if isinstance(metadata, dict):
+                            if metadata.get(key) != value:
+                                match = False
+                                break
+                        else:
+                            if getattr(metadata, key, None) != value:
+                                match = False
+                                break
+                    
                     if match:
                         filtered_memories.append(memory)
                 return filtered_memories
@@ -164,19 +186,21 @@ class BaseAgent:
             return memories
         return []
         
-    def search_memories(self, query: str, top_k: int = 5) -> List[Any]:
+    def search_memories(self, query: str, top_k: int = 5, include_relations: bool = False) -> Union[List[Any], Dict[str, Any]]:
         """
         语义搜索记忆
         Args:
             query: 搜索查询
             top_k: 返回结果数量
+            include_relations: 是否包含关系数据（仅在mem0 API v1.1中有效）
         Returns:
-            List[Memory]: 搜索结果列表
+            如果include_relations=False: List[Memory]: 搜索结果列表
+            如果include_relations=True: Dict[str, Any]: 包含'results'和'relations'的字典
         """
         if self.brain and self.brain.mem:
             try:
                 # 尝试使用top_k参数
-                return self.brain.mem.search(
+                response = self.brain.mem.search(
                     user_id=self.user_id,
                     agent_id=self.agent_id,
                     run_id=self.session_id,
@@ -186,7 +210,7 @@ class BaseAgent:
             except TypeError:
                 # 如果top_k参数不被接受，尝试使用limit参数
                 try:
-                    return self.brain.mem.search(
+                    response = self.brain.mem.search(
                         user_id=self.user_id,
                         agent_id=self.agent_id,
                         run_id=self.session_id,
@@ -195,29 +219,51 @@ class BaseAgent:
                     )
                 except TypeError:
                     # 如果limit参数也不被接受，只使用必需参数
-                    return self.brain.mem.search(
+                    response = self.brain.mem.search(
                         user_id=self.user_id,
                         agent_id=self.agent_id,
                         run_id=self.session_id,
                         query=query
                     )
+            
+            # 处理返回的数据格式
+            if isinstance(response, dict):
+                if include_relations and 'relations' in response:
+                    # 如果需要关系数据，直接返回完整响应
+                    return response
+                elif 'results' in response:
+                    # 否则只返回结果列表
+                    return response['results']
+            elif isinstance(response, list):
+                # 旧的API格式
+                return response
+                
         return []
         
-    # def get_memory_conversation_history(self, top_k: int = 10, order: str = "desc") -> List[Dict[str, str]]:
-    #     """
-    #     获取记忆中的对话历史
-    #     Args:
-    #         top_k: 返回的消息数量
-    #         order: 排序方式，"asc" 或 "desc"
-    #     Returns:
-    #         List[Dict[str, str]]: 对话历史列表
-    #     """
-    #     if self.brain and self.brain.mem:
-    #         return self.brain.mem.get_conversation_history(
-    #             user_id=self.user_id,
-    #             agent_id=self.agent_id,
-    #             run_id=self.session_id,
-    #             top_k=top_k,
-    #             order=order
-    #         )
-    #     return []
+    def get_conversation_history(self, top_k: int = 10, order: str = "desc") -> List[Dict[str, str]]:
+        """
+        获取记忆中的对话历史
+        Args:
+            top_k: 返回的消息数量
+            order: 排序方式，"asc" 或 "desc"
+        Returns:
+            List[Dict[str, str]]: 对话历史列表
+        """
+        if self.brain and self.brain.mem:
+            response = self.brain.mem.get_conversation_history(
+                user_id=self.user_id,
+                agent_id=self.agent_id,
+                run_id=self.session_id,
+                top_k=top_k,
+                order=order
+            )
+            
+            # 处理返回的数据格式
+            if isinstance(response, dict) and 'results' in response:
+                # 新的API格式 (v1.1)
+                return response['results']
+            elif isinstance(response, list):
+                # 旧的API格式
+                return response
+                
+        return []
