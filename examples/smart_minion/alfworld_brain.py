@@ -119,7 +119,7 @@ Respond with ONLY the exact command you want to execute.
 """
         
         # Ask the brain for the next action
-        brain_response, score, *_ = await brain.step(query=prompt)
+        brain_response, score, *_ = await brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
         cleaned_response = brain_response.strip()
@@ -296,7 +296,7 @@ Respond with ONLY the exact command you want to execute.
 """
         
         # Ask the brain for the next action
-        brain_response, score, *_ = await brain.step(query=prompt)
+        brain_response, score, *_ = await brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
         cleaned_response = brain_response.strip()
