@@ -149,7 +149,7 @@ For example, if the task is "find a mug and put it in the microwave", the plan m
 Your plan should be specific to the current task and observation. Return ONLY the numbered steps, one per line.
 """
         
-        plan_response, score, *_ = await self.brain.step(query=prompt)
+        plan_response, score, *_ = await self.brain.step(query=prompt, check=False)
         
         # Extract the plan steps
         plan_steps = []
@@ -231,7 +231,7 @@ Respond with ONLY the exact command you want to execute.
 """
         
         # Ask the brain for the next action
-        brain_response, score, *_ = await self.brain.step(query=prompt)
+        brain_response, score, *_ = await self.brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
         cleaned_response = brain_response.strip()
@@ -318,7 +318,7 @@ Based on the current observation and history, has the current plan step been com
 Answer with ONLY "NEXT" if we should move to the next step, or "STAY" if we should remain at the current step.
 """
         
-        progress_response, score, *_ = await self.brain.step(query=prompt)
+        progress_response, score, *_ = await self.brain.step(query=prompt, check=False)
         
         # Check if we should move to the next step
         if "NEXT" in progress_response.upper():
