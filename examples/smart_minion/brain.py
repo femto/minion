@@ -49,21 +49,21 @@ async def smart_brain():
     # print(obs)
 
     # 从 HumanEval/88 提取的测试用例
-    test_data = {
-        "task_id": "HumanEval/88",
-        "prompt": "\ndef sort_array(array):\n    \"\"\"\n    Given an array of non-negative integers, return a copy of the given array after sorting,\n    you will sort the given array in ascending order if the sum( first index value, last index value) is odd,\n    or sort it in descending order if the sum( first index value, last index value) is even.\n\n    Note:\n    * don't change the given array.\n\n    Examples:\n    * sort_array([]) => []\n    * sort_array([5]) => [5]\n    * sort_array([2, 4, 3, 0, 1, 5]) => [0, 1, 2, 3, 4, 5]\n    * sort_array([2, 4, 3, 0, 1, 5, 6]) => [6, 5, 4, 3, 2, 1, 0]\n    \"\"\"\n",
-        "entry_point": "sort_array",
-        "test": ["assert candidate([]) == []", 
-                "assert candidate([5]) == [5]", 
-                "assert candidate([2, 4, 3, 0, 1, 5]) == [0, 1, 2, 3, 4, 5]",
-                "assert candidate([2, 4, 3, 0, 1, 5, 6]) == [6, 5, 4, 3, 2, 1, 0]"]
-    }
-
+    # test_data = {
+    #     "task_id": "HumanEval/88",
+    #     "prompt": "\ndef sort_array(array):\n    \"\"\"\n    Given an array of non-negative integers, return a copy of the given array after sorting,\n    you will sort the given array in ascending order if the sum( first index value, last index value) is odd,\n    or sort it in descending order if the sum( first index value, last index value) is even.\n\n    Note:\n    * don't change the given array.\n\n    Examples:\n    * sort_array([]) => []\n    * sort_array([5]) => [5]\n    * sort_array([2, 4, 3, 0, 1, 5]) => [0, 1, 2, 3, 4, 5]\n    * sort_array([2, 4, 3, 0, 1, 5, 6]) => [6, 5, 4, 3, 2, 1, 0]\n    \"\"\"\n",
+    #     "entry_point": "sort_array",
+    #     "test": ["assert candidate([]) == []",
+    #             "assert candidate([5]) == [5]",
+    #             "assert candidate([2, 4, 3, 0, 1, 5]) == [0, 1, 2, 3, 4, 5]",
+    #             "assert candidate([2, 4, 3, 0, 1, 5, 6]) == [6, 5, 4, 3, 2, 1, 0]"]
+    # }
+    #
     # obs, score, *_ = await brain.step(
-    #     query="hipa",
+    #     query=test_data["prompt"],
+    #     route="python",
     #     post_processing="extract_python",
     #     entry_point=test_data["entry_point"],
-    #     route="native",
     #     check=10,
     #     check_route="ldb_check",
     #     dataset="HumanEval",
@@ -72,16 +72,14 @@ async def smart_brain():
     # print(obs)
 
     obs, score, *_ = await brain.step(
-        query=test_data["prompt"],
-        route="python",
-        post_processing="extract_python",
-        entry_point=test_data["entry_point"],
-        check=10,
-        check_route="ldb_check",
-        dataset="HumanEval",
-        metadata={"test_cases": test_data["test"]}  # 添加测试用例到 metadata
+        query="""You are in the middle of a room. Looking quickly around you, you see a bathtubbasin 1, a cabinet 2, a cabinet 1, a countertop 1, a garbagecan 1, a handtowelholder 1, a sinkbasin 1, a toilet 1, a toiletpaperhanger 1, and a towelholder 1.
+
+Your task is to: find two soapbottle and put them in cabinet.
+""",
+check=False
     )
     print(obs)
+
 
 if __name__ == "__main__":
     asyncio.run(smart_brain())
