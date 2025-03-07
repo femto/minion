@@ -45,22 +45,30 @@ class ALFWorldPlannerBrain:
         self.plan = []
         self.task = ""
         self.current_step = 0
+        self.env_type = "AlfredTWEnv"  # Default environment type
         
-    async def initialize(self) -> bool:
+    async def initialize(self, env_type: Optional[str] = None) -> bool:
         """
         Initialize the ALFWorld environment.
         
+        Args:
+            env_type: Type of environment to initialize (AlfredTWEnv, AlfredThorEnv, or AlfredHybrid)
+            
         Returns:
             bool: True if initialization was successful, False otherwise
         """
+        # Set environment type if provided
+        if env_type:
+            self.env_type = env_type
+            
         # Check if server is running
         if not self.client.check_server():
             print("ALFWorld server is not running. Please start the server first.")
             return False
             
         # Initialize environment
-        print("Initializing ALFWorld environment...")
-        result = self.client.initialize()
+        print(f"Initializing ALFWorld environment with type: {self.env_type}...")
+        result = self.client.initialize(env_type=self.env_type)
         print(f"Initialization result: {result.get('status', 'unknown')}")
         
         if result.get("status") != "success":
@@ -340,10 +348,6 @@ Answer with ONLY "NEXT" if we should move to the next step, or "STAY" if we shou
         Returns:
             Dict: A summary of the game
         """
-        # Initialize the environment
-        if not await self.initialize():
-            return {"status": "failed", "reason": "initialization_failed"}
-            
         # Reset the environment
         initial_state = await self.reset()
         
@@ -496,7 +500,7 @@ Answer with ONLY "NEXT" if we should move to the next step, or "STAY" if we shou
         print(f"Results saved to {filename}")
         return filename
 
-async def run_planner_brain(custom_task: Optional[str] = None, max_steps: int = 50, save_results: bool = True):
+async def run_planner_brain(custom_task: Optional[str] = None, max_steps: int = 50, save_results: bool = True, env_type: str = "AlfredTWEnv"):
     """
     Run the ALFWorld Planner Brain.
     
@@ -504,8 +508,10 @@ async def run_planner_brain(custom_task: Optional[str] = None, max_steps: int = 
         custom_task: A custom task to use instead of the one from the environment
         max_steps: Maximum number of steps to take
         save_results: Whether to save the results to a file
+        env_type: Type of environment to initialize (AlfredTWEnv, AlfredThorEnv, or AlfredHybrid)
     """
     planner_brain = ALFWorldPlannerBrain()
+    await planner_brain.initialize(env_type=env_type)
     results = await planner_brain.run(custom_task, max_steps)
     
     if save_results:
