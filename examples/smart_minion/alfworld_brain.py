@@ -17,11 +17,14 @@ from minion.providers import create_llm_provider
 
 from alfworld_client import ALFWorldClient
 
-async def alfworld_brain():
+async def alfworld_brain(env_type="AlfredTWEnv"):
     """
     Create a brain that can play ALFWorld games.
     This function initializes the ALFWorld client, connects to the server,
     and uses the Brain class to make decisions.
+    
+    Args:
+        env_type: Type of environment to initialize (AlfredTWEnv, AlfredThorEnv, or AlfredHybrid)
     """
     # Initialize the LLM model
     model = "gpt-4o"  # You can change this to any model you have configured
@@ -47,8 +50,8 @@ async def alfworld_brain():
         return
 
     # Initialize environment
-    print("Initializing ALFWorld environment...")
-    result = client.initialize()
+    print(f"Initializing ALFWorld environment with type: {env_type}...")
+    result = client.initialize(env_type=env_type)
     print(f"Initialization result: {result.get('status', 'unknown')}")
 
     # Reset environment
@@ -194,12 +197,13 @@ Respond with ONLY the exact command you want to execute.
             print(f"  Action: {h['action']}")
         print()
 
-async def run_alfworld_with_custom_task(task_description):
+async def run_alfworld_with_custom_task(task_description, env_type="AlfredTWEnv"):
     """
     Run the ALFWorld brain with a custom task description.
     
     Args:
         task_description: A string describing the task to complete
+        env_type: Type of environment to initialize (AlfredTWEnv, AlfredThorEnv, or AlfredHybrid)
     """
     # Initialize the LLM model
     model = "gpt-4o"  # You can change this to any model you have configured
@@ -225,8 +229,8 @@ async def run_alfworld_with_custom_task(task_description):
         return
 
     # Initialize environment
-    print("Initializing ALFWorld environment...")
-    result = client.initialize()
+    print(f"Initializing ALFWorld environment with type: {env_type}...")
+    result = client.initialize(env_type=env_type)
     print(f"Initialization result: {result.get('status', 'unknown')}")
 
     # Reset environment

@@ -19,6 +19,9 @@ async def main():
     parser.add_argument('--planner', action='store_true', help='Use the planner brain instead of the basic brain.')
     parser.add_argument('--max-steps', type=int, default=50, help='Maximum number of steps to take.')
     parser.add_argument('--save-results', action='store_true', help='Save the results to a file.')
+    parser.add_argument('--env-type', type=str, default='AlfredTWEnv', 
+                        choices=['AlfredTWEnv', 'AlfredThorEnv', 'AlfredHybrid'],
+                        help='Type of environment to use: AlfredTWEnv, AlfredThorEnv, or AlfredHybrid.')
     
     args = parser.parse_args()
     
@@ -37,15 +40,16 @@ async def main():
         await run_planner_brain(
             custom_task=args.task,
             max_steps=args.max_steps,
-            save_results=args.save_results
+            save_results=args.save_results,
+            env_type=args.env_type
         )
     else:
         if args.task:
             print(f"Running with custom task: {args.task}")
-            await run_alfworld_with_custom_task(args.task)
+            await run_alfworld_with_custom_task(args.task, env_type=args.env_type)
         else:
             print("Running with default task from the environment")
-            await alfworld_brain()
+            await alfworld_brain(env_type=args.env_type)
 
 if __name__ == "__main__":
     asyncio.run(main()) 
