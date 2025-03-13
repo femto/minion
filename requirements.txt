@@ -33,7 +33,7 @@ aiofiles
 jsonlines==3.1.0
 datasets
 astunparse
-transformers
+#transformers
 accelerate
 astor
 graphviz
