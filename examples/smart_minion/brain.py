@@ -38,7 +38,10 @@ async def smart_brain():
         llm=llm,
         #llms={"route": [ "llama3.2","llama3.1"]}
     )
-    obs, score, *_ = await brain.step(query="what's the solution 234*568")
+    # obs, score, *_ = await brain.step(query="what's the solution 234*568")
+    # print(obs)
+
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
     print(obs)
 
     obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")

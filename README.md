@@ -124,7 +124,7 @@ docker build -t intercode-python -f docker/python.Dockerfile .
 brain = Brain() #default will use docker python env
 ```
 
-#### Using Brain with rpyc env
+#### Using Brain with rpyc env(If you don't want to use docker)
 ```
 python docker/utils/python_server.py --port 3007
 ```

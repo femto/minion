@@ -44,3 +44,6 @@ pysnooper
 #llmdebugger
 azure-identity
 azure-ai-inference
+
+#smolagents
+#browser-use
