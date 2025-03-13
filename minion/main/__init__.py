@@ -9,6 +9,7 @@ from minion.main.worker import (
     MultiPlanMinion,
     OptillmMinion,
 )
+from minion.main.local_python_env import LocalPythonEnv
 
 try:
     from minion.main.ldb_worker import LDBMinion
@@ -26,6 +27,7 @@ __all__ = [
     'MathPlanMinion',
     'MultiPlanMinion',
     'OptillmMinion',
+    'LocalPythonEnv',
 ]
 
 if HAS_LDB:

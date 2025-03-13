@@ -11,6 +11,7 @@ import os
 import yaml
 
 from minion import config
+from minion.main import LocalPythonEnv
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
@@ -32,16 +33,17 @@ async def smart_brain():
     llm = create_llm_provider(llm_config)
 
     python_env_config = {"port": 3007}
-
+    #python_env = RpycPythonEnv(port=python_env_config.get("port", 3007))
+    python_env = LocalPythonEnv(verbose=False)
     brain = Brain(
-        python_env=RpycPythonEnv(port=python_env_config.get("port", 3007)), 
+        python_env=python_env,
         llm=llm,
         #llms={"route": [ "llama3.2","llama3.1"]}
     )
-    # obs, score, *_ = await brain.step(query="what's the solution 234*568")
+    # obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python")
     # print(obs)
 
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8",check=False)
     print(obs)
 
     obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
