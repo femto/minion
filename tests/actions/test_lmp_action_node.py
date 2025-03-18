@@ -1,8 +1,8 @@
 import pytest
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.worker import IdentifyMinion
-from minion.message_types import Message
-from minion.messages import user, system
+from minion.schema.message_types import Message
+from minion.schema.messages import user, system
 from minion.models.schemas import Answer
 from minion.providers import create_llm_provider
 from minion.configs.config import config

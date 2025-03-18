@@ -131,6 +131,10 @@ python docker/utils/python_server.py --port 3007
 ```
 brain = Brain(python_env=RpycPythonEnv(port=3007))
 ```
+#### Using Brain with Local Python env(be aware of this method, since llm can generate bad code)
+```
+brain = Brain(python_env=LocalPythonEnv(verbose=False))
+```
 #### Troubleshooting with docker python env
 #### stop existing container if necessary
 ```

@@ -1,7 +1,7 @@
-# minion/messages.py
-from ell.types import AnyContent, Message
+# Compatibility module - imports from the new location
+# This file is deprecated, please use minion.schema.messages instead
 
-from typing import Union, List
+from minion.schema.messages import system, user, assistant, Message
 
 __all__ = ['system', 'user', 'assistant', 'Message']
 

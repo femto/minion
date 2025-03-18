@@ -2,7 +2,7 @@ import os
 import warnings
 from typing import AsyncIterator, List, Optional
 
-from minion.message_types import ContentType, Message
+from minion.schema.message_types import ContentType, Message
 
 from minion.providers.base_provider import BaseProvider
 from minion.providers.llm_provider_registry import llm_registry

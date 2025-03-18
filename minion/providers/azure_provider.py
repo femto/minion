@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from minion.providers.openai_provider import OpenAIProvider
 from minion.providers.llm_provider_registry import llm_registry
-from minion.message_types import Message
+from minion.schema.message_types import Message
 
 
 @llm_registry.register("azure")
@@ -23,7 +23,7 @@ class AzureProvider(OpenAIProvider):
         else:
             client_kwargs["azure_deployment"] = self.config.model
             
-        self.client_ell = openai.AzureOpenAI(**client_kwargs)
+        self.client_sync = openai.AzureOpenAI(**client_kwargs)
         self.client = openai.AsyncAzureOpenAI(**client_kwargs)
 
     async def generate(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
@@ -34,4 +34,9 @@ class AzureProvider(OpenAIProvider):
     async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         # 移除 model 参数，因为 Azure 使用 deployment_name
         #kwargs.pop("model", None)
-        return await super().generate_stream(messages, temperature, **kwargs) 
+        return await super().generate_stream(messages, temperature, **kwargs)
+        
+    def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
+        # 移除 model 参数，因为 Azure 使用 deployment_name
+        #kwargs.pop("model", None)
+        return super().generate_sync(messages, temperature, **kwargs) 

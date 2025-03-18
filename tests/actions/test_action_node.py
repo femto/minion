@@ -2,7 +2,7 @@ import pytest
 import json
 from minion.actions.action_node import LLMActionNode
 from minion.providers.base_llm import BaseLLM
-from minion.message_types import Message
+from minion.schema.message_types import Message
 from typing import List, Optional, AsyncIterator, Type
 from pydantic import BaseModel
 
