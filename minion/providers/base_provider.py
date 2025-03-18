@@ -4,7 +4,7 @@ from typing import AsyncIterator, List, Optional, Any, Generator
 
 from minion.configs.config import LLMConfig, config
 from minion.logs import logger
-from minion.message_types import Message
+from minion.schema.message_types import Message
 from minion.providers.cost import CostManager
 
 

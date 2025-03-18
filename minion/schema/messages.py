@@ -1,9 +1,9 @@
 # Compatibility module - imports from the new location
 # This file is deprecated, please use minion.schema.messages instead
+from typing import Union, List
 
-from minion.schema.messages import system, user, assistant, Message
-
-__all__ = ['system', 'user', 'assistant', 'Message']
+from ell import Message
+from ell.types import AnyContent
 
 
 def system(content: Union[AnyContent, List[AnyContent]]) -> Message:
