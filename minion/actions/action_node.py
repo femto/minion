@@ -4,7 +4,7 @@ import json
 
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
-from minion.message_types import Message
+from minion.schema.message_types import Message
 from minion.models.schemas import Answer
 from minion.providers import BaseProvider
 from minion.utils.utils import extract_json

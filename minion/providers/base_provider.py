@@ -15,6 +15,7 @@ class BaseProvider(ABC):
         self.config = config
         self.cost_manager = CostManager()
         self._setup_retry_config()
+        self.generate_sync = self.retry_decorator(self.generate_sync)
         self.generate = self.retry_decorator(self.generate)
         self.generate_stream = self.retry_decorator(self.generate_stream)
         self._setup()
@@ -59,6 +60,11 @@ class BaseProvider(ABC):
     @abstractmethod
     async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Generator[str, None, str]:
         """Generate streaming completion from messages"""
+        pass
+
+    @abstractmethod
+    def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
+        """Generate completion from messages synchronously"""
         pass
 
     def get_cost(self) -> CostManager:

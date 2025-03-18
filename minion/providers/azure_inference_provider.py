@@ -6,7 +6,7 @@ from azure.core.credentials import AzureKeyCredential
 from minion.logs import log_llm_stream
 from minion.providers.base_provider import BaseProvider
 from minion.providers.llm_provider_registry import llm_registry
-from minion.message_types import Message, MessageContent, ContentType
+from minion.schema.message_types import Message, MessageContent, ContentType
 from minion.providers.openai_provider import OpenAIProvider
 
 
@@ -22,6 +22,9 @@ class AzureInferenceProvider(OpenAIProvider):
             endpoint=endpoint,
             credential=AzureKeyCredential(key)
         )
+        # Also use the same client for sync operations since Azure Inference SDK
+        # doesn't have separate sync/async clients
+        self.client_sync = self.client
 
     # def _prepare_messages(self, messages: List[Message] | Message | str) -> List[Any]:
     #     """Convert minion Message objects to Azure Inference SDK message objects"""
@@ -108,3 +111,26 @@ class AzureInferenceProvider(OpenAIProvider):
                     log_llm_stream(chunk_message)
                 #yield chunk_message
         return full_content
+        
+    def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
+        """Generate completion synchronously using Azure Inference SDK"""
+        azure_messages = self._prepare_messages(messages)
+        
+        # Prepare parameters
+        params = {
+            "messages": azure_messages,
+            "model": self.model,
+            "temperature": temperature if temperature is not None else 0.6,
+            "max_tokens": kwargs.get("max_tokens", 1000)
+        }
+        
+        # Add optional parameters if provided
+        if "top_p" in kwargs:
+            params["top_p"] = kwargs["top_p"]
+        if "frequency_penalty" in kwargs:
+            params["frequency_penalty"] = kwargs["frequency_penalty"]
+        if "presence_penalty" in kwargs:
+            params["presence_penalty"] = kwargs["presence_penalty"]
+        
+        response = self.client_sync.complete(**params)
+        return response.messages[0].content

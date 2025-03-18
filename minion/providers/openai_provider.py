@@ -5,7 +5,7 @@ from openai.types import CompletionUsage
 from minion.configs.config import ContentType, ImageDetail, config
 from minion.const import MINION_ROOT
 from minion.logs import log_llm_stream
-from minion.message_types import ImageContent, ImageUtils, Message, MessageContent
+from minion.schema.message_types import ImageContent, ImageUtils, Message, MessageContent
 from minion.providers.base_provider import BaseProvider
 
 from minion.providers.cost import CostManager
@@ -21,7 +21,7 @@ class OpenAIProvider(BaseProvider):
         if self.config.base_url:
             client_kwargs["base_url"] = str(self.config.base_url)
         
-        self.client_ell = openai.OpenAI(**client_kwargs)
+        self.client_sync = openai.OpenAI(**client_kwargs)
         self.client = openai.AsyncOpenAI(**client_kwargs)
 
     #or should we call _convert_messages
@@ -92,7 +92,6 @@ class OpenAIProvider(BaseProvider):
     async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         prepared_messages = self._prepare_messages(messages)
         model = self.config.model
-
         stream = await self.client.chat.completions.create(
             model=model,
             messages=prepared_messages,
@@ -131,6 +130,24 @@ class OpenAIProvider(BaseProvider):
         self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
 
         return full_content
+
+    def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
+        """Generate completion from messages synchronously"""
+        prepared_messages = self._prepare_messages(messages)
+        model = self.config.model
+
+        response = self.client_sync.chat.completions.create(
+            model=model, 
+            messages=prepared_messages, 
+            temperature=temperature or self.config.temperature, 
+            **kwargs
+        )
+
+        completion_tokens = response.usage.completion_tokens
+        prompt_tokens, _ = CostManager.calculate(prepared_messages, completion_tokens, model)
+        self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
+
+        return response.choices[0].message.content
 
 
 # 使用示例

@@ -9,9 +9,9 @@ import ell
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
 from minion.configs.config import config
-from minion.message_types import Message
+from minion.schema.message_types import Message
 from minion.actions.action_node import LLMActionNode
-from minion.messages import user
+from minion.schema.messages import user
 from minion.providers import create_llm_provider
 from minion.models.schemas import Answer  # Import the Answer model
 
@@ -22,7 +22,7 @@ from minion.models.schemas import Answer  # Import the Answer model
 class LmpActionNode(LLMActionNode):
     def __init__(self, llm, input_parser=None, output_parser=None):
         super().__init__(llm, input_parser, output_parser)
-        #ell.init(**config.ell, default_client=self.llm.client_ell)
+        #ell.init(**config.ell, default_client=self.llm.client_sync)
 
     @ell.complex(model="gpt-4o-mini")
     def ell_call(self, ret):

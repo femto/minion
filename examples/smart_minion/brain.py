@@ -25,6 +25,7 @@ async def smart_brain():
     # 使用从 minion/__init__.py 导入的 config 对象
     model = "gpt-4o"
     #model = "gpt-4o-mini"
+    #model = "gemini-2.0-flash-exp"
     # model = "deepseek-r1"
     # model = "phi-4"
     #model = "llama3.2"
@@ -43,7 +44,10 @@ async def smart_brain():
     # obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python")
     # print(obs)
 
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8",check=False)
+    obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
+    print(obs)
+
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
     print(obs)
 
     obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")

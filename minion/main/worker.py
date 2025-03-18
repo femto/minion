@@ -993,7 +993,7 @@ class OptillmMinion(WorkerMinion):
                 approaches[0], 
                 self.input.system_prompt, 
                 self.input.query, 
-                self.brain.llm.client_ell, 
+                self.brain.llm.client_sync, 
                 self.brain.llm.config.model
             )
         elif operation == 'AND':
@@ -1001,7 +1001,7 @@ class OptillmMinion(WorkerMinion):
                 approaches,
                 self.input.system_prompt,
                 self.input.query,
-                self.brain.llm.client_ell,
+                self.brain.llm.client_sync,
                 self.brain.llm.config.model
             )
         elif operation == 'OR':
@@ -1009,7 +1009,7 @@ class OptillmMinion(WorkerMinion):
                 approaches,
                 self.input.system_prompt,
                 self.input.query,
-                self.brain.llm.client_ell,
+                self.brain.llm.client_sync,
                 self.brain.llm.config.model
             )
         else:
