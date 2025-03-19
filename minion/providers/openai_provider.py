@@ -39,8 +39,11 @@ class OpenAIProvider(BaseProvider):
         
         prepared_messages = []
         for msg in messages:
+            prepared_msg = {"role": msg.role}
+            
+            # 处理消息内容
             if isinstance(msg.content, str):
-                prepared_messages.append({"role": msg.role, "content": msg.content})
+                prepared_msg["content"] = msg.content
             elif isinstance(msg.content, list):
                 # 处理content为列表的情况
                 content = []
@@ -56,11 +59,11 @@ class OpenAIProvider(BaseProvider):
                                 "image_url": {"url": item.image.data, "detail": item.image.detail},
                             }
                             content.append(image_data)
-                prepared_messages.append({"role": msg.role, "content": content})
+                prepared_msg["content"] = content
             else:
                 # 处理现有的 MessageContent 情况
                 if msg.content.type == ContentType.TEXT:
-                    prepared_messages.append({"role": msg.role, "content": msg.content.text})
+                    prepared_msg["content"] = msg.content.text
                 else:
                     # 处理包含图像的消息
                     content = []
@@ -72,7 +75,27 @@ class OpenAIProvider(BaseProvider):
                             "image_url": {"url": msg.content.image.data, "detail": msg.content.image.detail},
                         }
                         content.append(image_data)
-                    prepared_messages.append({"role": msg.role, "content": content})
+                    prepared_msg["content"] = content
+            
+            # 确保function或tool消息包含name字段
+            if msg.role in ["function", "tool"]:
+                if hasattr(msg, "name") and msg.name:
+                    prepared_msg["name"] = msg.name
+                else:
+                    # 如果缺少name，添加一个默认值避免API错误
+                    prepared_msg["name"] = "function_call"
+                    print(f"Warning: Adding missing 'name' field to '{msg.role}' message")
+            
+            # 处理tool_calls字段
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                prepared_msg["tool_calls"] = msg.tool_calls
+            
+            # 处理tool_call_id字段
+            if hasattr(msg, "tool_call_id") and msg.tool_call_id:
+                prepared_msg["tool_call_id"] = msg.tool_call_id
+                
+            prepared_messages.append(prepared_msg)
+            
         return prepared_messages
 
     async def generate(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
