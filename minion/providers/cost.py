@@ -27,6 +27,14 @@ class CostManager(BaseModel):
         self.total_prompt_tokens += prompt_tokens
         self.total_completion_tokens += completion_tokens
 
+    def reset(self):
+        """重置所有成本指标为零"""
+        self.total_cost = 0.0
+        self.total_prompt_cost = 0.0
+        self.total_completion_cost = 0.0
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+
     @staticmethod
     def calculate(messages: List[dict], completion_tokens: int, model: str) -> tuple[int, int]:
         """计算API调用的token数量"""

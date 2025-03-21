@@ -151,7 +151,13 @@ class OpenAIProvider(BaseProvider):
         prompt_tokens, _ = CostManager.calculate(prepared_messages, completion_tokens, model)
         self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
 
-        return response.choices[0].message.content
+        # 处理可能的工具调用
+        if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+            # 如果是工具调用，返回工具调用信息
+            return response.choices[0].message.tool_calls
+        
+        # 正常返回内容
+        return response.choices[0].message.content or ""
 
     async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         prepared_messages = self._prepare_messages(messages)
@@ -173,33 +179,94 @@ class OpenAIProvider(BaseProvider):
 
         completion_tokens = 0
         full_content = ""
+        tool_calls_chunks = []
+        
         async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content is not None:
-                finish_reason = (
-                    chunk.choices[0].finish_reason if chunk.choices and hasattr(chunk.choices[0],
-                                                                                "finish_reason") else None
-                )
-                if finish_reason:
-                    if hasattr(chunk, "usage") and chunk.usage is not None:
-                        # Some services have usage as an attribute of the chunk, such as Fireworks
-                        if isinstance(chunk.usage, CompletionUsage):
-                            usage = chunk.usage
-                        else:
-                            usage = CompletionUsage(**chunk.usage)
-                    elif hasattr(chunk.choices[0], "usage"):
-                        # The usage of some services is an attribute of chunk.choices[0], such as Moonshot
-                        usage = CompletionUsage(**chunk.choices[0].usage)
-                    # elif "openrouter.ai" in self.config.base_url:
-                    #     # due to it get token cost from api
-                    #     usage = await get_openrouter_tokens(chunk)
-                completion_tokens += 1
-                chunk_message = chunk.choices[0].delta.content
-                full_content += chunk_message
-                log_llm_stream(chunk_message)
+            if chunk.choices:
+                # 检查是否有工具调用
+                if hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
+                    # 处理工具调用流
+                    tool_calls_chunks.append(chunk.choices[0].delta.tool_calls)
+                    completion_tokens += 1
+                    log_llm_stream(f"[Tool Call Chunk]: {chunk.choices[0].delta.tool_calls}")
+                
+                # 处理常规内容
+                elif chunk.choices[0].delta.content is not None:
+                    finish_reason = (
+                        chunk.choices[0].finish_reason if chunk.choices and hasattr(chunk.choices[0],
+                                                                                    "finish_reason") else None
+                    )
+                    if finish_reason:
+                        if hasattr(chunk, "usage") and chunk.usage is not None:
+                            # Some services have usage as an attribute of the chunk, such as Fireworks
+                            if isinstance(chunk.usage, CompletionUsage):
+                                usage = chunk.usage
+                            else:
+                                usage = CompletionUsage(**chunk.usage)
+                        elif hasattr(chunk.choices[0], "usage"):
+                            # The usage of some services is an attribute of chunk.choices[0], such as Moonshot
+                            usage = CompletionUsage(**chunk.choices[0].usage)
+                        # elif "openrouter.ai" in self.config.base_url:
+                        #     # due to it get token cost from api
+                        #     usage = await get_openrouter_tokens(chunk)
+                    completion_tokens += 1
+                    chunk_message = chunk.choices[0].delta.content
+                    full_content += chunk_message
+                    log_llm_stream(chunk_message)
 
         prompt_tokens, _ = CostManager.calculate(prepared_messages, completion_tokens, model)
         self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
 
+        # 如果有工具调用，返回工具调用
+        if tool_calls_chunks:
+            # 构建完整的工具调用对象
+            # 定义一个简单的类来表示工具调用
+            class ToolCall:
+                def __init__(self, id, type, function):
+                    self.id = id
+                    self.type = type
+                    self.function = function
+            
+            class Function:
+                def __init__(self, name, arguments):
+                    self.name = name
+                    self.arguments = arguments
+            
+            # 根据工具调用的ID对工具调用进行分组和合并
+            tool_call_dict = {}
+            
+            for chunk_list in tool_calls_chunks:
+                for tool_chunk in chunk_list:
+                    id = tool_chunk.id
+                    if id not in tool_call_dict:
+                        tool_call_dict[id] = {
+                            "id": id,
+                            "type": "function",
+                            "function": {"name": "", "arguments": ""}
+                        }
+                    
+                    if hasattr(tool_chunk.function, 'name') and tool_chunk.function.name:
+                        tool_call_dict[id]["function"]["name"] = tool_chunk.function.name
+                    
+                    if hasattr(tool_chunk.function, 'arguments') and tool_chunk.function.arguments:
+                        tool_call_dict[id]["function"]["arguments"] += tool_chunk.function.arguments
+            
+            # 将合并后的工具调用转换为我们自定义的ToolCall对象
+            result_tool_calls = []
+            for id, tc_data in tool_call_dict.items():
+                function = Function(
+                    name=tc_data["function"]["name"],
+                    arguments=tc_data["function"]["arguments"]
+                )
+                tool_call = ToolCall(
+                    id=id,
+                    type=tc_data["type"],
+                    function=function
+                )
+                result_tool_calls.append(tool_call)
+            
+            return result_tool_calls
+            
         return full_content
 
     def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
@@ -224,7 +291,13 @@ class OpenAIProvider(BaseProvider):
         prompt_tokens, _ = CostManager.calculate(prepared_messages, completion_tokens, model)
         self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
 
-        return response.choices[0].message.content
+        # 处理可能的工具调用
+        if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+            # 如果是工具调用，返回工具调用信息
+            return response.choices[0].message.tool_calls
+            
+        # 正常返回内容
+        return response.choices[0].message.content or ""
 
 
 # 使用示例
