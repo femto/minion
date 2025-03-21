@@ -19,7 +19,15 @@ class ContentBlock(BaseModel):
 class FunctionDefinition(BaseModel):
     """Function definition for a tool call."""
     name: str = Field(..., description="函数名称")
-    arguments: str = Field("", description="函数的JSON格式参数")
+    description: str = Field(..., description="函数描述")
+    parameters: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {},
+            "required": []
+        },
+        description="函数的参数定义，符合JSON Schema格式"
+    )
 
 class ToolCall(BaseModel):
     """Tool call object that follows OpenAI's format."""

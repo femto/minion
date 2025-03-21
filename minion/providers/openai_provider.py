@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from openai.types import CompletionUsage
 
@@ -98,10 +98,51 @@ class OpenAIProvider(BaseProvider):
             
         return prepared_messages
 
+    def _prepare_tools(self, tools: List[Dict]) -> List[Dict]:
+        """
+        将工具格式转换为OpenAI API所需的格式
+        
+        Args:
+            tools: 原始工具列表
+            
+        Returns:
+            List[Dict]: 格式化后的工具列表
+        """
+        if not tools:
+            return None
+            
+        prepared_tools = []
+        for tool in tools:
+            # 如果已经是OpenAI格式（包含type和function字段），则直接使用
+            if 'type' in tool and 'function' in tool:
+                prepared_tools.append(tool)
+            else:
+                # 如果是minion格式（没有type和function嵌套），则转换为OpenAI格式
+                function_data = {}
+                # 提取工具的基本信息
+                for key in ["name", "description", "parameters"]:
+                    if key in tool:
+                        function_data[key] = tool[key]
+                
+                # 确保有必要的字段
+                if "name" in function_data and "description" in function_data:
+                    prepared_tools.append({
+                        "type": "function",
+                        "function": function_data
+                    })
+        
+        return prepared_tools if prepared_tools else None
+
     async def generate(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         prepared_messages = self._prepare_messages(messages)
         model = self.config.model
-
+        
+        # 处理tools参数
+        if 'tools' in kwargs:
+            prepared_tools = self._prepare_tools(kwargs.pop('tools'))
+            if prepared_tools:
+                kwargs['tools'] = prepared_tools
+        
         response = await self.client.chat.completions.create(
             model=model, messages=prepared_messages, temperature=temperature or self.config.temperature, **kwargs
         )
@@ -115,6 +156,13 @@ class OpenAIProvider(BaseProvider):
     async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         prepared_messages = self._prepare_messages(messages)
         model = self.config.model
+        
+        # 处理tools参数
+        if 'tools' in kwargs:
+            prepared_tools = self._prepare_tools(kwargs.pop('tools'))
+            if prepared_tools:
+                kwargs['tools'] = prepared_tools
+        
         stream = await self.client.chat.completions.create(
             model=model,
             messages=prepared_messages,
@@ -158,6 +206,12 @@ class OpenAIProvider(BaseProvider):
         """Generate completion from messages synchronously"""
         prepared_messages = self._prepare_messages(messages)
         model = self.config.model
+
+        # 处理tools参数
+        if 'tools' in kwargs:
+            prepared_tools = self._prepare_tools(kwargs.pop('tools'))
+            if prepared_tools:
+                kwargs['tools'] = prepared_tools
 
         response = self.client_sync.chat.completions.create(
             model=model, 
