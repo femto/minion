@@ -19,21 +19,90 @@ class ContentBlock(BaseModel):
 class FunctionDefinition(BaseModel):
     """Function definition for a tool call."""
     name: str = Field(..., description="函数名称")
-    description: str = Field(..., description="函数描述")
-    parameters: Dict[str, Any] = Field(
-        default_factory=lambda: {
-            "type": "object",
-            "properties": {},
-            "required": []
-        },
-        description="函数的参数定义，符合JSON Schema格式"
+    description: Optional[str] = Field(None, description="函数描述")
+    parameters: Optional[Dict[str, Any]] = Field(None, description="函数的参数定义，符合JSON Schema格式")
+    arguments: Optional[Union[str, Dict[str, Any]]] = Field(None, description="函数调用的参数")
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FunctionDefinition":
+        """Create a FunctionDefinition from a dictionary."""
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected dict, got {type(data)}")
+        
+        # Extract known fields
+        name = data.get("name")
+        if not name:
+            raise ValueError("Function definition must have a name")
+            
+        description = data.get("description")
+        parameters = data.get("parameters")
+        arguments = data.get("arguments")
+        
+        # If arguments is a string, try to parse it as JSON
+        if isinstance(arguments, str):
+            try:
+                import json
+                arguments = json.loads(arguments)
+            except:
+                # Keep as string if parsing fails
+                pass
+                
+        return cls(
+            name=name,
+            description=description,
+            parameters=parameters,
+            arguments=arguments
     )
 
 class ToolCall(BaseModel):
     """Tool call object that follows OpenAI's format."""
-    id: str = Field(..., description="工具调用的唯一标识")
+    id: Optional[str] = Field(None, description="工具调用的唯一标识")
     type: Literal["function"] = Field("function", description="工具调用类型，目前仅支持function")
-    function: FunctionDefinition = Field(..., description="函数定义")
+    function: Union[FunctionDefinition, Dict[str, Any]] = Field(..., description="函数定义")
+    
+    @field_validator("function")
+    @classmethod
+    def validate_function(cls, v):
+        """Ensure function is a valid FunctionDefinition."""
+        if isinstance(v, dict):
+            try:
+                return FunctionDefinition.from_dict(v)
+            except Exception as e:
+                print(f"Error converting function dict to FunctionDefinition: {e}")
+                # Fall back to keeping the dict as is
+                return v
+        return v
+
+    def dict(self, *args, **kwargs):
+        """Convert to dictionary with proper nesting."""
+        try:
+            result = super().dict(*args, **kwargs)
+            # Ensure id is present
+            if not result.get("id"):
+                result["id"] = f"call_{id(self)}"
+            return result
+        except Exception as e:
+            print(f"Error in ToolCall.dict: {e}")
+            # Fallback manual conversion
+            func_data = {}
+            if isinstance(self.function, FunctionDefinition):
+                func_data = {
+                    "name": self.function.name
+                }
+                if self.function.description:
+                    func_data["description"] = self.function.description
+                if self.function.parameters:
+                    func_data["parameters"] = self.function.parameters
+                if self.function.arguments:
+                    func_data["arguments"] = self.function.arguments
+            elif isinstance(self.function, dict):
+                func_data = self.function
+                
+            return {
+                "id": self.id or f"call_{id(self)}",
+                "type": self.type,
+                "function": func_data
+            }
 
 class ToolResult(BaseModel):
     """Result from a tool call."""
@@ -99,6 +168,8 @@ class Message(BaseModel):
     @field_validator("content")
     @classmethod
     def validate_content_type(cls, v):
+        if v is None:
+            return MessageContent(type=ContentType.TEXT, text="")
         if isinstance(v, str):
             return MessageContent(type=ContentType.TEXT, text=v)
         return v
@@ -118,11 +189,111 @@ class Message(BaseModel):
         if role in ["function", "tool"] and not v:
             raise ValueError(f"name is required when role is {role}")
         return v
+    
+    @field_validator("tool_calls")
+    @classmethod
+    def validate_tool_calls(cls, v, info):
+        """Ensure tool_calls is properly formatted."""
+        if v is None:
+            return v
+        
+        role = info.data.get("role")
+        if role != "assistant":
+            return None
+            
+        # Convert each tool call to proper ToolCall objects
+        result = []
+        for tool_call in v:
+            try:
+                if isinstance(tool_call, ToolCall):
+                    result.append(tool_call)
+                elif isinstance(tool_call, dict):
+                    # Ensure id is present
+                    if "id" not in tool_call:
+                        tool_call["id"] = f"call_{len(result)}"
+                        
+                    # Ensure function is properly formatted
+                    if "function" in tool_call:
+                        # Handle case where function is a dict-like object but not a proper dict
+                        func = tool_call["function"]
+                        if not isinstance(func, dict) and hasattr(func, "__getitem__") and hasattr(func, "get"):
+                            # Convert to proper dict
+                            tool_call["function"] = {k: func[k] for k in func if k != "__dict__"}
+                        
+                        # Convert function arguments from string to dict if needed
+                        elif isinstance(func, dict) and "arguments" in func and isinstance(func["arguments"], str):
+                            try:
+                                import json
+                                func["arguments"] = json.loads(func["arguments"])
+                            except Exception as e:
+                                print(f"Failed to parse arguments JSON: {e}")
+                    
+                    # Now create a ToolCall with the processed dict
+                    try:
+                        result.append(ToolCall(**tool_call))
+                    except Exception as e:
+                        print(f"Error creating ToolCall from dict: {e}, input: {tool_call}")
+                        # Fallback: construct manually with minimal required fields
+                        if "function" in tool_call and isinstance(tool_call["function"], dict):
+                            func_dict = tool_call["function"]
+                            if "name" in func_dict:
+                                function_def = FunctionDefinition(
+                                    name=func_dict["name"],
+                                    description=func_dict.get("description"),
+                                    arguments=func_dict.get("arguments")
+                                )
+                                tc = ToolCall(
+                                    id=tool_call.get("id", f"call_{len(result)}"),
+                                    type=tool_call.get("type", "function"),
+                                    function=function_def
+                                )
+                                result.append(tc)
+            except Exception as e:
+                print(f"Error processing tool call: {e}, input: {tool_call}")
+                    
+        return result if result else None
 
     def model_dump_json(self, **kwargs) -> str:
         """Convert to JSON string with proper formatting for API requests."""
         data = self.model_dump(exclude_none=True, **kwargs)
         return json.dumps(data)
+    
+    def model_dump(self, **kwargs) -> dict:
+        """Convert to dictionary with proper formatting for API requests."""
+        result = {}
+        
+        # Always include role and content
+        result["role"] = self.role
+        
+        # Format content based on type
+        if isinstance(self.content, MessageContent):
+            if self.content.text is not None:
+                result["content"] = self.content.text
+            else:
+                result["content"] = ""
+        else:
+            result["content"] = str(self.content)
+            
+        # Include tool-related fields if present
+        if self.name is not None:
+            result["name"] = self.name
+            
+        if self.tool_call_id is not None:
+            result["tool_call_id"] = self.tool_call_id
+            
+        if self.tool_calls:
+            result["tool_calls"] = [
+                tc.dict() if hasattr(tc, "dict") else tc
+                for tc in self.tool_calls
+            ]
+            
+        # Apply any exclude options
+        exclude = kwargs.get("exclude", set())
+        for key in exclude:
+            if key in result:
+                del result[key]
+                
+        return result
     
     @classmethod
     def tool_call(cls, tool_calls: List[ToolCall]) -> "Message":
@@ -137,8 +308,17 @@ class Message(BaseModel):
     def function_response(cls, name: str, content: str, tool_call_id: Optional[str] = None) -> "Message":
         """Create a function response message."""
         return cls(
-            role="function",
+            role="tool",
             name=name,
+            content=content,
+            tool_call_id=tool_call_id
+        )
+        
+    @classmethod
+    def tool_response(cls, tool_call_id: str, content: str) -> "Message":
+        """Create a tool response message."""
+        return cls(
+            role="tool",
             content=content,
             tool_call_id=tool_call_id
         )
