@@ -1,0 +1,51 @@
+Trace:
+(12):     result = 0
+(13):     for num in numbers:
+(14):         if num % 2 == 0:
+(13):     for num in numbers:
+(14):         if num % 2 == 0:
+(15):             result += num
+(13):     for num in numbers:
+(14):         if num % 2 == 0:
+(13):     for num in numbers:
+(14):         if num % 2 == 0:
+Value Profile Program:
+from typing import *
+import math
+from heapq import *
+import itertools
+import re
+import typing
+import heapq
+_str=str
+import re
+def process_numbers(numbers):
+    __var_list = vars();print(f'Value_After:10|' + '|'.join([(x + '=' + _str(__var_list[x])) for x in __var_list if not x.startswith('__')]));
+    """Process a list of numbers and return sum of even numbers"""
+    result = 0
+    __var_list = vars();print(f'Value_After:12|' + '|'.join([(x + '=' + _str(__var_list[x])) for x in __var_list if not x.startswith('__')]));
+    for num in numbers:
+        __var_list = vars();print(f'Value_After:13|' + '|'.join([(x + '=' + _str(__var_list[x])) for x in __var_list if not x.startswith('__')]));
+        if num % 2 == 0:
+            __var_list = vars();print(f'Value_After:14|' + '|'.join([(x + '=' + _str(__var_list[x])) for x in __var_list if not x.startswith('__')]));
+            result += num
+            __var_list = vars();print(f'Value_After:15|' + '|'.join([(x + '=' + _str(__var_list[x])) for x in __var_list if not x.startswith('__')]));
+    _ret = result
+    __var_list = vars();print(f'Value_After:16|' + '|'.join([(x + '=' + _str(__var_list[x])) for x in __var_list if not x.startswith('__')])); return _ret
+
+
+result = process_numbers([1, 2, 3, 4])
+result 
+
+Value Profile Output:
+Value_After:10|numbers=[1, 2, 3, 4]
+Value_After:12|numbers=[1, 2, 3, 4]|result=0
+Value_After:13|numbers=[1, 2, 3, 4]|result=0|num=1
+Value_After:13|numbers=[1, 2, 3, 4]|result=0|num=2
+Value_After:14|numbers=[1, 2, 3, 4]|result=0|num=2
+Value_After:15|numbers=[1, 2, 3, 4]|result=2|num=2
+Value_After:13|numbers=[1, 2, 3, 4]|result=2|num=3
+Value_After:13|numbers=[1, 2, 3, 4]|result=2|num=4
+Value_After:14|numbers=[1, 2, 3, 4]|result=2|num=4
+Value_After:15|numbers=[1, 2, 3, 4]|result=6|num=4
+Value_After:16|numbers=[1, 2, 3, 4]|result=6|num=4|_ret=6

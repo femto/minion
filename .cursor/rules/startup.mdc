@@ -1,0 +1,10 @@
+---
+description: 需要起的资源
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+- 需要起docker qdrant
+- You can @ files here
+- You can use markdown but dont have to

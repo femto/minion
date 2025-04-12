@@ -32,22 +32,22 @@ async def smart_brain():
     llm_config = config.models.get(model)
 
 
-    
+
     llm = create_llm_provider(llm_config)
 
     python_env_config = {"port": 3007}
-    #python_env = RpycPythonEnv(port=python_env_config.get("port", 3007))
-    python_env = LocalPythonEnv(verbose=False)
+    python_env = RpycPythonEnv(port=python_env_config.get("port", 3007))
+    #python_env = LocalPythonEnv(verbose=False)
     brain = Brain(
         python_env=python_env,
         llm=llm,
-        #llms={"route": [ "llama3.2","llama3.1"]}
+        llms={"route": [llm]}
     )
     # obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python")
     # print(obs)
 
-    obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
-    print(obs)
+    # obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
+    # print(obs)
 
     obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
     print(obs)
