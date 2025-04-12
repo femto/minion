@@ -169,8 +169,11 @@ class Minion(metaclass=SubclassHookMeta):
         return answer
 
     async def execute(self):
+        from jinja2 import Template
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(ASK_PROMPT_JINJA.format(input=self.input))
+        template = Template(ASK_PROMPT_JINJA)
+        prompt = template.render(input=self.input)
+        response = await node.execute(prompt)
         self.answer = self.input.answer = response
         return self.answer
 
@@ -178,16 +181,16 @@ class Minion(metaclass=SubclassHookMeta):
         # 获取改进路由
         route_name = getattr(self.input, 'improve_route', 'feedback')
         improver_cls = ImproveRoute.get_route(route_name)
-        
+
         if improver_cls:
             improver = improver_cls(
-                input=self.input, 
+                input=self.input,
                 brain=self.brain,
                 worker=self
             )
             self.answer = await improver.execute()
             return self.answer
-        
+
         # fallback
         self.answer = await self.execute()
         return self.answer

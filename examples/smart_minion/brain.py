@@ -41,13 +41,13 @@ async def smart_brain():
     brain = Brain(
         python_env=python_env,
         llm=llm,
-        llms={"route": [llm]}
+
     )
     # obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python")
     # print(obs)
 
-    # obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
-    # print(obs)
+    obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
+    print(obs)
 
     obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
     print(obs)
