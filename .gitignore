@@ -97,3 +97,6 @@ config.yaml
 logdir
 
 qdrant_storage
+
+# Run result files
+run_*.json
