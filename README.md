@@ -40,7 +40,7 @@ Minion supports processing various benchmarks through configurable workflows. Yo
 - `examples/smart_minion/gsm8k/`: Math word problem solving
 - `examples/smart_minion/code_contests/`: Code competition problem solving
 
-### Configuration-based Workflow
+#### Configuration-based Workflow
 
 Each benchmark can be configured using a JSON configuration file that defines the processing pipeline. For example, `examples/smart_minion/code_contests/code_contests_config.json` demonstrates an ensemble approach:
 
