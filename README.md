@@ -58,7 +58,7 @@ Each benchmark can be configured using a JSON configuration file that defines th
     }
   ],
   "result_strategy": {
-    "name": "codium"
+    "name": "majority_voting"
   }
 }
 ```
