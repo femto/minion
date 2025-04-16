@@ -34,6 +34,43 @@ Minion has achieved impressive results on various benchmarks:
 - AIME 2024: 26% success rate (4 out of 15 tasks completed successfully)
 - Humaneval: 98.2% pass@1 rate using gpt-4o
 
+## InProgress
+
+Minion supports processing various benchmarks through configurable workflows. You can find examples in:
+- `examples/smart_minion/gsm8k/`: Math word problem solving
+- `examples/smart_minion/code_contests/`: Code competition problem solving
+
+### Configuration-based Workflow
+
+Each benchmark can be configured using a JSON configuration file that defines the processing pipeline. For example, `examples/smart_minion/code_contests/code_contests_config.json` demonstrates an ensemble approach:
+
+```json
+{
+  "type": "ensemble",
+  "pre_processing": ["problem_reflect", "example_reasoning"],
+  "workers": [
+    {
+      "name": "python",
+      "count": 3,
+      "check": 1,
+      "check_route": "codium_check",
+      "post_processing": "extract_python"
+    }
+  ],
+  "result_strategy": {
+    "name": "codium"
+  }
+}
+```
+
+This configuration allows you to define:
+- Pre-processing steps for problem analysis
+- Multiple worker configurations for ensemble solutions
+- Verification and post-processing steps
+- Result aggregation strategies
+
+You can create similar configurations for your own benchmarks by following these examples.
+
 ## Minion Design
 
 The core logic of Minion is implemented in `examples/smart_minion/brain.py`. You can experiment with different examples by modifying the code, as various scenarios are commented out for easy testing.
