@@ -1,8 +1,12 @@
 loguru
 python-dotenv
 litellm
-black
 tenacity
+rpyc
+aiofiles
+colorama
+
+black
 pytest
 pytest-asyncio
 
@@ -11,7 +15,6 @@ tree_sitter_python
 
 jinja2
 intercode-bench
-rpyc
 mem0ai
 ollama
 #embedchain>=0.1.120
@@ -27,7 +30,6 @@ antlr4-python3-runtime
 
 ell-ai
 optillm
-aiofiles
 colorama
 
 #ldb dependencies

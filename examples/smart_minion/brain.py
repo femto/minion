@@ -23,7 +23,9 @@ async def smart_brain():
     current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 使用从 minion/__init__.py 导入的 config 对象
-    model = "gpt-4o"
+    #model = "gpt-4o"
+    model = "o4-mini"
+    #model = "claude"
     #model = "gpt-4o-mini"
     #model = "gemini-2.0-flash-exp"
     # model = "deepseek-r1"
@@ -43,29 +45,39 @@ async def smart_brain():
         llm=llm,
 
     )
+    obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
+                                      ,route="raw",check=False)
+    print(obs)
+    3
     # obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python")
     # print(obs)
 
-    obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
-    print(obs)
+    # obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
+    # print(obs)
 
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
-    print(obs)
-
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
-    print(obs)
-
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2 5 11 8")
-    print(obs)
-
-    obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
-    print(obs)
+    # obs, score, *_ = await brain.step(query="生成一张可爱的人工智慧图片", check=False)
+    # print(obs)
+    # obs, score, *_ = await brain.step(query="复刻一个电商网站",route="plan")
+    # print(obs)
+    #
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
+    # print(obs)
+    #
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
+    # print(obs)
+    #
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2 5 11 8")
+    # print(obs)
+    #
+    # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
+    # print(obs)
 
     obs, score, *_ = await brain.step(
         query="Write a 500000 characters novel named 'Reborn in Skyrim'. "
               "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
               "I will tip you $100,000 if you write a good novel."
-              "Since the novel is very long, you may need to divide it into subtasks."
+              "Since the novel is very long, you may need to divide it into subtasks.",
+        route="plan"
     )
     print(obs)
 

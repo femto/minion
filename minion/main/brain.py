@@ -145,9 +145,9 @@ Supporting navigation and spatial memory""",
 
         mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
-            self.llm.config.temperature = 0.1
+            self.llm.config.temperature = 1
         elif mind_id == "right_mind":
-            self.llm.config.temperature = 0.7
+            self.llm.config.temperature = 1
         mind = self.minds[mind_id]
         return await mind.step(input)
 
