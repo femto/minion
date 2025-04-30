@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "minion-agent-x"
+name = "minionx"
 version = "0.1.1"
 authors = [
     {name = "femto", email = "femtowin@gmail.com"},
