@@ -24,7 +24,8 @@ async def smart_brain():
 
     # 使用从 minion/__init__.py 导入的 config 对象
     #model = "gpt-4o"
-    model = "o4-mini"
+    model = "gpt-4.1"
+    #model = "o4-mini"
     #model = "claude"
     #model = "gpt-4o-mini"
     #model = "gemini-2.0-flash-exp"

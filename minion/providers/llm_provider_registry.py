@@ -15,6 +15,7 @@ class LLMRegistry:
         return cls._instance
 
     def register(self, api_type: str):
+
         def decorator(cls):
             self.providers[api_type] = f"{cls.__module__}.{cls.__name__}"
             return cls

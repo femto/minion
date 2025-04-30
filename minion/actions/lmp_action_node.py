@@ -24,11 +24,6 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    @ell.complex(model="gpt-4o-mini")
-    def ell_call(self, ret):
-        """You are a helpful assistant."""
-        return ret
-
     async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", system_prompt: Optional[str] = None, **kwargs) -> Any:
         # 添加 input_parser 处理
         if self.input_parser:
