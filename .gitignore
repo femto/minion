@@ -100,3 +100,6 @@ qdrant_storage
 
 # Run result files
 run_*.json
+
+#LLMDebug trace files
+tracing_log
