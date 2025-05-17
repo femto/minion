@@ -8,7 +8,8 @@
 
 import uuid
 from enum import Enum
-from typing import Any, Dict, Optional, Union, Callable
+from typing import Any, Dict, Optional, Union, Callable, List
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -54,21 +55,31 @@ class ExecutionState(BaseModel):
 
 
 class Input(BaseModel):
+    """输入数据模型"""
+    
+    query: str = ""  # 查询内容
+    query_type: str = ""  # 查询类型
+    query_id: Optional[Any] = None  # 查询ID
+    query_time: datetime = Field(default_factory=datetime.utcnow)  # 查询时间
+    system_prompt: Optional[str] = None  # 系统提示
+    mind_id: Optional[str] = None  # 心智ID
+    images: Optional[Any] = None  # 图像
+    tools: List[Any] = Field(default_factory=list)  # 工具列表
+    user_id: Optional[str] = None  # 用户ID
+    
+    class Config:
+        arbitrary_types_allowed = True
+
     # Basic fields
     long_context: str = Field(default="")  # Full context of the input
     short_context: str = ""  # Summarized/abstracted version of context
 
-    query: str = ""  # The actual query or question
-    query_type: str = ""  # Type of query: generate/solve/execute
     query_sub_type: str = ""  # Specific sub-category of the query
-    images: Optional[Union[str, list[str]]] = None  # Image data if any
-
     guidance: str = ""  # Additional guidance for processing
     constraint: str = ""  # Constraints or requirements
     instruction: str = ""  # Step-by-step instructions
 
     cache_plan: str = None
-    system_prompt: str = ""
     task: Any = None
     symbols: Dict[str, Any] = Field(default_factory=dict)
     task_check: bool = False
@@ -106,7 +117,6 @@ class Input(BaseModel):
     # Metadata
     dataset: str = ""  # Source dataset identifier
     dataset_description: str = ""  # Description of the dataset
-    query_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  # Unique query identifier
     run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))  # Unique execution identifier
 
     # Processing state
@@ -130,16 +140,6 @@ class Input(BaseModel):
     save_state: bool = Field(
         default=False,
         description="Whether to save state during execution"
-    )
-
-    # 添加system_prompt字段
-    system_prompt: str = Field(
-        default="",
-        description="System prompt for LLM models"
-    )
-    mind_id : str = Field(
-        default="",
-        description="mind if to choose, left_mind/right_mind/hippocampus_mind"
     )
 
     def update_execution_state(self, **kwargs):

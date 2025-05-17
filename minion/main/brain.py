@@ -44,6 +44,7 @@ class Brain:
         llms={},
         python_env=None,
         stats_storer=None,
+        tools=None,  # 新增: 支持工具集
     ):
         self.id = id or uuid.uuid4()
         self.minds = {}
@@ -115,10 +116,19 @@ Supporting navigation and spatial memory""",
                 # Assume it's already a provider instance
                 self.llms[key] = value
 
+        # 设置工具集
+        self.tools = tools or []
+        
         image_name = "intercode-python"
         self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
 
         self.stats_storer = stats_storer
+
+    def add_tool(self, tool):
+        """
+        添加工具到Brain
+        """
+        self.tools.append(tool)
 
     def add_mind(self, mind):
         self.minds[mind.id] = mind
@@ -134,21 +144,29 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    async def step(self, input=None, query="", query_type="", system_prompt: str = None, **kwargs):
+    async def step(self, input=None, query="", query_type="", system_prompt: str = None, tools=None, **kwargs):
+        # 处理传入的tools
+        current_tools = tools if tools is not None else self.tools
+        
+        # 创建Input
         input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64
         
-        # Set system prompt if provided
+        # 设置工具和系统提示
+        input.tools = current_tools
         if system_prompt is not None:
             input.system_prompt = system_prompt
 
+        # 选择心智
         mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
             self.llm.config.temperature = 1
         elif mind_id == "right_mind":
             self.llm.config.temperature = 1
         mind = self.minds[mind_id]
+        
+        # 执行步骤
         return await mind.step(input)
 
     def cleanup_python_env(self, input):
