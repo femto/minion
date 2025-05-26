@@ -10,6 +10,7 @@ from minion.main.python_env import PythonEnv
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
 from minion.tools.base_tool import BaseTool
+from minion.tools.default_tools import FinalAnswerTool
 
 
 class SimpleTool(BaseTool):
@@ -45,6 +46,7 @@ async def demo():
     
     # 创建工具
     tool = SimpleTool()
+    final_answer_tool = FinalAnswerTool()
     
     print("=== brain.step使用tools演示 ===")
     
@@ -52,7 +54,7 @@ async def demo():
     print("\n1. 在step方法中传入tools:")
     response, *_ = await brain.step(
         query="请计算 2 + 3 * 4 的结果",
-        tools=[tool],  # 在这里传入工具
+        tools=[tool,final_answer_tool],  # 在这里传入工具
         route="native",
         check=False
     )
@@ -63,7 +65,7 @@ async def demo():
     brain_with_tools = Brain(
         python_env=python_env,
         llm=llm,
-        tools=[tool]  # 初始化时传入工具
+        tools=[tool,final_answer_tool]  # 初始化时传入工具
     )
     
     response, *_ = await brain_with_tools.step(
@@ -77,7 +79,8 @@ async def demo():
     print("\n3. 使用add_tool动态添加:")
     brain_dynamic = Brain(python_env=python_env, llm=llm)
     brain_dynamic.add_tool(tool)  # 动态添加工具
-    
+    brain_dynamic.add_tool(final_answer_tool)  # 动态添加工具
+
     response, *_ = await brain_dynamic.step(
         query="请计算 100 / 4 的结果",
         check=False,

@@ -15,7 +15,7 @@ from minion.main import LocalPythonEnv
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
-
+from minion.tools.default_tools import FinalAnswerTool
 
 
 async def smart_brain():
@@ -46,23 +46,24 @@ async def smart_brain():
         llm=llm,
 
     )
-    obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
-                                      ,route="raw",check=False)
-    print(obs)
-    3
-    # obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python")
+    # obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
+    #                                   ,route="raw",check=False)
     # print(obs)
+    final_answer_tool = FinalAnswerTool()
 
-    # obs, score, *_ = await brain.step(query="在文档中高亮显示'Hello World'文本")
-    # print(obs)
+    obs, score, *_ = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
+    print(obs)
+
+    obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python", check=False)
+    print(obs)
 
     # obs, score, *_ = await brain.step(query="生成一张可爱的人工智慧图片", check=False)
     # print(obs)
     # obs, score, *_ = await brain.step(query="复刻一个电商网站",route="plan")
     # print(obs)
     #
-    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
-    # print(obs)
+    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
+    print(obs)
     #
     # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
     # print(obs)
