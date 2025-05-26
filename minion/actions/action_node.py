@@ -29,13 +29,13 @@ class LLMActionNode(ActionNode):
         self.output_parser = output_parser
 
     async def execute(self, messages: List[Message], **kwargs) -> Any:
-        if self.input_parser:
-            messages = self.input_parser(messages)
+        # if self.input_parser:
+        #     messages = self.input_parser(messages)
 
         response = await self.llm.generate_stream_response(messages,**kwargs)
 
-        if self.output_parser:
-            return self.output_parser(response)
+        # if self.output_parser:
+        #     return self.output_parser(response)
 
         return response
 

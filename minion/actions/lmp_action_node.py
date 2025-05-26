@@ -122,37 +122,48 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
 
         response = await super().execute(messages, **api_params)
         
+        # 从 ChatCompletion 对象中提取字符串内容
+        if hasattr(response, 'choices') and hasattr(response.choices[0], 'message'):
+            message = response.choices[0].message
+            if hasattr(message, 'content') and message.content:
+                response_text = message.content
+            else:
+                response_text = ""
+        else:
+            # 如果不是 ChatCompletion 对象，假设是字符串
+            response_text = str(response)
+        
         # 处理工具调用
-        if tools is not None and isinstance(response, str):
-            response = await self._handle_tool_calls(response, tools, messages, api_params)
+        if tools is not None:
+            response_text = await self._handle_tool_calls(response, tools, messages, api_params)
 
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             if format == "xml" or format == "xml_simple":
                 # 清理响应中的代码块标记
-                response = response.strip()
-                if response.startswith('```xml'):
-                    response = response[6:]  # 移除开头的 ```xml
-                if response.endswith('```'):
-                    response = response[:-3]  # 移除结尾的 ```
-                response = response.strip()
+                response_text = response_text.strip()
+                if response_text.startswith('```xml'):
+                    response_text = response_text[6:]  # 移除开头的 ```xml
+                if response_text.endswith('```'):
+                    response_text = response_text[:-3]  # 移除结尾的 ```
+                response_text = response_text.strip()
 
                 # 确保响应是有效的 XML
-                if not response.strip().startswith('<?xml'):
-                    response = f'<?xml version="1.0" encoding="UTF-8"?>\n{response}'
+                if not response_text.strip().startswith('<?xml'):
+                    response_text = f'<?xml version="1.0" encoding="UTF-8"?>\n{response_text}'
 
                 # 根据format选择解析方式
                 if format == "xml_simple":
-                    response = self._simple_xml_to_json(response_format, response)
+                    response_text = self._simple_xml_to_json(response_format, response_text)
                 else:
-                    response = self._xml_to_json(response)
-            response = self.normalize_response(response)
+                    response_text = self._xml_to_json(response_text)
+            response_text = self.normalize_response(response_text)
 
         if original_response_format and isinstance(original_response_format, type) and issubclass(original_response_format, BaseModel):
-            response = original_response_format.model_validate_json(response)
+            response_text = original_response_format.model_validate_json(response_text)
 
         if self.output_parser:
-            response = self.output_parser(response)
-        return response
+            response_text = self.output_parser(response_text)
+        return response_text
 
     def _dict_to_xml_example(self, data, root_name="root"):
         """Helper method to convert a dictionary to XML example string."""
@@ -352,7 +363,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         处理工具调用响应
         
         Args:
-            response: LLM的原始响应
+            response: LLM的原始响应（可能是字符串或 ChatCompletion 对象）
             tools: 可用的工具列表
             messages: 消息历史
             api_params: API参数
@@ -360,7 +371,69 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         Returns:
             str: 处理后的响应
         """
-        # 检查响应是否包含工具调用
+        # 检查是否是 ChatCompletion 对象
+        if hasattr(response, 'choices') and hasattr(response.choices[0], 'message'):
+            message = response.choices[0].message
+            # 检查是否有 tool_calls
+            if hasattr(message, 'tool_calls') and message.tool_calls:
+                # 处理 OpenAI 格式的 tool_calls
+                final_response = ""
+                for tool_call in message.tool_calls:
+                    tool_name = tool_call.function.name
+                    args_str = tool_call.function.arguments
+                    
+                    # 查找对应的工具
+                    target_tool = None
+                    for tool in tools:
+                        if hasattr(tool, 'name') and tool.name == tool_name:
+                            target_tool = tool
+                            break
+                        elif hasattr(tool, '__name__') and tool.__name__ == tool_name:
+                            target_tool = tool
+                            break
+                    
+                    if target_tool:
+                        try:
+                            # 解析参数
+                            if hasattr(target_tool, 'forward'):
+                                # BaseTool 实例
+                                if args_str.strip():
+                                    # 尝试解析为 JSON 参数
+                                    import json
+                                    try:
+                                        args_dict = json.loads(args_str)
+                                        tool_result = target_tool.forward(**args_dict)
+                                    except:
+                                        # 如果 JSON 解析失败，作为字符串传递
+                                        tool_result = target_tool.forward(args_str.strip().strip('"\''))
+                                else:
+                                    tool_result = target_tool.forward()
+                            elif callable(target_tool):
+                                # 普通可调用对象
+                                if args_str.strip():
+                                    import json
+                                    try:
+                                        args_dict = json.loads(args_str)
+                                        tool_result = target_tool(**args_dict)
+                                    except:
+                                        tool_result = target_tool(args_str.strip().strip('"\''))
+                                else:
+                                    tool_result = target_tool()
+                            else:
+                                tool_result = "Tool call failed: tool is not callable"
+                            
+                            final_response += f"Tool {tool_name} execution result: {tool_result}\n"
+                            
+                        except Exception as e:
+                            error_msg = f"Tool {tool_name} execution error: {str(e)}"
+                            final_response += error_msg + "\n"
+                
+                return final_response.strip()
+            else:
+                # 没有 tool_calls，返回正常内容
+                return message.content or ""
+        
+        # 如果不是 ChatCompletion 对象，按原来的字符串处理方式
         import json
         import re
         
@@ -404,16 +477,16 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                         else:
                             tool_result = target_tool()
                     else:
-                        tool_result = "工具调用失败：工具不可调用"
+                        tool_result = "Tool call failed: tool is not callable"
                     
                     # 替换响应中的工具调用为工具结果
                     final_response = final_response.replace(
                         match.group(0), 
-                        f"工具 {tool_name} 执行结果: {tool_result}"
+                        f"Tool {tool_name} execution result: {tool_result}"
                     )
                     
                 except Exception as e:
-                    error_msg = f"工具 {tool_name} 执行出错: {str(e)}"
+                    error_msg = f"Tool {tool_name} execution error: {str(e)}"
                     final_response = final_response.replace(match.group(0), error_msg)
         
         return final_response

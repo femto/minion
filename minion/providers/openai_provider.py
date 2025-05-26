@@ -270,13 +270,15 @@ class OpenAIProvider(BaseProvider):
             **kwargs: Additional parameters to pass to the API
 
         Returns:
-            If tool_calls are present, returns the tool_calls structure (list of dicts),
-            else returns the full content string.
+            An OpenAI-style response object (dict) with choices, usage, etc.
         """
+        from openai.types.chat import ChatCompletion
+
         full_content = ""
-        tool_calls_acc = []  # Accumulate tool call deltas
         tool_call_map = {}   # id -> tool_call dict (for multi-call)
         has_tool_calls = False
+        finish_reason = None
+        role = "assistant"
 
         async for chunk in self.generate_stream_chunk(messages, temperature, **kwargs):
             if hasattr(chunk, 'choices') and chunk.choices:
@@ -285,43 +287,71 @@ class OpenAIProvider(BaseProvider):
                 if hasattr(delta, 'tool_calls') and delta.tool_calls:
                     has_tool_calls = True
                     for tc in delta.tool_calls:
-                        tc_id = getattr(tc, 'id', None)
-                        if tc_id is None:
+                        # 使用 index 而不是 id 来跟踪工具调用
+                        tc_index = getattr(tc, 'index', None)
+                        if tc_index is None:
                             continue
+                        
                         # Initialize or update the tool_call dict
-                        if tc_id not in tool_call_map:
-                            tool_call_map[tc_id] = {
-                                'id': tc_id,
+                        if tc_index not in tool_call_map:
+                            tool_call_map[tc_index] = {
+                                'id': getattr(tc, 'id', f'call_{tc_index}'),  # 使用 id 或生成一个
                                 'type': getattr(tc, 'type', 'function'),
                                 'function': {
                                     'name': '',
                                     'arguments': ''
                                 }
                             }
+                        
                         # Update function name and arguments (may come in pieces)
                         func = getattr(tc, 'function', None)
                         if func:
                             if hasattr(func, 'name') and func.name:
-                                tool_call_map[tc_id]['function']['name'] += func.name
+                                tool_call_map[tc_index]['function']['name'] += func.name
                             if hasattr(func, 'arguments') and func.arguments:
-                                tool_call_map[tc_id]['function']['arguments'] += func.arguments
+                                tool_call_map[tc_index]['function']['arguments'] += func.arguments
                 # Handle normal content
                 if hasattr(delta, 'content') and delta.content:
                     full_content += delta.content
+                # Track finish_reason and role if present
+                if hasattr(chunk.choices[0], 'finish_reason') and chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
+                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'role') and chunk.choices[0].delta.role:
+                    role = chunk.choices[0].delta.role
 
         # 更新token计数
         completion_tokens = len(full_content) // 4  # 粗略估计
-        model = self.config.model
+        model = kwargs.pop("model", None) or self.config.model
         prompt_tokens, _ = CostManager.calculate(messages, completion_tokens, model)
         self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
         self.last_input_token_count = prompt_tokens
         self.last_output_token_count = completion_tokens
 
-        if has_tool_calls and tool_call_map:
-            # Return as a list (mimic OpenAI API)
-            return list(tool_call_map.values())
-        else:
-            return full_content
+        # 构造 OpenAI response 格式
+        response = {
+            "id": f"chatcmpl-stream-{hash(str(messages))}"[:29],  # 生成一个伪 ID
+            "object": "chat.completion",
+            "created": int(__import__('time').time()),
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": role,
+                        **({"content": full_content} if not has_tool_calls else {}),
+                        **({"tool_calls": list(tool_call_map.values())} if has_tool_calls else {})
+                    },
+                    "finish_reason": finish_reason or ("tool_calls" if has_tool_calls else "stop")
+                }
+            ],
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens
+            }
+        }
+
+        return ChatCompletion(**response)
 
 
 # 使用示例

@@ -79,7 +79,7 @@ class RawMinion(WorkerMinion):
 
     async def execute(self):
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(self.input.query, system_prompt=self.input.system_prompt)
+        response = await node.execute(self.input.query, system_prompt=self.input.system_prompt, tools = self.input.tools or self.brain.tools)
 
         self.answer_raw = self.input.answer_raw = response
         self.answer = self.input.answer = response
@@ -98,7 +98,7 @@ class NativeMinion(WorkerMinion):
         prompt = prompt.render(input=self.input)
         
         node = LmpActionNode(self.brain.llm)
-        response = await node.execute(prompt, tools = self.input.tools or self.brain.tools)
+        response = await node.execute(prompt, system_prompt=self.input.system_prompt, tools = self.input.tools or self.brain.tools)
         self.raw_answer = self.input.answer_raw = response
         self.answer = self.input.answer = response
         return self.answer
