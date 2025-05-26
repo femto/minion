@@ -78,7 +78,7 @@ class OpenAIProvider(BaseProvider):
 
         return prepared_tools if prepared_tools else None
 
-    def generate_sync_raw(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
+    def generate_sync_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
         """
         Generate completion from messages synchronously, returning raw response
 
@@ -128,7 +128,7 @@ class OpenAIProvider(BaseProvider):
         Returns:
             str: The generated text or tool calls
         """
-        response = self.generate_sync_raw(messages, temperature, **kwargs)
+        response = self.generate_sync_response(messages, temperature, **kwargs)
 
         # 处理可能的工具调用
         if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
@@ -137,7 +137,7 @@ class OpenAIProvider(BaseProvider):
         # 正常返回内容
         return response.choices[0].message.content or ""
 
-    async def generate_raw(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
+    async def generate_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
         """
         Generate completion from messages asynchronously, returning raw response
 
@@ -187,7 +187,7 @@ class OpenAIProvider(BaseProvider):
         Returns:
             str: The generated text or tool calls
         """
-        response = await self.generate_raw(messages, temperature, **kwargs)
+        response = await self.generate_response(messages, temperature, **kwargs)
 
         # 处理可能的工具调用
         if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
@@ -196,7 +196,9 @@ class OpenAIProvider(BaseProvider):
         # 正常返回内容
         return response.choices[0].message.content or ""
 
-    async def generate_stream_raw(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> AsyncIterator[Any]:
+
+
+    async def generate_stream_chunk(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
         """
         Generate streaming completion from messages, returning raw chunks
 
@@ -209,7 +211,7 @@ class OpenAIProvider(BaseProvider):
             Raw OpenAI API response chunks
         """
         prepared_messages = self._prepare_messages(messages)
-        model = self.config.model
+        model = kwargs.pop("model",None) or self.config.model
 
         # 处理tools参数
         if 'tools' in kwargs:
@@ -241,7 +243,7 @@ class OpenAIProvider(BaseProvider):
             str: Generated text chunks
         """
         full_content = ""
-        async for chunk in self.generate_stream_raw(messages, temperature, **kwargs):
+        async for chunk in self.generate_stream_chunk(messages, temperature, **kwargs):
             if hasattr(chunk, 'choices') and chunk.choices and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_content += content
@@ -257,6 +259,69 @@ class OpenAIProvider(BaseProvider):
         self.last_input_token_count = prompt_tokens
         self.last_output_token_count = completion_tokens
         return full_content
+
+    async def generate_stream_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
+        """
+        Generate streaming completion from messages, handling tool calls if present.
+
+        Args:
+            messages: List of Message objects or OpenAI format message dictionaries
+            temperature: Temperature for generation
+            **kwargs: Additional parameters to pass to the API
+
+        Returns:
+            If tool_calls are present, returns the tool_calls structure (list of dicts),
+            else returns the full content string.
+        """
+        full_content = ""
+        tool_calls_acc = []  # Accumulate tool call deltas
+        tool_call_map = {}   # id -> tool_call dict (for multi-call)
+        has_tool_calls = False
+
+        async for chunk in self.generate_stream_chunk(messages, temperature, **kwargs):
+            if hasattr(chunk, 'choices') and chunk.choices:
+                delta = chunk.choices[0].delta
+                # Handle tool_calls (function calls)
+                if hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    has_tool_calls = True
+                    for tc in delta.tool_calls:
+                        tc_id = getattr(tc, 'id', None)
+                        if tc_id is None:
+                            continue
+                        # Initialize or update the tool_call dict
+                        if tc_id not in tool_call_map:
+                            tool_call_map[tc_id] = {
+                                'id': tc_id,
+                                'type': getattr(tc, 'type', 'function'),
+                                'function': {
+                                    'name': '',
+                                    'arguments': ''
+                                }
+                            }
+                        # Update function name and arguments (may come in pieces)
+                        func = getattr(tc, 'function', None)
+                        if func:
+                            if hasattr(func, 'name') and func.name:
+                                tool_call_map[tc_id]['function']['name'] += func.name
+                            if hasattr(func, 'arguments') and func.arguments:
+                                tool_call_map[tc_id]['function']['arguments'] += func.arguments
+                # Handle normal content
+                if hasattr(delta, 'content') and delta.content:
+                    full_content += delta.content
+
+        # 更新token计数
+        completion_tokens = len(full_content) // 4  # 粗略估计
+        model = self.config.model
+        prompt_tokens, _ = CostManager.calculate(messages, completion_tokens, model)
+        self.cost_manager.update_cost(prompt_tokens, completion_tokens, model)
+        self.last_input_token_count = prompt_tokens
+        self.last_output_token_count = completion_tokens
+
+        if has_tool_calls and tool_call_map:
+            # Return as a list (mimic OpenAI API)
+            return list(tool_call_map.values())
+        else:
+            return full_content
 
 
 # 使用示例

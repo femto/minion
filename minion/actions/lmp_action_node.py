@@ -24,7 +24,7 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", system_prompt: Optional[str] = None, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", system_prompt: Optional[str] = None, tools=None, **kwargs) -> Any:
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
@@ -52,11 +52,28 @@ class LmpActionNode(LLMActionNode):
             elif hasattr(self, 'input') and self.input and self.input.system_prompt:
                 messages.insert(0, {"role": "system", "content": self.input.system_prompt})
 
-        # 从 llm.config 获取配置
-        api_params = {
-            "temperature": self.llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
-            "model": self.llm.config.model,
-        }
+        # 处理 tools 参数
+        if tools is not None:
+            # 将 tools 转换为 API 格式
+            tools_formatted = self._format_tools_for_api(tools)
+            if tools_formatted:
+                api_params = {
+                    "temperature": self.llm.config.temperature,
+                    "model": self.llm.config.model,
+                    "tools": tools_formatted,
+                    "tool_choice": "auto"
+                }
+            else:
+                api_params = {
+                    "temperature": self.llm.config.temperature,
+                    "model": self.llm.config.model,
+                }
+        else:
+            # 从 llm.config 获取配置
+            api_params = {
+                "temperature": self.llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
+                "model": self.llm.config.model,
+            }
 
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
         api_params.update(kwargs)
@@ -104,6 +121,10 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             messages.append({"role": "user", "content": prompt})
 
         response = await super().execute(messages, **api_params)
+        
+        # 处理工具调用
+        if tools is not None and isinstance(response, str):
+            response = await self._handle_tool_calls(response, tools, messages, api_params)
 
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             if format == "xml" or format == "xml_simple":
@@ -232,3 +253,167 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                         result[field] = value
 
         return json.dumps(result)
+    
+    def _format_tools_for_api(self, tools):
+        """
+        将工具列表转换为API调用格式
+        
+        Args:
+            tools: 工具列表，可以是 BaseTool 实例列表
+            
+        Returns:
+            list: 格式化后的工具定义列表，符合OpenAI API格式
+        """
+        if not tools:
+            return []
+            
+        formatted_tools = []
+        
+        for tool in tools:
+            # 检查是否是 BaseTool 实例
+            if hasattr(tool, 'name') and hasattr(tool, 'description') and hasattr(tool, 'inputs'):
+                tool_def = {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": tool.inputs,
+                            "required": [
+                                name for name, param in tool.inputs.items() 
+                                if not param.get("nullable", False)
+                            ]
+                        }
+                    }
+                }
+                formatted_tools.append(tool_def)
+            elif isinstance(tool, dict) and "function" in tool:
+                # 如果已经是正确格式的工具定义
+                formatted_tools.append(tool)
+            else:
+                # 尝试从工具对象的方法生成定义
+                if hasattr(tool, '__call__'):
+                    tool_name = tool.__name__
+                    tool_desc = tool.__doc__ or f"Tool to {tool_name}"
+
+                    # check if the tool has __input__schema__ attribute which we set when wrapping MCP tools
+                    if not hasattr(tool, "__input_schema__"):
+                        # Generate one from the function signature
+                        import inspect
+
+                        sig = inspect.signature(tool)
+                        properties = {}
+                        required = []
+
+                        for param_name, param in sig.parameters.items():
+                            # Skip *args and **kwargs
+                            if param.kind in (
+                                    inspect.Parameter.VAR_POSITIONAL,
+                                    inspect.Parameter.VAR_KEYWORD,
+                            ):
+                                continue
+
+                            # Add the parameter to properties
+                            properties[param_name] = {
+                                "type": "string",
+                                "description": f"Parameter {param_name}",
+                            }
+
+                            # If parameter has no default, it's required
+                            if param.default == inspect.Parameter.empty:
+                                required.append(param_name)
+
+                        input_schema = {
+                            "type": "object",
+                            "properties": properties,
+                            "required": required,
+                        }
+                    else:
+                        # Use the provided schema
+                        input_schema = tool.__input_schema__
+
+                    # Add the tool to available tools
+                    formatted_tools.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "description": tool_desc,
+                                "parameters": input_schema,
+                            },
+                        }
+                    )
+                     
+        return formatted_tools
+    
+    async def _handle_tool_calls(self, response, tools, messages, api_params):
+        """
+        处理工具调用响应
+        
+        Args:
+            response: LLM的原始响应
+            tools: 可用的工具列表
+            messages: 消息历史
+            api_params: API参数
+            
+        Returns:
+            str: 处理后的响应
+        """
+        # 检查响应是否包含工具调用
+        import json
+        import re
+        
+        # 尝试解析工具调用（这里简化处理，实际需要根据具体LLM的响应格式）
+        # 查找函数调用模式
+        tool_call_pattern = r'(?:调用工具|使用工具|call tool|use tool).*?(\w+)\s*\((.*?)\)'
+        matches = re.finditer(tool_call_pattern, response, re.IGNORECASE | re.DOTALL)
+        
+        final_response = response
+        
+        for match in matches:
+            tool_name = match.group(1)
+            args_str = match.group(2)
+            
+            # 查找对应的工具
+            target_tool = None
+            for tool in tools:
+                if hasattr(tool, 'name') and tool.name == tool_name:
+                    target_tool = tool
+                    break
+                elif hasattr(tool, '__name__') and tool.__name__ == tool_name:
+                    target_tool = tool
+                    break
+            
+            if target_tool:
+                try:
+                    # 解析参数
+                    if hasattr(target_tool, 'forward'):
+                        # BaseTool 实例
+                        if args_str.strip():
+                            # 尝试解析为字符串参数
+                            args_str = args_str.strip().strip('"\'')
+                            tool_result = target_tool.forward(args_str)
+                        else:
+                            tool_result = target_tool.forward()
+                    elif callable(target_tool):
+                        # 普通可调用对象
+                        if args_str.strip():
+                            args_str = args_str.strip().strip('"\'')
+                            tool_result = target_tool(args_str)
+                        else:
+                            tool_result = target_tool()
+                    else:
+                        tool_result = "工具调用失败：工具不可调用"
+                    
+                    # 替换响应中的工具调用为工具结果
+                    final_response = final_response.replace(
+                        match.group(0), 
+                        f"工具 {tool_name} 执行结果: {tool_result}"
+                    )
+                    
+                except Exception as e:
+                    error_msg = f"工具 {tool_name} 执行出错: {str(e)}"
+                    final_response = final_response.replace(match.group(0), error_msg)
+        
+        return final_response

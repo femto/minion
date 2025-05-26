@@ -52,9 +52,26 @@ class BaseProvider(ABC):
             before_sleep=before_sleep_log(logger, logging.WARN)
         )
 
+
+
+    @abstractmethod
+    def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
+        """Generate completion from messages synchronously"""
+        pass
+
+    #@abstractmethod
+    async def generate_sync_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Any:
+        """Generate completion from messages"""
+        pass
+
     @abstractmethod
     async def generate(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         """Generate completion from messages"""
+        pass
+
+    #@abstractmethod
+    async def generate_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None,
+                                **kwargs) -> Any:
         pass
 
     @abstractmethod
@@ -62,10 +79,12 @@ class BaseProvider(ABC):
         """Generate streaming completion from messages"""
         pass
 
-    @abstractmethod
-    def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
-        """Generate completion from messages synchronously"""
+    #@abstractmethod
+    async def generate_stream_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None,
+                                       **kwargs) -> Any:
         pass
+
+
 
     def get_cost(self) -> CostManager:
         return self.cost_manager
