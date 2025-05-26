@@ -80,7 +80,8 @@ async def demo():
     
     response, *_ = await brain_dynamic.step(
         query="请计算 100 / 4 的结果",
-        check=False
+        check=False,
+        route = "raw",
     )
     print(f"回答: {response}")
 
