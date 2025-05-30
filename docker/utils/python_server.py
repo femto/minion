@@ -1,9 +1,11 @@
 import argparse
+import ast
 import re
 import sys
 import threading
 import traceback
 from io import StringIO
+from typing import Optional
 
 import rpyc
 from rpyc import ThreadPoolServer
@@ -54,6 +56,29 @@ class MyService(rpyc.Service):
                 current_namespace = current_namespace[part]
         return current_namespace
 
+    def _extract_last_assigned_var(self, code: str) -> Optional[str]:
+        """
+        Extract the name of the last variable being assigned in the code.
+        
+        Args:
+            code (str): The code to analyze
+            
+        Returns:
+            Optional[str]: The name of the last assigned variable, or None if no assignment is found
+        """
+        try:
+            parsed = ast.parse(code.strip())
+            # Find the last assignment statement
+            last_assign = None
+            for node in parsed.body:
+                if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                    # Simple assignment like 'x = 5'
+                    if isinstance(node.targets[0], ast.Name):
+                        last_assign = node.targets[0].id
+            return last_assign
+        except SyntaxError:
+            return None
+
     def exposed_execute(self, command):
         try:
             full_id, command = self.extract_id_and_command(command)
@@ -62,6 +87,10 @@ class MyService(rpyc.Service):
             if command == "RESET_CONTAINER_SPECIAL_KEYWORD":
                 namespace.clear()
                 namespace.update(ORIGINAL_GLOBAL)
+                return {"output": "", "error": ""}
+
+            # Try to extract the last assigned variable name before execution
+            last_assigned_var = self._extract_last_assigned_var(command)
 
             output_buffer = StringIO()
             error_buffer = StringIO()
@@ -75,6 +104,11 @@ class MyService(rpyc.Service):
             sys.stderr = sys.__stderr__
             output = output_buffer.getvalue().strip()
             error = error_buffer.getvalue().strip()
+
+            # If there was no output but we have an assignment, show the variable value
+            if last_assigned_var and not output and last_assigned_var in namespace:
+                var_value = namespace[last_assigned_var]
+                output = str(var_value)
 
             return {"output": output, "error": error}
         except Exception as e:

@@ -136,9 +136,9 @@ class LocalPythonEnv(IntercodeEnv):
                     function_definition = self.input_multiline_function()
                     code = code + "\n" + function_definition
             else:
-                # Check if this is a variable inspection request
+                # Check if this is a variable inspection request (but not for _)
                 var_name = self._is_variable_inspection(code)
-                if var_name:
+                if var_name and var_name != "_":
                     # This is a request to inspect a variable
                     if var_name in self.local_env:
                         self.observation = {"output": f"{var_name} = {self.local_env[var_name]}\n", "error": ""}
@@ -178,13 +178,13 @@ class LocalPythonEnv(IntercodeEnv):
         stdout_capture = StringIO()
         stderr_capture = StringIO()
         
-        result = {"output": "", "error": "", "result": ""}
+        result = {"output": "", "error": ""}
         
         try:
             # Check if this is a request for the last result
             if code.strip() == "_":
                 if self.last_result is not None:
-                    result["output"] = f"{self.last_result}\n"
+                    result["output"] = f"{self.last_result}"
                 else:
                     result["output"] = "No previous result available\n"
                 return result
@@ -192,46 +192,59 @@ class LocalPythonEnv(IntercodeEnv):
             # Try to extract the last assigned variable name before execution
             last_assigned_var = self._extract_last_assigned_var(code)
             
-            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                # Try to parse the code to see if it's a single expression that we can evaluate
+            # Check if this is a wrapped expression like print(expression)
+            is_wrapped_expr = False
+            original_expr = None
+            if code.strip().startswith('print(') and code.strip().endswith(')'):
+                # Extract the inner expression
+                inner_code = code.strip()[6:-1].strip()  # Remove print( and )
                 try:
-                    # Check if the code is a single expression
-                    parsed = ast.parse(code.strip())
+                    # Check if the inner part is a simple expression
+                    parsed = ast.parse(inner_code)
                     if len(parsed.body) == 1 and isinstance(parsed.body[0], ast.Expr):
-                        # It's a single expression, we can use eval to get its value
-                        expr_value = eval(code, self.local_env)
-                        if expr_value is not None:
-                            result["result"] = str(expr_value)
-                            self.last_result = expr_value
-                            # Store the last result in the _ variable
-                            self.local_env["_"] = expr_value
-                    else:
-                        # It's not a single expression, execute it normally
-                        exec(code, self.local_env)
-                        
-                        # Check if it's an assignment that we should capture the value of
-                        if len(parsed.body) == 1 and isinstance(parsed.body[0], ast.Assign):
-                            # Get the variable name being assigned
-                            var_name = parsed.body[0].targets[0].id
-                            if var_name in self.local_env:
-                                result["result"] = str(self.local_env[var_name])
-                                self.last_result = self.local_env[var_name]
-                                # Store the last result in the _ variable
-                                self.local_env["_"] = self.local_env[var_name]
-                except SyntaxError:
-                    # If parsing fails, just execute the code normally
-                    exec(code, self.local_env)
+                        is_wrapped_expr = True
+                        original_expr = inner_code
+                except:
+                    pass
+            
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                # Execute the code directly - similar to python_server.py approach
+                exec(code, self.local_env)
                 
             result["output"] = stdout_capture.getvalue()
             result["error"] = stderr_capture.getvalue()
             
-            # If there was no output but we have a result, add it to the output
-            if not result["output"].strip() and result["result"]:
-                result["output"] = result["result"]
-            
-            # If we identified a variable assignment and there's no output, show the variable value
-            if last_assigned_var and not result["output"].strip() and last_assigned_var in self.local_env:
-                result["output"] = f"{self.local_env[last_assigned_var]}"
+            # If this was a wrapped expression, try to get the original value
+            if is_wrapped_expr and original_expr:
+                try:
+                    expr_value = eval(original_expr, self.local_env)
+                    if expr_value is not None:
+                        self.last_result = expr_value
+                        self.local_env["_"] = expr_value
+                except:
+                    pass
+            # If there was no output but we have an assignment, show the variable value
+            elif last_assigned_var and not result["output"].strip() and last_assigned_var in self.local_env:
+                var_value = self.local_env[last_assigned_var]
+                result["output"] = f"{var_value}"
+                # Store as last result
+                self.last_result = var_value
+                self.local_env["_"] = var_value
+            else:
+                # Try to detect if this was a simple expression (not wrapped)
+                try:
+                    # Check if the code is a single expression
+                    parsed = ast.parse(code.strip())
+                    if len(parsed.body) == 1 and isinstance(parsed.body[0], ast.Expr):
+                        # It's a single expression, evaluate it to get the result
+                        expr_value = eval(code, self.local_env)
+                        if expr_value is not None and not result["output"].strip():
+                            result["output"] = str(expr_value)
+                            self.last_result = expr_value
+                            self.local_env["_"] = expr_value
+                except (SyntaxError, ValueError):
+                    # If it's not a simple expression, continue with normal output
+                    pass
                 
         except Exception as e:
             result["error"] = f"{str(e)}\n{traceback.format_exc()}"
@@ -285,6 +298,10 @@ class LocalPythonEnv(IntercodeEnv):
         Returns:
             str: The command, possibly wrapped with print()
         """
+        # Don't wrap the special _ variable - let execute_code handle it
+        if command.strip() == "_":
+            return command
+            
         try:
             # Parse the command as an AST (Abstract Syntax Tree)
             parsed_command = ast.parse(command.strip())
