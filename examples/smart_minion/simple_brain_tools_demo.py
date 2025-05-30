@@ -55,7 +55,7 @@ async def demo():
     response, *_ = await brain.step(
         query="请计算 2 + 3 * 4 的结果",
         tools=[tool,final_answer_tool],  # 在这里传入工具
-        route="native",
+        route="plan",
         check=False
     )
     print(f"回答: {response}")

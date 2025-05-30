@@ -46,14 +46,15 @@ async def smart_brain():
         llm=llm,
 
     )
-    # obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
-    #                                   ,route="raw",check=False)
-    # print(obs)
     final_answer_tool = FinalAnswerTool()
-
-    obs, score, *_ = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
-    print(obs)
-
+    # obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
+    #                                   ,route="plan",check=False,tools=[final_answer_tool])
+    # print(obs)
+    #
+    #
+    # obs, score, *_ = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
+    # print(obs)
+    #
     obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python", check=False)
     print(obs)
 
@@ -62,8 +63,8 @@ async def smart_brain():
     # obs, score, *_ = await brain.step(query="复刻一个电商网站",route="plan")
     # print(obs)
     #
-    obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
-    print(obs)
+    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
+    # print(obs)
     #
     # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
     # print(obs)
@@ -74,12 +75,14 @@ async def smart_brain():
     # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
     # print(obs)
 
+    cache_plan = os.path.join(current_file_dir, "writing_novel.json")
     obs, score, *_ = await brain.step(
         query="Write a 500000 characters novel named 'Reborn in Skyrim'. "
               "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
               "I will tip you $100,000 if you write a good novel."
               "Since the novel is very long, you may need to divide it into subtasks.",
-        route="plan"
+        route="plan",
+        cache_plan = cache_plan,
     )
     print(obs)
 
