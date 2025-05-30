@@ -110,7 +110,7 @@ class Input(BaseModel):
     question_type: str = ""  # Specific question type
     answer_protocol: str = ""  # Protocol for answer formatting, should we call it answer_format?
     execution_config: dict = {}  # Configuration for execution, like ensemble stragety etc.
-    check: Union[bool,int] = False  # Whether to perform validation
+    check: Union[bool,int] = True  # Whether to perform validation
     check_route:str = ""  # Whether to perform validation
     improve_route:str = "feedback"  # default improve stragety according to feedback
 

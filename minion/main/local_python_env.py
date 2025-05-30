@@ -227,11 +227,11 @@ class LocalPythonEnv(IntercodeEnv):
             
             # If there was no output but we have a result, add it to the output
             if not result["output"].strip() and result["result"]:
-                result["output"] = result["result"] + "\n"
+                result["output"] = result["result"]
             
             # If we identified a variable assignment and there's no output, show the variable value
             if last_assigned_var and not result["output"].strip() and last_assigned_var in self.local_env:
-                result["output"] = f"{last_assigned_var} = {self.local_env[last_assigned_var]}\n"
+                result["output"] = f"{self.local_env[last_assigned_var]}"
                 
         except Exception as e:
             result["error"] = f"{str(e)}\n{traceback.format_exc()}"
