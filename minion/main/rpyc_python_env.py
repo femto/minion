@@ -77,6 +77,9 @@ class RpycPythonEnv(IntercodeEnv):
 
     def step(self, action: str) -> None:
         full_id, code = extract_id_and_command(action)
+
+        #deprecate this logic here, when using python executor(ie. python_env),
+        #handle last expr or assignment there
         try:
             if code.strip().startswith("def "):
                 if not self.is_agent:  # interactive input multiline
