@@ -395,25 +395,33 @@ Now, critically analyze the implications of using the dict=True parameter when d
 
 Finally, after solving the equations, ensure that any additional constraints or context-specific conditions are thoroughly considered. Discuss how examining each solution against these constraints can help in determining the most appropriate solution(s) for the given problem.
 """
-PYTHON_PROMPT = (
-    """
-    Write python code to solve the problem, also noted the python program must print out answer"""
-    + COMMON_ERROR
-    + COMMON_SYMPY_ERROR
-    + """Please ensure all the variables are defined, don't use variables before defining them
-                please ensure you correctly indent the code, and don't use // as comment
-                """
-)
 #try not to use sympy
 PYTHON_PROMPT = (
     """
-    Write python code to solve the problem, also noted the python program must print out answer"""
+    Write python code to solve the problem, remember if you define the solution as a function, remember to invoke it,
+    also noted the python program must print out answer"""
     #+ COMMON_ERROR
     #+ COMMON_SYMPY_ERROR
     + """Please ensure all the variables are defined, don't use variables before defining them
                 please ensure you correctly indent the code, and don't use // as comment
                 """
 )
+PYTHON_EXECUTE_PROMPT = """Your code must follow these rules:
+1. If you define a function (or multiple functions), you must also call the function(s) to ensure the program produces output.
+2. Make sure all variables are declared before use—do not use undefined variables.
+3. Properly indent your code using standard Python conventions (4 spaces per indentation level).
+4. Use '#' for comments, not '//' (as '//' is not valid for Python comments).
+5. The code must include a print statement to display the result or output to the console.
+
+Think step-by-step:
+- First, analyze what the problem requires as output.
+- Next, reason about how to structure the code: functions, logic, and data.
+- Then write the complete solution.
+- Finally, invoke any defined functions at the end to ensure the program runs and outputs correctly.
+
+Do not omit function calls. Always include executable code that produces a visible result.
+"""
+
 EXISTING_ANSWER_PROMPT = """
 {% if input.full_output %}
 Full Output:

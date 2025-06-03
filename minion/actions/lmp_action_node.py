@@ -4,6 +4,7 @@ import json
 import xml.etree.ElementTree as ET
 import re
 import random
+import inspect
 
 import ell
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
@@ -311,8 +312,6 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                     # check if the tool has __input__schema__ attribute which we set when wrapping MCP tools
                     if not hasattr(tool, "__input_schema__"):
                         # Generate one from the function signature
-                        import inspect
-
                         sig = inspect.signature(tool)
                         properties = {}
                         required = []
@@ -394,31 +393,23 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                     
                     if target_tool:
                         try:
-                            # 解析参数
-                            if hasattr(target_tool, 'forward'):
-                                # BaseTool 实例
-                                if args_str.strip():
-                                    # 尝试解析为 JSON 参数
-                                    import json
-                                    try:
-                                        args_dict = json.loads(args_str)
-                                        tool_result = target_tool.forward(**args_dict)
-                                    except:
-                                        # 如果 JSON 解析失败，作为字符串传递
-                                        tool_result = target_tool.forward(args_str.strip().strip('"\''))
-                                else:
-                                    tool_result = target_tool.forward()
-                            elif callable(target_tool):
+                            if callable(target_tool):
                                 # 普通可调用对象
-                                if args_str.strip():
+                                if isinstance(args_str,str):
                                     import json
                                     try:
                                         args_dict = json.loads(args_str)
                                         tool_result = target_tool(**args_dict)
                                     except:
-                                        tool_result = target_tool(args_str.strip().strip('"\''))
+                                        args_str.strip().strip('"\'')
+                                        args_dict = json.loads(args_str)
+                                        tool_result = target_tool(**args_dict)
                                 else:
-                                    tool_result = target_tool()
+                                    tool_result = target_tool(**args_str) #assume it's dict
+                                
+                                # 检查是否是 awaitable，如果是则 await
+                                if inspect.iscoroutine(tool_result):
+                                    tool_result = await tool_result
                             else:
                                 tool_result = "Tool call failed: tool is not callable"
                             
@@ -469,6 +460,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                             tool_result = target_tool.forward(args_str)
                         else:
                             tool_result = target_tool.forward()
+                        
+                        # 检查是否是 awaitable，如果是则 await
+                        if inspect.iscoroutine(tool_result):
+                            tool_result = await tool_result
+                            
                     elif callable(target_tool):
                         # 普通可调用对象
                         if args_str.strip():
@@ -476,6 +472,10 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                             tool_result = target_tool(args_str)
                         else:
                             tool_result = target_tool()
+                        
+                        # 检查是否是 awaitable，如果是则 await
+                        if inspect.iscoroutine(tool_result):
+                            tool_result = await tool_result
                     else:
                         tool_result = "Tool call failed: tool is not callable"
                     

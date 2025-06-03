@@ -4,6 +4,7 @@
 
 import os
 from pathlib import Path
+import importlib.resources
 
 from colorama import Fore, Style, init
 from loguru import logger
@@ -50,7 +51,18 @@ def get_minion_root():
 # MINION PROJECT ROOT AND VARS 
 CONFIG_ROOT = Path.home() / ".minion"
 MINION_ROOT = get_minion_root()
-MODEL_PRICES_PATH = MINION_ROOT / "minion/utils/model_prices_and_context_window.json"
+
+# 修复MODEL_PRICES_PATH，兼容源码和包内
+try:
+    # Python 3.9+
+    import importlib.resources as pkg_resources
+    if pkg_resources.files("minion.utils").joinpath("model_prices_and_context_window.json").is_file():
+        MODEL_PRICES_PATH = pkg_resources.files("minion.utils").joinpath("model_prices_and_context_window.json")
+    else:
+        MODEL_PRICES_PATH = MINION_ROOT / "minion/utils/model_prices_and_context_window.json"
+except Exception:
+    MODEL_PRICES_PATH = MINION_ROOT / "minion/utils/model_prices_and_context_window.json"
+
 DEFAULT_WORKSPACE_ROOT = MINION_ROOT / "workspace"
 
 EXAMPLE_PATH = MINION_ROOT / "examples"

@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "minionx"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
     {name = "femto", email = "femtowin@gmail.com"},
 ]
-description = "A powerful AI agent framework for Python"
+description = "👷‍♂️Minion is Agent's Brain. Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence."
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"

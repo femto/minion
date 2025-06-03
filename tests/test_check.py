@@ -144,3 +144,19 @@ def test_extract_doctest_with_complex_multiline(test_minion):
     
     result = test_minion.extract_doctest(query)
     assert result == expected
+
+
+def test_model_prices_path():
+    import json
+    from minion.const import MODEL_PRICES_PATH
+    if hasattr(MODEL_PRICES_PATH, 'open'):
+        # importlib.resources.Path
+        with MODEL_PRICES_PATH.open('r', encoding='utf-8') as f:
+            data = json.load(f)
+    else:
+        # pathlib.Path
+        with open(MODEL_PRICES_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    # 简单断言文件内容为dict且有内容
+    assert isinstance(data, dict) or isinstance(data, list)
+    assert len(data) > 0

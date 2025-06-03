@@ -51,7 +51,7 @@ from minion.main.prompt import (
     SMART_PROMPT_TEMPLATE,
     TASK_INPUT,
     TASK_ROUTE_PROMPT,
-    WORKER_PROMPT,
+    WORKER_PROMPT, PYTHON_EXECUTE_PROMPT,
 )
 from minion.main.symbol_table import Symbol
 from minion.main.task_graph import convert_tasks_to_graph
@@ -439,6 +439,7 @@ class PythonMinion(WorkerMinion):
             if not self.task:
                 prompt = Template(
                     PYTHON_PROMPT
+                    + PYTHON_EXECUTE_PROMPT
                     + WORKER_PROMPT
                     + """
 
@@ -451,6 +452,7 @@ Previous error:
             else:
                 prompt = Template(
                     PYTHON_PROMPT
+                    + PYTHON_EXECUTE_PROMPT
                     + WORKER_PROMPT
                     + TASK_INPUT
                     + """
@@ -478,14 +480,15 @@ Previous error:
             if obs["error"]:
                 error = obs["error"]
                 logger.error(error)
+                self.answer = self.input.answer = f"output:{obs['output']}, error:{obs['error']}"
                 continue  # try again?
             output, error = obs["output"], obs["error"]
             self.answer = self.input.answer = output #answer is only output
             # print("#####OUTPUT#####")
             # print(output)
-            print(f"###solution###:{self.answer}")
+            print(f"###answer###:{self.answer}")
             return self.answer  # obs
-        self.answer = self.input.answer = ""
+
         return self.answer
 
     async def execute_code_solution(self):
@@ -499,6 +502,7 @@ Previous error:
                 Generate a complete Python solution for the given problem.
                 This may include one or more functions, classes, or a full module as needed.
                 Do not include any explanations or comments, just the code.
+                If you define the solution as a function, remember to invoke it
                 
                 Previous error (if any):
                 {{error}}
@@ -531,7 +535,7 @@ Previous error:
             file_structure_text = await node.execute(prompt)
             file_structure = self.extract_file_structure(file_structure_text)
             self.save_files(file_structure)
-            self.answer = self.input.answer = "Files generated successfully"
+            self.answer = self.input.answer = file_structure_text
             return self.answer
 
     def extract_file_structure(self, text):

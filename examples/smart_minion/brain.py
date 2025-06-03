@@ -46,7 +46,7 @@ async def smart_brain():
         llm=llm,
 
     )
-    final_answer_tool = FinalAnswerTool()
+    #final_answer_tool = FinalAnswerTool()
     # obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
     #                                   ,route="plan",check=False,tools=[final_answer_tool])
     # print(obs)
