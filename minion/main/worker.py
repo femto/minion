@@ -191,10 +191,10 @@ class DcotMinion(WorkerMinion):
         return self.answer
 
 
-@register_worker_minion
-class MultiPlanMinion(WorkerMinion):
-    "This Strategy will first generate multiple plan, and then compare each plan, see which one is more promising to produce good result, first try most promising plan, then to less promising plan."
-    pass
+# @register_worker_minion
+# class MultiPlanMinion(WorkerMinion):
+#     "This Strategy will first generate multiple plan, and then compare each plan, see which one is more promising to produce good result, first try most promising plan, then to less promising plan."
+#     pass
 
 
 @register_worker_minion
