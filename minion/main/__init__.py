@@ -6,7 +6,6 @@ from minion.main.worker import (
     MathMinion,
     PlanMinion,
     MathPlanMinion,
-    MultiPlanMinion,
     OptillmMinion,
 )
 from minion.main.local_python_env import LocalPythonEnv

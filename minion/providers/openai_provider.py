@@ -247,6 +247,8 @@ class OpenAIProvider(BaseProvider):
             if hasattr(chunk, 'choices') and chunk.choices and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_content += content
+                # 调用log_llm_stream实时显示流式内容
+                log_llm_stream(content)
                 #yield content
 
         # 更新token计数
@@ -312,7 +314,10 @@ class OpenAIProvider(BaseProvider):
                                 tool_call_map[tc_index]['function']['arguments'] += func.arguments
                 # Handle normal content
                 if hasattr(delta, 'content') and delta.content:
-                    full_content += delta.content
+                    content = delta.content
+                    full_content += content
+                    # 调用log_llm_stream实时显示流式内容
+                    log_llm_stream(content)
                 # Track finish_reason and role if present
                 if hasattr(chunk.choices[0], 'finish_reason') and chunk.choices[0].finish_reason:
                     finish_reason = chunk.choices[0].finish_reason
