@@ -31,7 +31,8 @@ class FeedbackMinion(ImproverMinion):
         
         # 使用 LLM 改进内容
         node = LmpActionNode(self.brain.llm)
-        improved_answer = await node.execute(prompt)
+        tools = (self.input.tools or []) + (self.brain.tools or [])
+        improved_answer = await node.execute(prompt, tools=tools)
         
         # 更新 worker 的答案
         self.worker.answer = improved_answer

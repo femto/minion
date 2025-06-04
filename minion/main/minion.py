@@ -173,7 +173,8 @@ class Minion(metaclass=SubclassHookMeta):
         node = LmpActionNode(self.brain.llm)
         template = Template(ASK_PROMPT_JINJA)
         prompt = template.render(input=self.input)
-        response = await node.execute(prompt)
+        tools = (self.input.tools or []) + (self.brain.tools or [])
+        response = await node.execute(prompt, tools=tools)
         self.answer = self.input.answer = response
         return self.answer
 

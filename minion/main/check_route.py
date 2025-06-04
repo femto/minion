@@ -92,7 +92,8 @@ class CheckRouterMinion(Minion):
                     for llm in self.brain.llms['check_route']:
                         try:
                             node = LmpActionNode(llm)
-                            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                            tools = (self.input.tools or []) + (self.brain.tools or [])
+                            meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=tools)
                             checker_name = meta_plan.name
                             if checker_name in CHECK_MINION_REGISTRY:
                                 logger.info(f"Selected checker using check_route LLM {llm.config.model}: {checker_name}")
@@ -109,7 +110,8 @@ class CheckRouterMinion(Minion):
                     for llm in self.brain.llms['route']:
                         try:
                             node = LmpActionNode(llm)
-                            meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                            tools = (self.input.tools or []) + (self.brain.tools or [])
+                            meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=tools)
                             checker_name = meta_plan.name
                             if checker_name in CHECK_MINION_REGISTRY:
                                 logger.info(f"Selected checker using route LLM {llm.config.model}: {checker_name}")
@@ -126,7 +128,8 @@ class CheckRouterMinion(Minion):
             # If no specific LLMs configured or all failed, use default brain.llm
             try:
                 node = LmpActionNode(self.brain.llm)
-                meta_plan = await node.execute(filled_template, response_format=MetaPlan)
+                tools = (self.input.tools or []) + (self.brain.tools or [])
+                meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=tools)
                 checker_name = meta_plan.name
                 if checker_name in CHECK_MINION_REGISTRY:
                     logger.info(f"Selected checker using default brain.llm: {checker_name}")

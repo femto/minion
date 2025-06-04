@@ -64,7 +64,8 @@ class CheckMinion(Minion):
         prompt = prompt.render(input=self.input)
 
         node = LmpActionNode(self.brain.llm)
-        result = await node.execute(prompt, response_format=CheckResult, format="xml_simple")
+        tools = (self.input.tools or []) + (self.brain.tools or [])
+        result = await node.execute(prompt, response_format=CheckResult, format="xml_simple", tools=tools)
 
         self.answer_node = result
         self.answer = self.input.feedback = {
@@ -216,7 +217,8 @@ class DoctestMinion(CheckMinion):
     async def _execute_test(self, prompt):
         """Execute test logic"""
         node = LmpActionNode(self.brain.llm)
-        result = await node.execute(prompt, response_format=CheckResult)
+        tools = (self.input.tools or []) + (self.brain.tools or [])
+        result = await node.execute(prompt, response_format=CheckResult, tools=tools)
         
         self.answer_node = result
         self.answer = self.input.feedback = {
