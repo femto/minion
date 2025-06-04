@@ -362,7 +362,9 @@ class TaskMinion(WorkerMinion):
 
         # filter out smart, since we don't want choose smart following smart again
         # also filter out ScoreMinion
-        filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
+        # 当选择meta plan的时候，把plan去掉，否则task又走一遍planminion了
+        filtered_registry = {key: value for key, value in MINION_REGISTRY.items() 
+                           if key not in ['plan', 'math_plan']}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input, task=self.task)
 
         tools = (self.input.tools or []) + (self.brain.tools or [])
