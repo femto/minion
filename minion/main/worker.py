@@ -181,8 +181,8 @@ class DcotMinion(WorkerMinion):
         prompt = prompt.render(input=self.input)
         
         node = LmpActionNode(self.brain.llm)
-        tools = (self.input.tools or []) + (self.brain.tools or [])
-        response = await node.execute(prompt, tools=tools)
+        #tools = (self.input.tools or []) + (self.brain.tools or [])
+        response = await node.execute(prompt, tools=None)
         
         self.answer_node = node
         self.answer = self.input.answer = extract_answer(response)
@@ -281,8 +281,8 @@ class PlanMinion(WorkerMinion):
             filtered_registry = {key: value for key, value in MINION_REGISTRY.items()}
             filled_template = choose_template.render(minions=filtered_registry, input=self.input)
 
-            tools = (self.input.tools or []) + (self.brain.tools or [])
-            response = await LmpActionNode(llm=self.brain.llm).execute(filled_template, tools=tools)
+            #tools = (self.input.tools or []) + (self.brain.tools or [])
+            response = await LmpActionNode(llm=self.brain.llm).execute(filled_template, tools=None)
 
             json = extract_longest_json_from_string(response)
 
@@ -366,7 +366,7 @@ class TaskMinion(WorkerMinion):
         filled_template = choose_template.render(minions=filtered_registry, input=self.input, task=self.task)
 
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        meta_plan = await LmpActionNode(llm=self.brain.llm).execute(filled_template, response_format=MetaPlan, tools=tools)
+        meta_plan = await LmpActionNode(llm=self.brain.llm).execute(filled_template, response_format=MetaPlan, tools=None)
 
         name = meta_plan.name
         name = most_similar_minion(name, filtered_registry.keys())
@@ -470,7 +470,7 @@ Previous error:
                 prompt = prompt.render(input=self.input, task=self.task, error=error)
 
             tools = (self.input.tools or []) + (self.brain.tools or [])
-            code = await node.execute(prompt, tools=tools)
+            code = await node.execute(prompt, tools=None)
 
             code = extract_python(code, self.input.entry_point)
             print(code)
@@ -518,7 +518,7 @@ Previous error:
             prompt = prompt.render(input=self.input, error=error)
 
             tools = (self.input.tools or []) + (self.brain.tools or [])
-            code = await node.execute(prompt, tools=tools)
+            code = await node.execute(prompt, tools=None)
             code = extract_python(code, self.input.entry_point)
             self.answer = self.input.answer = code
             return self.answer
@@ -735,8 +735,8 @@ class IdentifyMinion(Minion):
         prompt = prompt.render(input=self.input)
 
         node = LmpActionNode(self.brain.llm)
-        tools = (self.input.tools or []) + (self.brain.tools or [])
-        identification = await node.execute(prompt, response_format=Identification, tools=tools)
+        #tools = (self.input.tools or []) + (self.brain.tools or [])
+        identification = await node.execute(prompt, response_format=Identification, tools=None)
         
         self.input.complexity = identification.complexity
         self.input.query_range = identification.query_range
@@ -758,8 +758,8 @@ class QaMinion(Minion):
             prompt = prompt.render(question=f"what's {self.input.dataset}")
 
             node = LmpActionNode(self.brain.llm)
-            tools = (self.input.tools or []) + (self.brain.tools or [])
-            answer = await node.execute_answer(prompt, tools=tools)
+            #tools = (self.input.tools or []) + (self.brain.tools or [])
+            answer = await node.execute_answer(prompt, tools=None)
             
             self.answer = self.input.dataset_description = answer
             return self.answer
@@ -806,8 +806,8 @@ class RouteMinion(Minion):
                 for llm in self.brain.llms['route']:
                     try:
                         node = LmpActionNode(llm)
-                        tools = (self.input.tools or []) + (self.brain.tools or [])
-                        meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=tools)
+                        #tools = (self.input.tools or []) + (self.brain.tools or [])
+                        meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=None)
                         
                         name = meta_plan.name
                         if name in filtered_registry:
@@ -828,8 +828,8 @@ class RouteMinion(Minion):
             # 如果没有route配置或所有route LLM都失败，使用默认的brain.llm
             try:
                 node = LmpActionNode(self.brain.llm)
-                tools = (self.input.tools or []) + (self.brain.tools or [])
-                meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=tools)
+                #tools = (self.input.tools or []) + (self.brain.tools or [])
+                meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=None)
                 
                 name = meta_plan.name
                 if name in filtered_registry:
