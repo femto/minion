@@ -80,7 +80,14 @@ class RawMinion(WorkerMinion):
     async def execute(self):
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        response = await node.execute(self.input.query, system_prompt=self.input.system_prompt, tools=tools)
+        
+        # In task mode, use task query instead of original query
+        if self.task:
+            query = self.task.get("instruction", "") or self.task.get("task_description", "")
+        else:
+            query = self.input.query
+            
+        response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools)
 
         self.answer_raw = self.input.answer_raw = response
         self.answer = self.input.answer = response
@@ -95,8 +102,14 @@ class NativeMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        prompt = Template(WORKER_PROMPT)
-        prompt = prompt.render(input=self.input)
+        if self.task:
+            # Task mode: use TASK_INPUT template
+            prompt = Template(WORKER_PROMPT + TASK_INPUT)
+            prompt = prompt.render(input=self.input, task=self.task)
+        else:
+            # Normal mode: use original WORKER_PROMPT
+            prompt = Template(WORKER_PROMPT)
+            prompt = prompt.render(input=self.input)
         
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
@@ -116,8 +129,14 @@ class CotMinion(WorkerMinion):
         self.input.instruction = "let's think step by step to solve this problem"
 
     async def execute(self):
-        prompt = Template(COT_PROBLEM_INSTRUCTION + WORKER_PROMPT)
-        prompt = prompt.render(input=self.input)
+        if self.task:
+            # Task mode: use TASK_INPUT template
+            prompt = Template(COT_PROBLEM_INSTRUCTION + WORKER_PROMPT + TASK_INPUT)
+            prompt = prompt.render(input=self.input, task=self.task)
+        else:
+            # Normal mode: use original prompt
+            prompt = Template(COT_PROBLEM_INSTRUCTION + WORKER_PROMPT)
+            prompt = prompt.render(input=self.input)
 
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
@@ -177,8 +196,14 @@ class DcotMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        prompt = Template(DCOT_PROMPT)
-        prompt = prompt.render(input=self.input)
+        if self.task:
+            # Task mode: use TASK_INPUT template
+            prompt = Template(DCOT_PROMPT + TASK_INPUT)
+            prompt = prompt.render(input=self.input, task=self.task)
+        else:
+            # Normal mode: use original prompt
+            prompt = Template(DCOT_PROMPT)
+            prompt = prompt.render(input=self.input)
         
         node = LmpActionNode(self.brain.llm)
         #tools = (self.input.tools or []) + (self.brain.tools or [])
@@ -504,20 +529,40 @@ Previous error:
         error = ""
         for i in range(5):
             node = LmpActionNode(llm=self.brain.llm)
-            prompt = Template(
-                PYTHON_PROMPT
-                + WORKER_PROMPT
-                + """
-                Generate a complete Python solution for the given problem.
-                This may include one or more functions, classes, or a full module as needed.
-                Do not include any explanations or comments, just the code.
-                If you define the solution as a function, remember to invoke it
-                
-                Previous error (if any):
-                {{error}}
-                """
-            )
-            prompt = prompt.render(input=self.input, error=error)
+            
+            if self.task:
+                # Task mode: use TASK_INPUT template
+                prompt = Template(
+                    PYTHON_PROMPT
+                    + WORKER_PROMPT
+                    + TASK_INPUT
+                    + """
+                    Generate a complete Python solution for the given task.
+                    This may include one or more functions, classes, or a full module as needed.
+                    Do not include any explanations or comments, just the code.
+                    If you define the solution as a function, remember to invoke it
+                    
+                    Previous error (if any):
+                    {{error}}
+                    """
+                )
+                prompt = prompt.render(input=self.input, task=self.task, error=error)
+            else:
+                # Normal mode: use original prompt
+                prompt = Template(
+                    PYTHON_PROMPT
+                    + WORKER_PROMPT
+                    + """
+                    Generate a complete Python solution for the given problem.
+                    This may include one or more functions, classes, or a full module as needed.
+                    Do not include any explanations or comments, just the code.
+                    If you define the solution as a function, remember to invoke it
+                    
+                    Previous error (if any):
+                    {{error}}
+                    """
+                )
+                prompt = prompt.render(input=self.input, error=error)
 
             tools = (self.input.tools or []) + (self.brain.tools or [])
             code = await node.execute(prompt, tools=None)
@@ -529,18 +574,36 @@ Previous error:
         error = ""
         for i in range(5):
             node = LmpActionNode(llm=self.brain.llm)
-            prompt = Template(
-                PYTHON_PROMPT
-                + WORKER_PROMPT
-                + """
-                Create the necessary file structure and contents for the given task.
-                Include file paths and their contents.
-                
-                Previous error (if any):
-                {{error}}
-                """
-            )
-            prompt = prompt.render(input=self.input, error=error)
+            
+            if self.task:
+                # Task mode: use TASK_INPUT template
+                prompt = Template(
+                    PYTHON_PROMPT
+                    + WORKER_PROMPT
+                    + TASK_INPUT
+                    + """
+                    Create the necessary file structure and contents for the given task.
+                    Include file paths and their contents.
+                    
+                    Previous error (if any):
+                    {{error}}
+                    """
+                )
+                prompt = prompt.render(input=self.input, task=self.task, error=error)
+            else:
+                # Normal mode: use original prompt
+                prompt = Template(
+                    PYTHON_PROMPT
+                    + WORKER_PROMPT
+                    + """
+                    Create the necessary file structure and contents for the given task.
+                    Include file paths and their contents.
+                    
+                    Previous error (if any):
+                    {{error}}
+                    """
+                )
+                prompt = prompt.render(input=self.input, error=error)
 
             tools = (self.input.tools or []) + (self.brain.tools or [])
             file_structure_text = await node.execute(prompt, tools=tools)
@@ -1007,11 +1070,26 @@ class OptillmMinion(WorkerMinion):
             execute_parallel_approaches
         operation, approaches = self.parse_approach()
         
+        # Determine the query to use
+        if self.task:
+            query = self.task.get("instruction", "") or self.task.get("task_description", "")
+            # Add task context information
+            if self.task.get("dependent"):
+                dependent_info = "\n\nDependent outputs:\n"
+                for dependent in self.task["dependent"]:
+                    dependent_key = dependent.get("dependent_key")
+                    if dependent_key in self.input.symbols:
+                        symbol = self.input.symbols[dependent_key]
+                        dependent_info += f"- {dependent_key}: {symbol.output}\n"
+                query += dependent_info
+        else:
+            query = self.input.query
+        
         if operation == 'SINGLE':
             response, tokens = execute_single_approach(
                 approaches[0], 
                 self.input.system_prompt, 
-                self.input.query, 
+                query, 
                 self.brain.llm.client_sync, 
                 self.brain.llm.config.model
             )
@@ -1019,7 +1097,7 @@ class OptillmMinion(WorkerMinion):
             (response, tokens) = execute_combined_approaches(
                 approaches,
                 self.input.system_prompt,
-                self.input.query,
+                query,
                 self.brain.llm.client_sync,
                 self.brain.llm.config.model
             )
@@ -1027,7 +1105,7 @@ class OptillmMinion(WorkerMinion):
             response, tokens = execute_parallel_approaches(
                 approaches,
                 self.input.system_prompt,
-                self.input.query,
+                query,
                 self.brain.llm.client_sync,
                 self.brain.llm.config.model
             )

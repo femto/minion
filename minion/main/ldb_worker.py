@@ -126,6 +126,42 @@ if HAS_LDB:
             self.model = OpenaiChat(self.brain.llm.config.model, api_key=self.brain.llm.config.api_key, base_url=self.brain.llm.config.base_url)
             self.generator = PyGenerator()
 
+        async def execute(self):
+            # Determine the query to use
+            if self.task:
+                # Task mode: extract instruction from task
+                func_sig = self.task.get("instruction", "") or self.task.get("task_description", "")
+                # Add context information from dependent tasks
+                if self.task.get("dependent"):
+                    dependent_info = "\n\nDependent outputs:\n"
+                    for dependent in self.task["dependent"]:
+                        dependent_key = dependent.get("dependent_key")
+                        if dependent_key in self.input.symbols:
+                            symbol = self.input.symbols[dependent_key]
+                            dependent_info += f"- {dependent_key}: {symbol.output}\n"
+                    func_sig += dependent_info
+            else:
+                # Normal mode: use original query
+                func_sig = self.input.query
+
+            # 设置LDB生成所需参数
+            messages = []
+            
+            # 使用LDB生成代码
+            answer, messages = self.generator.ldb_generate(
+                func_sig=func_sig,
+                model=self.model,
+                messages=messages,
+                prev_func_impl="",
+                failed_tests="",
+                num_comps=1,
+                temperature=self.brain.llm.config.temperature,
+                dataset_type=self.input.dataset or "humaneval"  # 默认使用humaneval
+            )
+
+            self.answer = self.input.answer = answer
+            return self.answer
+
     class LdbBaseMinion(TestMinion):
         def __init__(self, **kwargs):
             if not HAS_LDB:
