@@ -138,7 +138,7 @@ class CotMinion(WorkerMinion):
 
         self.input.answer = self.answer
         self.answer_raw = self.input.answer_raw = response
-        return self.answer_raw
+        return self.answer
 
 # class DotMinion(WorkerMinion):
 #     """Diagram of Thought (DoT) Strategy"""
@@ -363,7 +363,7 @@ class TaskMinion(WorkerMinion):
         # filter out smart, since we don't want choose smart following smart again
         # also filter out ScoreMinion
         # 当选择meta plan的时候，把plan去掉，否则task又走一遍planminion了
-        filtered_registry = {key: value for key, value in MINION_REGISTRY.items() 
+        filtered_registry = {key: value for key, value in WORKER_MINIONS.items()
                            if key not in ['plan', 'math_plan']}
         filled_template = choose_template.render(minions=filtered_registry, input=self.input, task=self.task)
 
