@@ -404,7 +404,7 @@ class TaskMinion(WorkerMinion):
         result = await minion.execute()
         self.answer = self.task["answer"] = result
         self.input.symbols[self.task["output_key"]] = result
-        print("#####OUTPUT#####")
+        print("#####TASK OUTPUT#####")
         print(f"{self.task['output_key']}:{result}")
 
         # 如果需要检查，则进行额外的检查循环
@@ -426,7 +426,7 @@ class TaskMinion(WorkerMinion):
                 result = await minion.execute()
                 self.answer = self.task["answer"] = result
                 self.input.symbols[self.task["output_key"]] = result
-                print("#####OUTPUT#####")
+                print("#####TASK OUTPUT#####")
                 print(f"{self.task['output_key']}:{result}")
 
                 # 清除反馈信息，为下一次迭代做准备
