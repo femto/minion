@@ -20,7 +20,7 @@ class ProblemReflectMinion(PreProcessingMinion):
         
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        reflection = await node.execute(prompt, tools=tools)
+        reflection = await node.execute(prompt, tools=None)
         
         # Store reflection in input metadata for later use
         self.input.info["problem_reflection"] = reflection
