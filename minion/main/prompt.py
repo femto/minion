@@ -2,7 +2,7 @@ NATIVE_PROBLEM_INSTRUCTION = """
 respond to the following query within the tags <final_answer></final_answer>.
 """
 COT_PROBLEM_INSTRUCTION = """
-Please respond in the following structured reasoning format:
+Please respond using the following structured reasoning format:
 
 <think>
 Systematically break down the problem into logical, distinct steps. For each step:
@@ -15,7 +15,8 @@ Systematically break down the problem into logical, distinct steps. For each ste
 After analyzing all relevant factors, synthesize your findings into a coherent and well-supported conclusion.
 </think>
 
-Provide your final answer clearly and directly, backed by the reasoning above. Do not include a confidence level in your response.
+Then, immediately follow with your answer — clearly and directly stated — without including a “Final Answer:” label or a confidence level.
+
 """
 
 ASK_PROMPT_JINJA = """
