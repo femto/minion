@@ -2,7 +2,11 @@ NATIVE_PROBLEM_INSTRUCTION = """
 respond to the following query within the tags <final_answer></final_answer>.
 """
 COT_PROBLEM_INSTRUCTION = """
-Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion. Clearly express your final conclusion, ensuring that it is directly accessible and requires no further interpretation by presenting it explicitly within the tags <final_answer></final_answer>. Finally, include a verbalized confidence level for your conclusion (e.g., "Confidence: 60% / Medium") to convey your level of certainty in the analysis and decision-making process.
+<think>
+Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion.
+</think>
+
+Provide your final answer clearly and directly, ensuring it is well-supported by the reasoning above. Include a verbalized confidence level for your conclusion (e.g., "Confidence: 60% / Medium") to convey your level of certainty in the analysis and decision-making process.
 """
 
 ASK_PROMPT_JINJA = """
@@ -695,3 +699,46 @@ Please improve the code to make it pass all test cases. The improved code should
 4. Pass all test cases
 
 Return only the improved code without any explanations or comments."""
+
+def extract_think_and_answer(response: str) -> tuple[str, str]:
+    """
+    Extract think content and answer content from DeepSeek think mode response.
+    
+    Args:
+        response: The full response text containing <think></think> tags
+        
+    Returns:
+        tuple: (think_content, answer_content)
+            - think_content: Content within <think></think> tags
+            - answer_content: Content outside <think></think> tags
+    """
+    import re
+    
+    # Extract think content
+    think_pattern = r'<think>(.*?)</think>'
+    think_matches = re.findall(think_pattern, response, re.DOTALL)
+    think_content = '\n'.join(think_matches) if think_matches else ""
+    
+    # Extract answer content (everything outside think tags)
+    answer_content = re.sub(think_pattern, '', response, flags=re.DOTALL)
+    answer_content = answer_content.strip()
+    
+    return think_content.strip(), answer_content
+
+
+def format_deepseek_response(think_content: str, answer_content: str) -> str:
+    """
+    Format content into DeepSeek think mode format.
+    
+    Args:
+        think_content: The thinking/reasoning content
+        answer_content: The final answer content
+        
+    Returns:
+        str: Formatted response with <think></think> tags
+    """
+    if not think_content:
+        return answer_content
+    
+    formatted = f"<think>\n{think_content}\n</think>\n\n{answer_content}"
+    return formatted

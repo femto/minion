@@ -66,6 +66,7 @@ from minion.models.schemas import (
 )
 from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python, \
     extract_answer
+from minion.main.prompt import extract_think_and_answer
 
 class WorkerMinion(Minion):
     pass
@@ -89,8 +90,13 @@ class RawMinion(WorkerMinion):
             
         response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools)
 
+        # Extract answer using DeepSeek think mode
+        think_content, answer_content = extract_think_and_answer(response)
+        self.answer = answer_content if answer_content else response
+        self.think_content = think_content
+        
         self.answer_raw = self.input.answer_raw = response
-        self.answer = self.input.answer = response
+        self.input.answer = self.answer
         return self.answer
 
 @register_worker_minion
@@ -114,8 +120,14 @@ class NativeMinion(WorkerMinion):
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
         response = await node.execute(prompt, system_prompt=self.input.system_prompt, tools=tools)
+        
+        # Extract answer using DeepSeek think mode
+        think_content, answer_content = extract_think_and_answer(response)
+        self.answer = answer_content if answer_content else response
+        self.think_content = think_content
+        
         self.raw_answer = self.input.answer_raw = response
-        self.answer = self.input.answer = response
+        self.input.answer = self.answer
         return self.answer
 
 
@@ -153,7 +165,11 @@ class CotMinion(WorkerMinion):
         if post_processing == "extract_python" or self.input.query_type == "code_solution":
             self.answer = response  # Let route minion handle extraction
         else:
-            self.answer = extract_final_answer(response)
+            # For DeepSeek think mode, extract the answer part outside <think> tags
+            think_content, answer_content = extract_think_and_answer(response)
+            self.answer = answer_content if answer_content else response
+            # Store think content for potential debugging/analysis
+            self.think_content = think_content
 
         self.input.answer = self.answer
         self.answer_raw = self.input.answer_raw = response
