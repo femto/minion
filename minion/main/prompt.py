@@ -2,11 +2,20 @@ NATIVE_PROBLEM_INSTRUCTION = """
 respond to the following query within the tags <final_answer></final_answer>.
 """
 COT_PROBLEM_INSTRUCTION = """
+Please respond in the following structured reasoning format:
+
 <think>
-Let's approach this problem by systematically breaking it down into distinct, logical steps. For each step, provide a clear explanation of the reasoning behind it, considering any underlying assumptions, potential biases, and alternative approaches. Explore how different assumptions or methodologies might lead to varying outcomes and critically assess the consequences of each decision. Additionally, consider the broader implications of these decisions within the context of the problem. Once all aspects have been thoroughly analyzed, synthesize the findings to reach a well-supported conclusion.
+Systematically break down the problem into logical, distinct steps. For each step:
+- Clearly explain the reasoning process and articulate any underlying assumptions.
+- Identify potential biases and consider at least one alternative approach.
+- Examine how changes in assumptions or methods might affect the outcome.
+- Evaluate the short-term and long-term consequences of each decision.
+- Discuss the broader implications of each choice in the context of the original problem.
+
+After analyzing all relevant factors, synthesize your findings into a coherent and well-supported conclusion.
 </think>
 
-Provide your final answer clearly and directly, ensuring it is well-supported by the reasoning above. Include a verbalized confidence level for your conclusion (e.g., "Confidence: 60% / Medium") to convey your level of certainty in the analysis and decision-making process.
+Provide your final answer clearly and directly, backed by the reasoning above. Do not include a confidence level in your response.
 """
 
 ASK_PROMPT_JINJA = """
