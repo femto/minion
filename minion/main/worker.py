@@ -339,8 +339,13 @@ class PlanMinion(WorkerMinion):
     async def execute_tasks_in_order(self, graph):
         sorted_tasks = list(nx.topological_sort(graph))
         start_index = self.input.execution_state.current_task_index
+        total_tasks = len(sorted_tasks)
+        
+        logger.info(f"📋 Plan execution: {total_tasks} tasks total, starting from index {start_index}")
 
         for index, task_id in enumerate(sorted_tasks[start_index:], start=start_index):
+            logger.info(f"📋 Plan progress: executing task {index + 1}/{total_tasks} (task_id: {task_id})")
+            
             for task in self.plan:
                 if task["task_id"] == task_id:
                     task_minion = TaskMinion(brain=self.brain, input=self.input, task=task)
@@ -351,7 +356,11 @@ class PlanMinion(WorkerMinion):
 
                     self.input.update_execution_state(current_task_index=index + 1, last_completed_task=task_id)
                     self.save_execution_state()
+                    
+                    logger.info(f"📋 Plan progress: task {index + 1}/{total_tasks} completed, stored in symbol '{task['output_key']}'")
+                    break
 
+        logger.info(f"📋 Plan execution completed: all {total_tasks} tasks finished")
         self.answer = self.input.answer = result
         return self.answer
 
@@ -399,6 +408,14 @@ class TaskMinion(WorkerMinion):
         self.task = task
 
     async def choose_minion_and_run(self):
+        # Log the start of task execution
+        task_id = self.task.get("task_id", "unknown")
+        task_instruction = self.task.get("instruction", "")
+        task_description = self.task.get("task_description", "")
+        logger.info(f"🎯 Starting execution of task [{task_id}]: {task_instruction}")
+        if task_description:
+            logger.info(f"📝 Task description: {task_description}")
+        
         choose_template = Template(TASK_ROUTE_PROMPT)
 
         # filter out smart, since we don't want choose smart following smart again
@@ -414,23 +431,38 @@ class TaskMinion(WorkerMinion):
         name = meta_plan.name
         name = most_similar_minion(name, filtered_registry.keys())
         klass = filtered_registry[name]
+        
+        # Log the chosen minion
+        logger.info(f"🤖 Task [{task_id}] selected minion: {name} ({klass.__name__})")
+        
         minion = klass(input=self.input, brain=self.brain, task=self.task)
 
         # 确保至少执行一次
+        logger.info(f"⚡ Executing task [{task_id}] with {name}...")
         result = await minion.execute()
         self.answer = self.task["answer"] = result
         self.input.symbols[self.task["output_key"]] = result
+        
+        # Log task completion
+        # output_key = self.task.get("output_key", "unknown")
+        # logger.info(f"✅ Task [{task_id}] completed. Output key: {output_key}")
+        # logger.info(f"📊 Task [{task_id}] result: {str(result)[:200]}")  # Limit result display to 200 chars
         print("#####TASK OUTPUT#####")
         print(f"{self.task['output_key']}:{result}")
 
         # 如果需要检查，则进行额外的检查循环
         if int(self.input.task_check) > 0:
+            logger.info(f"🔍 Task [{task_id}] entering check loop ({self.input.task_check} iterations)")
             for iteration in range(int(self.input.task_check)):
+                logger.info(f"🔍 Task [{task_id}] check iteration {iteration + 1}/{self.input.task_check}")
                 check_minion = CheckMinion(input=self.input, brain=self.brain)
                 check_result = await check_minion.execute()
                 
                 if check_result and check_result["correct"]:
+                    logger.info(f"✅ Task [{task_id}] passed check on iteration {iteration + 1}")
                     return self.answer
+                else:
+                    logger.info(f"❌ Task [{task_id}] failed check on iteration {iteration + 1}, retrying...")
                     
                 # 如果检查失败，添加反馈信息到input中
                 # if check_result:
@@ -439,16 +471,19 @@ class TaskMinion(WorkerMinion):
                 #     logger.info(f"Check failed on iteration {iteration + 1}. Feedback: {self.input.feedback}")
                     
                 # 使用反馈信息重新执行
+                logger.info(f"🔄 Task [{task_id}] re-executing with {name}...")
                 result = await minion.execute()
                 self.answer = self.task["answer"] = result
                 self.input.symbols[self.task["output_key"]] = result
+                logger.info(f"📊 Task [{task_id}] retry result: {str(result)[:200]}")
                 print("#####TASK OUTPUT#####")
                 print(f"{self.task['output_key']}:{result}")
 
                 # 清除反馈信息，为下一次迭代做准备
                 self.input.feedback = ""
                 self.input.error = ""
-
+        
+        logger.info(f"🏁 Task [{task_id}] execution finished")
         return self.answer
 
     async def execute(self):
