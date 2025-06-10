@@ -114,10 +114,17 @@ async def demo_basic_usage():
     print(f"Task: {task}")
     print("-" * 60)
     
-    # Run the task
-    result = await agent.run(task, max_steps=5, streaming=False)
+    # Run the task with streaming
+    final_response = None
+    async for result in agent.run(task, max_steps=5, streaming=True):
+        response, score, terminated, truncated, info = result
+        print(f"Step {info.get('step_count', '?')}: {response}")
+        final_response = response
+        if terminated:
+            print("Task completed!")
+            break
     
-    print(f"Result: {result}")
+    print(f"Final Result: {final_response}")
     print("-" * 60)
 
 
@@ -302,10 +309,18 @@ async def demo_custom_llm_config():
                 agent = create_turing_machine_agent(model_name=model_name)
             
             task = "What are the three most important principles of good software design?"
-            result = await agent.run(task, max_steps=3)
             
             print(f"Model: {model_name}")
-            print(f"Result: {result}")
+            print("Streaming response:")
+            final_result = None
+            async for result in agent.run(task, max_steps=3, streaming=True):
+                response, score, terminated, truncated, info = result
+                print(f"  Step {info.get('step_count', '?')}: {response}")
+                final_result = response
+                if terminated:
+                    break
+            
+            print(f"Final Result: {final_result}")
             
         except Exception as e:
             print(f"Error with model {model_name}: {e}")
