@@ -21,19 +21,95 @@ from minion.agents.turing_machine_agent import (
     create_turing_machine_agent
 )
 from minion.agents.base_agent import Input
+from minion.tools.default_tools import PythonInterpreterTool
+from minion.tools.base_tool import BaseTool
+
+
+class SearchTool(BaseTool):
+    """Mock search tool for demonstration"""
+    name = "web_search"
+    description = "Search the web for information"
+    inputs = {
+        "query": {"type": "string", "description": "Search query"}
+    }
+    output_type = "string"
+    
+    def forward(self, query: str) -> str:
+        # Mock search results
+        mock_results = {
+            "san francisco museums": "Found: Exploratorium, Computer History Museum, SFMOMA, California Academy of Sciences",
+            "san francisco restaurants": "Found: Tartine, State Bird Provisions, Benu, Gary Danko, Zuni Cafe",
+            "san francisco hotels": "Found: St. Regis, Fairmont, Palace Hotel, Hotel Zephyr"
+        }
+        
+        for key, result in mock_results.items():
+            if key.lower() in query.lower():
+                return result
+        
+        return f"Search results for '{query}': General information found (mock search)"
+
+
+class CalculatorTool(BaseTool):
+    """Simple calculator tool"""
+    name = "calculator"
+    description = "Perform mathematical calculations"
+    inputs = {
+        "expression": {"type": "string", "description": "Mathematical expression to evaluate"}
+    }
+    output_type = "string"
+    
+    def forward(self, expression: str) -> str:
+        try:
+            # Safe evaluation of mathematical expressions
+            import ast
+            import operator
+            
+            operators = {
+                ast.Add: operator.add,
+                ast.Sub: operator.sub,
+                ast.Mult: operator.mul,
+                ast.Div: operator.truediv,
+                ast.Pow: operator.pow,
+                ast.USub: operator.neg,
+            }
+            
+            def eval_expr(node):
+                if isinstance(node, ast.Num):
+                    return node.n
+                elif isinstance(node, ast.Constant):
+                    return node.value
+                elif isinstance(node, ast.BinOp):
+                    return operators[type(node.op)](eval_expr(node.left), eval_expr(node.right))
+                elif isinstance(node, ast.UnaryOp):
+                    return operators[type(node.op)](eval_expr(node.operand))
+                else:
+                    raise TypeError(f"Unsupported type {type(node)}")
+            
+            tree = ast.parse(expression, mode='eval')
+            result = eval_expr(tree.body)
+            return f"Result: {result}"
+            
+        except Exception as e:
+            return f"Error calculating '{expression}': {str(e)}"
 
 
 async def demo_basic_usage():
-    """Demo basic usage of TuringMachineAgent"""
+    """Demo basic usage of TuringMachineAgent with tools"""
     print("=" * 60)
-    print("Basic TuringMachineAgent Demo")
+    print("Basic TuringMachineAgent Demo with Tools")
     print("=" * 60)
     
     # Create agent using default LLM configuration
     agent = create_turing_machine_agent(name="demo_agent")
     
-    # Simple task using BaseAgent interface
-    task = "Help me plan a weekend trip to San Francisco. I'm interested in technology museums and good food."
+    # Add tools to the agent
+    agent.add_tool(SearchTool())
+    agent.add_tool(CalculatorTool())
+    
+    print(f"Available tools: {[tool.name for tool in agent.tools]}")
+    
+    # Simple task using BaseAgent interface that can benefit from tools
+    task = "Help me plan a weekend trip to San Francisco. I'm interested in technology museums and good food. Also calculate the total if hotels cost $200/night for 2 nights."
     
     print(f"Task: {task}")
     print("-" * 60)
@@ -46,9 +122,9 @@ async def demo_basic_usage():
 
 
 async def demo_step_by_step():
-    """Demo step-by-step execution with detailed monitoring"""
+    """Demo step-by-step execution with detailed monitoring and tools"""
     print("=" * 60) 
-    print("Step-by-Step Turing Machine Demo")
+    print("Step-by-Step Turing Machine Demo with Tools")
     print("=" * 60)
     
     # Create agent with specific model (if available in config)
@@ -60,6 +136,10 @@ async def demo_step_by_step():
     except:
         # Fallback to default if model not found
         agent = create_turing_machine_agent(name="step_agent")
+    
+    # Add tools to the agent
+    agent.add_tool(PythonInterpreterTool())
+    agent.add_tool(CalculatorTool())
     
     # Create detailed task setup
     goal = "Create a simple Python function that calculates the Fibonacci sequence"
@@ -163,6 +243,45 @@ async def demo_integrated_with_base_agent():
         print(f"Second Terminated: {terminated2}")
 
 
+async def demo_tools_showcase():
+    """Demo showcasing different tool usage scenarios"""
+    print("=" * 60)
+    print("Tools Showcase Demo")
+    print("=" * 60)
+    
+    # Create agent with multiple tools
+    agent = create_turing_machine_agent(name="tools_showcase_agent")
+    agent.add_tool(SearchTool())
+    agent.add_tool(CalculatorTool())
+    agent.add_tool(PythonInterpreterTool())
+    
+    print(f"Available tools: {[tool.name for tool in agent.tools]}")
+    print("-" * 60)
+    
+    # Test different tool scenarios
+    tool_tasks = [
+        "Search for information about San Francisco restaurants",
+        "Calculate the result of 15 * 7 + 123 - 45",
+        "Write Python code to calculate the factorial of 5 and print the result"
+    ]
+    
+    for i, task in enumerate(tool_tasks, 1):
+        print(f"\n--- Tool Task {i}: {task} ---")
+        
+        try:
+            # Run step by step to see tool usage
+            task_input = Input(query=task)
+            response, score, terminated, truncated, info = await agent.step(task_input, debug=False)
+            
+            print(f"Response: {response}")
+            print(f"State: {info.get('state', 'unknown')}")
+            
+        except Exception as e:
+            print(f"Error: {e}")
+        
+        print("-" * 40)
+
+
 async def demo_custom_llm_config():
     """Demo using different LLM configurations"""
     print("=" * 60)
@@ -200,6 +319,7 @@ async def main():
     demos = [
         ("Basic Usage", demo_basic_usage),
         ("Step-by-Step Execution", demo_step_by_step),
+        ("Tools Showcase", demo_tools_showcase),
         ("BaseAgent Interface", demo_integrated_with_base_agent),
         ("Custom LLM Config", demo_custom_llm_config),
     ]

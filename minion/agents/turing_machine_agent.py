@@ -10,6 +10,7 @@ from ..providers.llm_provider_registry import llm_registry
 from ..configs.config import config, LLMConfig
 from ..main.input import Input
 from .base_agent import BaseAgent
+from ..tools.base_tool import BaseTool
 
 
 class AgentState(Enum):
@@ -73,6 +74,7 @@ class AgentInput:
     prompt: str
     context: Dict[str, Any] = field(default_factory=dict)
     external_input: Any = None
+    available_tools: List[BaseTool] = field(default_factory=list)
 
 
 @dataclass
@@ -166,24 +168,42 @@ class AgentTuringMachine:
 - Current step: {agent_input.plan.current_step + 1} of {len(agent_input.plan.steps)}
 - Current action: {current_step['action'] if current_step else 'Starting'}"""
 
+        # Get available tools information
+        tools_info = ""
+        if agent_input.available_tools:
+            tools_info = "\n## Available Tools:\n"
+            for tool in agent_input.available_tools:
+                tools_info += f"- **{tool.name}**: {tool.description}\n"
+                if hasattr(tool, 'inputs') and tool.inputs:
+                    inputs_desc = ", ".join([f"{k}: {v.get('description', v.get('type', 'any'))}" for k, v in tool.inputs.items()])
+                    tools_info += f"  - Inputs: {inputs_desc}\n"
+            tools_info += "\nTo use a tool, wrap your tool call in a Python code block in your next_instruction:\n```python\n# Example for python_interpreter:\nresult = python_interpreter.forward(code=\"print(5 + 3)\")\nprint(f\"Tool result: {result}\")\n```</end_code>\n\nIMPORTANT: Always end code blocks with ```</end_code> for proper parsing.\n"
+
         # Construct comprehensive prompt
         prompt = f"""You are a Turing Machine Agent in state: {self.current_state.value}
 
 ## Task Goal: {agent_input.goal}
 
 ## Current Context: {agent_input.prompt}
-{plan_info}{memory_info}
+{plan_info}{memory_info}{tools_info}
 
 Please analyze the situation and determine your next action. Consider:
 1. Current state and goal
 2. Your existing working memory and what you've learned so far
-3. What action would best progress toward the goal
-4. Whether you need to transition to a different state  
-5. How to synthesize your previous memory with this step's results into an updated summary
-6. Whether the task is complete and you should halt execution
-7. If you're repeating similar actions, provide the actual final answer instead
+3. Any previous tool execution results mentioned in the context
+4. What action would best progress toward the goal
+5. Whether you need to transition to a different state  
+6. How to synthesize your previous memory with this step's results into an updated summary
+7. Whether the task is complete and you should halt execution
+8. If you're repeating similar actions, provide the actual final answer instead
 
 IMPORTANT: If the task asks for code, explanations, calculations, or specific content - provide the ACTUAL result in current_result, not just descriptions of what you plan to do. Avoid repetitive planning - move to concrete output.
+
+When using tools, review any previous tool execution results in the context above before deciding on your next action. You MUST wrap all tool calls in Python code blocks with the exact format:
+```python
+result = tool_name.forward(parameters)
+print(result)
+```</end_code>
 
 Available states: planning, executing, reflecting, waiting, halted, error
 
@@ -404,6 +424,9 @@ If you cannot provide JSON, just give a helpful response to complete the current
         # Parse output
         agent_output = self._parse_llm_output(llm_response)
 
+        # Execute tools if present in the instruction
+        agent_output = await self._execute_tools_if_needed(agent_input, agent_output, debug)
+
         # Update state
         self._update_state(agent_input, agent_output)
 
@@ -428,6 +451,90 @@ If you cannot provide JSON, just give a helpful response to complete the current
                 break
 
         return outputs
+    
+    async def _execute_tools_if_needed(self, agent_input: AgentInput, agent_output: AgentOutput, debug: bool = False) -> AgentOutput:
+        """Execute tools if they are referenced in the agent's instruction"""
+        instruction = agent_output.next_instruction
+        
+        # Look for Python code blocks with tool calls
+        import re
+        # Pattern to match ```python ... ```</end_code>
+        code_pattern = r'```python\s*\n(.*?)\n```</end_code>'
+        code_matches = re.findall(code_pattern, instruction, re.DOTALL)
+        
+        if not code_matches:
+            return agent_output
+        
+        # Execute each code block
+        tool_results = []
+        tools_used = []
+        
+        for code_block in code_matches:
+            if debug:
+                print(f"Executing Python code block:\n{code_block}")
+            
+            # Parse the Python code to extract tool calls
+            try:
+                # Create a safe execution environment with available tools
+                tool_namespace = {}
+                for tool in agent_input.available_tools:
+                    tool_namespace[tool.name] = tool
+                
+                # Add common Python functions
+                tool_namespace.update({
+                    'print': print,
+                    'len': len,
+                    'str': str,
+                    'int': int,
+                    'float': float,
+                    'list': list,
+                    'dict': dict,
+                })
+                
+                # Capture output
+                import io
+                from contextlib import redirect_stdout
+                output_capture = io.StringIO()
+                
+                with redirect_stdout(output_capture):
+                    # Execute the code
+                    exec(code_block, tool_namespace)
+                
+                # Get the output
+                output = output_capture.getvalue()
+                if output.strip():
+                    tool_results.append(f"Code execution output:\n{output.strip()}")
+                else:
+                    tool_results.append("Code executed successfully with no output.")
+                
+                # Track which tools were used
+                for tool in agent_input.available_tools:
+                    if tool.name in code_block:
+                        tools_used.append(tool.name)
+                
+            except Exception as e:
+                tool_results.append(f"Code execution error: {str(e)}")
+        
+        # Update agent output with tool results
+        if tool_results:
+            original_result = agent_output.current_result or ""
+            combined_result = f"{original_result}\n\nTool Execution Results:\n" + "\n".join(tool_results)
+            
+            # Create updated agent output
+            updated_output = AgentOutput(
+                next_instruction=agent_output.next_instruction,
+                action_params=agent_output.action_params,
+                memory_updates=agent_output.memory_updates,
+                plan_updates=agent_output.plan_updates,
+                current_result=combined_result,
+                next_state=agent_output.next_state,
+                halt_condition=agent_output.halt_condition,
+                confidence=agent_output.confidence,
+                reasoning=agent_output.reasoning + f" [Used tools: {', '.join(set(tools_used))}]" if tools_used else agent_output.reasoning
+            )
+            return updated_output
+        
+        return agent_output
 
 
 class TuringMachineAgent(BaseAgent):
@@ -487,7 +594,8 @@ class TuringMachineAgent(BaseAgent):
             plan=self.current_plan,
             memory=self.agent_memory,
             prompt=input_data.query,
-            context=kwargs
+            context=kwargs,
+            available_tools=self.tools
         )
         
         # Execute one step of the Turing Machine
@@ -549,7 +657,8 @@ class TuringMachineAgent(BaseAgent):
             plan=self.current_plan,
             memory=self.agent_memory,
             prompt=goal,
-            context=kwargs
+            context=kwargs,
+            available_tools=self.tools
         )
         
         step_count = 0
@@ -629,7 +738,8 @@ class TuringMachineAgent(BaseAgent):
             plan=self.current_plan,
             memory=self.agent_memory,
             prompt=goal,
-            context=kwargs
+            context=kwargs,
+            available_tools=self.tools
         )
         
         step_count = 0
@@ -670,22 +780,39 @@ class TuringMachineAgent(BaseAgent):
 
     def _update_agent_input_with_history(self, agent_input: AgentInput, 
                                          previous_outputs: List[Any], goal: str) -> AgentInput:
-        """Update agent input - memory is now managed by LLM via memory_updates"""
+        """Update agent input with tool execution results from previous steps"""
         
-        # Simple prompt since LLM manages its own memory now
+        # Build context from previous tool executions
+        tool_history = ""
         if previous_outputs:
-            updated_prompt = f"Continue working towards: {goal}"
-        else:
-            updated_prompt = goal
+            recent_outputs = previous_outputs[-3:]  # Keep last 3 steps to avoid too long prompts
+            for i, output in enumerate(recent_outputs):
+                step_num = len(previous_outputs) - len(recent_outputs) + i + 1
+                if output.current_result and "Tool Execution Results:" in output.current_result:
+                    # Extract tool results from current_result
+                    tool_results = output.current_result.split("Tool Execution Results:")[-1].strip()
+                    tool_history += f"\nStep {step_num} - {tool_results}"
         
-        # Create updated agent input - memory is updated by LLM's memory_updates
+        # Create enhanced prompt with tool execution history
+        if tool_history:
+            updated_prompt = f"""Continue working towards: {goal}
+
+## Previous Tool Execution Results:
+{tool_history}
+
+Please consider these tool results when planning your next action."""
+        else:
+            updated_prompt = f"Continue working towards: {goal}" if previous_outputs else goal
+        
+        # Create updated agent input
         return AgentInput(
             goal=goal,
             plan=agent_input.plan,
             memory=agent_input.memory,  # LLM manages memory via memory_updates
             prompt=updated_prompt,
             context=agent_input.context,
-            external_input=agent_input.external_input
+            external_input=agent_input.external_input,
+            available_tools=agent_input.available_tools
         )
 
 
