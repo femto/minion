@@ -177,10 +177,13 @@ class AgentTuringMachine:
 Please analyze the situation and determine your next action. Consider:
 1. Current state and goal
 2. Your existing working memory and what you've learned so far
-3. What action would best progress toward the goal  
-4. Whether you need to transition to a different state
+3. What action would best progress toward the goal
+4. Whether you need to transition to a different state  
 5. How to synthesize your previous memory with this step's results into an updated summary
 6. Whether the task is complete and you should halt execution
+7. If you're repeating similar actions, provide the actual final answer instead
+
+IMPORTANT: If the task asks for code, explanations, calculations, or specific content - provide the ACTUAL result in current_result, not just descriptions of what you plan to do. Avoid repetitive planning - move to concrete output.
 
 Available states: planning, executing, reflecting, waiting, halted, error
 

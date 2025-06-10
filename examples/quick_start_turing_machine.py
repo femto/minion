@@ -54,7 +54,7 @@ async def step_by_step_example():
     
     agent = create_turing_machine_agent(name="step_agent")
     
-    task = "Create a simple 'Hello World' function in Python"
+    task = "Write Python code for a function that prints 'Hello World'"
     
     print(f"Task: {task}")
     print("-" * 60)
@@ -62,16 +62,15 @@ async def step_by_step_example():
     try:
         # Use streaming to see intermediate results
         step_count = 0
-        async for result in agent.run(task, streaming=True, max_steps=18):
+        async for result in agent.run(task, streaming=True, max_steps=8, debug=True):
             step_count += 1
             print(f"Step {step_count} Result:")
             if isinstance(result, tuple) and len(result) >= 1:
-                response = result[0]
+                response, score, terminated, truncated, info = result
                 print(f"Response: {response}")
-                if len(result) >= 5:  # Check if we have info
-                    info = result[4]
-                    print(f"Action: {info.get('action', 'unknown')}")
-                    print(f"State: {info.get('state', 'unknown')}")
+                print(f"Action: {info.get('action', 'unknown')}")
+                print(f"State: {info.get('state', 'unknown')}")
+                print(f"Terminated: {terminated}, Truncated: {truncated}")
             else:
                 print(result)
             print("-" * 40)
