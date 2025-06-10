@@ -78,7 +78,7 @@ class AgentInput:
 @dataclass
 class AgentOutput:
     """Output from the Turing Machine at each step"""
-    next_action: str
+    next_instruction: str
     action_params: Dict[str, Any] = field(default_factory=dict)
     memory_updates: Dict[str, Any] = field(default_factory=dict)
     plan_updates: Optional[Plan] = None
@@ -190,7 +190,7 @@ Available states: planning, executing, reflecting, waiting, halted, error
 Preferred JSON format:
 {{
     "reasoning": "explanation of your decision",
-    "next_action": "action_name", 
+    "next_instruction": "detailed instruction for what to do next, including specific steps and parameters", 
     "current_result": "your detailed response or analysis",
     "next_state": "planning|executing|reflecting|waiting|halted|error",
     "halt_condition": false,
@@ -216,7 +216,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
         # Handle empty or None output
         if not output or output.strip() == "":
             return AgentOutput(
-                next_action="error",
+                next_instruction="handle empty response error and check API configuration",
                 current_result="LLM returned empty response. This may be due to API configuration issues.",
                 next_state=AgentState.ERROR,
                 halt_condition=True,
@@ -230,7 +230,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
             # Try to parse as JSON
             data = json.loads(json_content)
             return AgentOutput(
-                next_action=data.get("next_action", "wait"),
+                next_instruction=data.get("next_instruction", data.get("next_instruction", "wait and continue")),
                 action_params=data.get("action_params", {}),
                 memory_updates=data.get("memory_updates", {}),
                 plan_updates=data.get("plan_updates"),
@@ -246,7 +246,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
         except (ValueError, KeyError) as e:
             # Handle other parsing errors
             return AgentOutput(
-                next_action="error",
+                next_instruction="handle parsing error and request properly formatted response",
                 current_result=f"Error parsing LLM response: {str(e)}",
                 next_state=AgentState.ERROR,
                 halt_condition=True,
@@ -318,7 +318,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
         # If the output looks like a regular response, treat it as the result
         if len(output.strip()) > 10:  # Has some meaningful content
             return AgentOutput(
-                next_action="respond",
+                next_instruction="provide final response to user",
                 current_result=output.strip(),
                 next_state=AgentState.HALTED,
                 halt_condition=True,
@@ -327,7 +327,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
             )
         else:
             return AgentOutput(
-                next_action="error",
+                next_instruction="handle error and request clarification",
                 current_result="LLM provided unclear response. Please check your API configuration.",
                 next_state=AgentState.ERROR,
                 halt_condition=True,
@@ -348,7 +348,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
         episode = {
             "step": self.step_count,
             "state": self.current_state.value,
-            "action": agent_output.next_action,
+            "instruction": agent_output.next_instruction,
             "result": agent_output.current_result,
             "confidence": agent_output.confidence
         }
@@ -357,7 +357,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
         # Update plan
         if agent_output.plan_updates:
             agent_input.plan = agent_output.plan_updates
-        elif agent_output.next_action == "advance_plan":
+        elif "advance_plan" in agent_output.next_instruction.lower():
             agent_input.plan.advance_step()
 
         # Update state
@@ -369,7 +369,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
 
         if self.step_count >= self.max_steps:
             return AgentOutput(
-                next_action="halt",
+                next_instruction="halt execution due to maximum steps limit reached",
                 current_result="Maximum steps reached",
                 next_state=AgentState.HALTED,
                 halt_condition=True
@@ -392,7 +392,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
                 print(f"LLM Error: {e}")
             # Create error response
             agent_output = AgentOutput(
-                next_action="error",
+                next_instruction="handle LLM API error and verify configuration",
                 current_result=f"LLM API Error: {str(e)}. Please check your API configuration.",
                 next_state=AgentState.ERROR,
                 halt_condition=True,
@@ -408,7 +408,7 @@ If you cannot provide JSON, just give a helpful response to complete the current
         self._update_state(agent_input, agent_output)
 
         if debug:
-            print(f"Action: {agent_output.next_action}")
+            print(f"Next Instruction: {agent_output.next_instruction}")
             print(f"Result: {agent_output.current_result}")
             print(f"Next State: {agent_output.next_state}")
             print("-" * 50)
@@ -499,7 +499,7 @@ class TuringMachineAgent(BaseAgent):
         terminated = output.halt_condition or output.next_state == AgentState.HALTED
         truncated = False
         info = {
-            "action": output.next_action,
+            "instruction": output.next_instruction,
             "action_params": output.action_params,
             "state": output.next_state.value,
             "reasoning": output.reasoning,
@@ -568,7 +568,7 @@ class TuringMachineAgent(BaseAgent):
             terminated = output.halt_condition or output.next_state == AgentState.HALTED
             truncated = False
             info = {
-                "action": output.next_action,
+                "action": output.next_instruction,
                 "action_params": output.action_params,
                 "state": output.next_state.value,
                 "reasoning": output.reasoning,
@@ -591,9 +591,9 @@ class TuringMachineAgent(BaseAgent):
             # Provide better information about what was accomplished
             partial_result = f"Reached maximum steps limit ({max_steps})"
             if len(self.agent_memory.episodic_memory) > 0:
-                partial_result += f". Completed {len(self.agent_memory.episodic_memory)} actions."
-                last_action = self.agent_memory.episodic_memory[-1].get("action", "unknown")
-                partial_result += f" Last action: {last_action}"
+                partial_result += f". Completed {len(self.agent_memory.episodic_memory)} instructions."
+                last_instruction = self.agent_memory.episodic_memory[-1].get("instruction", "unknown")
+                partial_result += f" Last instruction: {last_instruction}"
             
             yield (
                 partial_result, 
@@ -604,7 +604,7 @@ class TuringMachineAgent(BaseAgent):
                     "reason": "max_steps_reached",
                     "steps_completed": step_count,
                     "max_steps": max_steps,
-                    "actions_completed": len(self.agent_memory.episodic_memory),
+                    "instructions_completed": len(self.agent_memory.episodic_memory),
                     "last_state": self.turing_machine.current_state.value
                 }
             )
@@ -661,7 +661,7 @@ class TuringMachineAgent(BaseAgent):
             if last_output and final_result:
                 partial_result = f"Partial result after {max_steps} steps: {final_result}"
                 if len(self.agent_memory.episodic_memory) > 0:
-                    partial_result += f"\n\nProgress made: {len(self.agent_memory.episodic_memory)} actions completed."
+                    partial_result += f"\n\nProgress made: {len(self.agent_memory.episodic_memory)} instructions completed."
                 return partial_result
             else:
                 return f"Unable to complete task within {max_steps} steps. Please try increasing max_steps or simplifying the task."

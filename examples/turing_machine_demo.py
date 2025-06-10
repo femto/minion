@@ -1,28 +1,26 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-Turing Machine Agent Demo
+Turing Machine Agent Demo Script
 
-This demo shows how to use the Agent as Turing Machine implementation with real LLM providers.
+This script demonstrates various ways to use the TuringMachineAgent
+including basic usage, step-by-step execution, and integration with BaseAgent.
 """
 
 import asyncio
 import sys
-from pathlib import Path
+import os
 
-# Add the project root to the Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+# Add the parent directory to the path to import minion
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from minion.agents import (
-    TuringMachineAgent,
-    create_turing_machine_agent,
-    AgentInput,
-    Memory,
-    Plan,
-    AgentState
+from minion.agents.turing_machine_agent import (
+    AgentTuringMachine, 
+    AgentInput, 
+    Memory, 
+    Plan, 
+    AgentState,
+    create_turing_machine_agent
 )
-from minion.main.input import Input
+from minion.agents.base_agent import Input
 
 
 async def demo_basic_usage():
@@ -115,7 +113,7 @@ async def demo_step_by_step():
         output = await agent.turing_machine.step(agent_input, debug=False)
         outputs.append(output)
         
-        print(f"Action Taken: {output.next_action}")
+        print(f"Next Instruction: {output.next_instruction}")
         print(f"Result: {output.current_result}")
         print(f"Confidence: {output.confidence:.2f}")
         print(f"Next State: {output.next_state.value}")
