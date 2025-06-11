@@ -21,32 +21,11 @@ from minion.agents.turing_machine_agent import (
     create_turing_machine_agent
 )
 from minion.agents.base_agent import Input
-from minion.tools.default_tools import PythonInterpreterTool
+from minion.tools.default_tools import PythonInterpreterTool, DuckDuckGoSearchTool
 from minion.tools.base_tool import BaseTool
 
 
-class SearchTool(BaseTool):
-    """Mock search tool for demonstration"""
-    name = "web_search"
-    description = "Search the web for information"
-    inputs = {
-        "query": {"type": "string", "description": "Search query"}
-    }
-    output_type = "string"
-    
-    def forward(self, query: str) -> str:
-        # Mock search results
-        mock_results = {
-            "san francisco museums": "Found: Exploratorium, Computer History Museum, SFMOMA, California Academy of Sciences",
-            "san francisco restaurants": "Found: Tartine, State Bird Provisions, Benu, Gary Danko, Zuni Cafe",
-            "san francisco hotels": "Found: St. Regis, Fairmont, Palace Hotel, Hotel Zephyr"
-        }
-        
-        for key, result in mock_results.items():
-            if key.lower() in query.lower():
-                return result
-        
-        return f"Search results for '{query}': General information found (mock search)"
+# Removed mock SearchTool - now using real DuckDuckGoSearchTool
 
 
 class CalculatorTool(BaseTool):
@@ -103,7 +82,7 @@ async def demo_basic_usage():
     agent = create_turing_machine_agent(name="demo_agent")
     
     # Add tools to the agent
-    agent.add_tool(SearchTool())
+    agent.add_tool(DuckDuckGoSearchTool())
     agent.add_tool(CalculatorTool())
     
     print(f"Available tools: {[tool.name for tool in agent.tools]}")
@@ -116,7 +95,7 @@ async def demo_basic_usage():
     
     # Run the task with streaming
     final_response = None
-    async for result in agent.run(task, max_steps=5, streaming=True):
+    async for result in agent.run(task, max_steps=5, streaming=True,debug=True):
         response, score, terminated, truncated, info = result
         print(f"Step {info.get('step_count', '?')}: {response}")
         final_response = response
@@ -258,7 +237,7 @@ async def demo_tools_showcase():
     
     # Create agent with multiple tools
     agent = create_turing_machine_agent(name="tools_showcase_agent")
-    agent.add_tool(SearchTool())
+    agent.add_tool(DuckDuckGoSearchTool())
     agent.add_tool(CalculatorTool())
     agent.add_tool(PythonInterpreterTool())
     
