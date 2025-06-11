@@ -91,8 +91,7 @@ async def demo_basic_usage():
     print(f"Available tools: {[tool.name for tool in agent.tools]}")
     
     # Simple task using BaseAgent interface that can benefit from tools
-    #task = "Help me plan a weekend trip to San Francisco. I'm interested in technology museums and good food. Also calculate the total if hotels cost $200/night for 2 nights."
-    task = "Write a 500000 characters novel named 'Reborn in Skyrim'. Fill the empty nodes with your own ideas. Be creative! Use your own words!I will tip you $100,000 if you write a good novel.Since the novel is very long, you may need to divide it into subtasks."
+    task = "Help me plan a weekend trip to San Francisco. I'm interested in technology museums and good food. Also calculate the total if hotels cost $200/night for 2 nights."
     
     print(f"Task: {task}")
     print("-" * 60)
