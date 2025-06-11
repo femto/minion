@@ -84,6 +84,7 @@ async def demo_basic_usage():
     # Add tools to the agent
     agent.add_tool(DuckDuckGoSearchTool())
     agent.add_tool(CalculatorTool())
+    agent.add_tool(PythonInterpreterTool())
     
     print(f"Available tools: {[tool.name for tool in agent.tools]}")
     
@@ -206,6 +207,11 @@ async def demo_integrated_with_base_agent():
     
     agent = create_turing_machine_agent(name="base_interface_agent")
     
+    # Add tools to the agent
+    agent.add_tool(DuckDuckGoSearchTool())
+    agent.add_tool(CalculatorTool())
+    agent.add_tool(PythonInterpreterTool())
+    
     # Use the BaseAgent interface for simpler interaction
     task_input = Input(query="Explain the concept of machine learning in simple terms and provide a basic example")
     
@@ -286,6 +292,11 @@ async def demo_custom_llm_config():
                 agent = create_turing_machine_agent()
             else:
                 agent = create_turing_machine_agent(model_name=model_name)
+            
+            # Add tools to the agent
+            agent.add_tool(DuckDuckGoSearchTool())
+            agent.add_tool(CalculatorTool())
+            agent.add_tool(PythonInterpreterTool())
             
             task = "What are the three most important principles of good software design?"
             
