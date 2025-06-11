@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Optional, Union, AsyncIterator, Tuple
 from enum import Enum
 import json
 import re
+import inspect
 from abc import ABC, abstractmethod
 
 from ..providers.base_provider import BaseProvider
@@ -89,6 +90,25 @@ class AgentOutput:
     halt_condition: bool = False
     confidence: float = 1.0
     reasoning: str = ""
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)  # 新增：专门存储工具调用
+
+
+@dataclass
+class AgentResponse:
+    """Response from TuringMachineAgent - more convenient than gym 5-tuple"""
+    response: Any
+    score: float
+    terminated: bool
+    truncated: bool
+    info: Dict[str, Any]
+    step_count: int
+    state: AgentState
+    success: bool = True  # 新增：执行是否成功，默认为True
+    error: Optional[str] = None  # 新增：错误信息，当success=False时使用
+    
+    def __iter__(self):
+        """Allow unpacking as tuple for backward compatibility"""
+        return iter((self.response, self.score, self.terminated, self.truncated, self.info))
 
 
 class LLMInterface(ABC):
@@ -177,7 +197,6 @@ class AgentTuringMachine:
                 if hasattr(tool, 'inputs') and tool.inputs:
                     inputs_desc = ", ".join([f"{k}: {v.get('description', v.get('type', 'any'))}" for k, v in tool.inputs.items()])
                     tools_info += f"  - Inputs: {inputs_desc}\n"
-            tools_info += "\nTo use a tool, wrap your tool call in a Python code block in your next_instruction:\n```python\n# Example for python_interpreter:\nresult = python_interpreter.forward(code=\"print(5 + 3)\")\nprint(f\"Tool result: {result}\")\n```</end_code>\n\nIMPORTANT: Always end code blocks with ```</end_code> for proper parsing.\n"
 
         # Construct comprehensive prompt
         prompt = f"""You are a Turing Machine Agent in state: {self.current_state.value}
@@ -199,18 +218,12 @@ Please analyze the situation and determine your next action. Consider:
 
 IMPORTANT: If the task asks for code, explanations, calculations, or specific content - provide the ACTUAL result in current_result, not just descriptions of what you plan to do. Avoid repetitive planning - move to concrete output.
 
-When using tools, review any previous tool execution results in the context above before deciding on your next action. You MUST wrap all tool calls in Python code blocks with the exact format:
-```python
-result = tool_name.forward(parameters)
-print(result)
-```</end_code>
-
 Available states: planning, executing, reflecting, waiting, halted, error
 
 Preferred JSON format:
 {{
     "reasoning": "explanation of your decision",
-    "next_instruction": "detailed instruction for what to do next, including specific steps and parameters", 
+    "next_instruction": "detailed instruction for what to do next - describe WHAT you want to accomplish, not HOW to do it", 
     "current_result": "your detailed response or analysis",
     "next_state": "planning|executing|reflecting|waiting|halted|error",
     "halt_condition": false,
@@ -223,6 +236,7 @@ Preferred JSON format:
 }}
 
 IMPORTANT: 
+- Your next_instruction should be a clear description of WHAT needs to be done, not specific implementation details or tool calls
 - Your memory_updates should be CUMULATIVE SUMMARIES that integrate your existing working memory with this step's results, NOT just descriptions of the current step. Think of it as updating your persistent understanding.
 - Set halt_condition to true when the task is fully completed and no further steps are needed. This will stop the execution.
 
@@ -258,7 +272,8 @@ If you cannot provide JSON, just give a helpful response to complete the current
                 next_state=AgentState(data.get("next_state", "executing")),
                 halt_condition=data.get("halt_condition", False),
                 confidence=data.get("confidence", 1.0),
-                reasoning=data.get("reasoning", "")
+                reasoning=data.get("reasoning", ""),
+                tool_calls=data.get("tool_calls", [])
             )
         except json.JSONDecodeError:
             # If it's not JSON, try to handle as plain text
@@ -334,25 +349,15 @@ If you cannot provide JSON, just give a helpful response to complete the current
         return ""  # No matching closing brace found
     
     def _handle_non_json_output(self, output: str) -> AgentOutput:
-        """Handle non-JSON output from LLM"""
-        # If the output looks like a regular response, treat it as the result
-        if len(output.strip()) > 10:  # Has some meaningful content
-            return AgentOutput(
-                next_instruction="provide final response to user",
-                current_result=output.strip(),
-                next_state=AgentState.HALTED,
-                halt_condition=True,
-                confidence=0.7,
-                reasoning="LLM provided non-JSON response, treating as final answer"
-            )
-        else:
-            return AgentOutput(
-                next_instruction="handle error and request clarification",
-                current_result="LLM provided unclear response. Please check your API configuration.",
-                next_state=AgentState.ERROR,
-                halt_condition=True,
-                reasoning="Unclear LLM response"
-            )
+        """Handle non-JSON output by extracting information from plain text"""
+        return AgentOutput(
+            next_instruction=output.strip(),
+            current_result=output.strip(),
+            next_state=AgentState.EXECUTING,
+            halt_condition=False,
+            reasoning="Non-JSON response processed",
+            tool_calls=[]  # 新增：空的工具调用列表
+        )
 
     def _update_state(self, agent_input: AgentInput, agent_output: AgentOutput):
         """Update the agent's internal state based on output"""
@@ -386,55 +391,69 @@ If you cannot provide JSON, just give a helpful response to complete the current
 
     async def step(self, agent_input: AgentInput, debug: bool = False) -> AgentOutput:
         """Execute one step of the Turing Machine"""
-
         if self.step_count >= self.max_steps:
             return AgentOutput(
-                next_instruction="halt execution due to maximum steps limit reached",
-                current_result="Maximum steps reached",
+                next_instruction="max steps reached",
+                current_result="Maximum steps exceeded",
                 next_state=AgentState.HALTED,
-                halt_condition=True
+                halt_condition=True,
+                reasoning="Reached maximum step limit"
             )
 
-        # Construct prompt
-        prompt = self._construct_prompt(agent_input)
-
+        self.step_count += 1
+        
         if debug:
-            print(f"Step {self.step_count} - State: {self.current_state}")
-            print("Prompt:", prompt[:200] + "..." if len(prompt) > 200 else prompt)
+            print(f"\n=== Step {self.step_count} ===")
+            print(f"Current state: {self.current_state}")
+            print(f"Goal: {agent_input.goal}")
+            print(f"Available tools: {[tool.name for tool in agent_input.available_tools]}")
 
-        # Get LLM response with error handling
+        # Stage 1: Generate next_instruction and basic agent output
+        prompt = self._construct_prompt(agent_input)
+        
+        if debug:
+            print(f"Prompt length: {len(prompt)} characters")
+
         try:
-            llm_response = await self.llm.generate(prompt, agent_input.context)
+            llm_output = await self.llm.generate(prompt)
             if debug:
-                print(f"LLM Response: {llm_response[:100]}..." if len(str(llm_response)) > 100 else f"LLM Response: {llm_response}")
+                print(f"LLM Output: {llm_output[:500]}...")  # First 500 chars
+            
+            agent_output = self._parse_llm_output(llm_output)
+            
         except Exception as e:
             if debug:
-                print(f"LLM Error: {e}")
-            # Create error response
+                print(f"Error generating LLM response: {e}")
             agent_output = AgentOutput(
-                next_instruction="handle LLM API error and verify configuration",
-                current_result=f"LLM API Error: {str(e)}. Please check your API configuration.",
+                next_instruction="handle LLM error",
+                current_result=f"Error communicating with LLM: {str(e)}",
                 next_state=AgentState.ERROR,
                 halt_condition=True,
-                reasoning=f"LLM API failed: {str(e)}"
+                reasoning=f"LLM error: {str(e)}"
             )
-            self._update_state(agent_input, agent_output)
-            return agent_output
 
-        # Parse output
-        agent_output = self._parse_llm_output(llm_response)
+        # Stage 2: 判断是否需要工具调用
+        if not agent_output.halt_condition and agent_input.available_tools:
+            if debug:
+                print(f"Stage 2: Determining tool calls for instruction: {agent_output.next_instruction}")
+            
+            tool_calls = await self._determine_tool_calls(agent_input, agent_output)
+            agent_output.tool_calls = tool_calls
+            
+            # Stage 3: 执行工具调用（如果有的话）
+            if tool_calls:
+                if debug:
+                    print(f"Executing {len(tool_calls)} tool calls")
+                agent_output = await self._execute_tool_calls(agent_input, agent_output, debug)
 
-        # Execute tools if present in the instruction
-        agent_output = await self._execute_tools_if_needed(agent_input, agent_output, debug)
-
-        # Update state
+        # Update internal state
         self._update_state(agent_input, agent_output)
 
         if debug:
-            print(f"Next Instruction: {agent_output.next_instruction}")
-            print(f"Result: {agent_output.current_result}")
-            print(f"Next State: {agent_output.next_state}")
-            print("-" * 50)
+            print(f"Next state: {agent_output.next_state}")
+            print(f"Halt condition: {agent_output.halt_condition}")
+            if agent_output.tool_calls:
+                print(f"Tool calls: {[tc.get('tool_name') for tc in agent_output.tool_calls]}")
 
         return agent_output
 
@@ -452,89 +471,152 @@ If you cannot provide JSON, just give a helpful response to complete the current
 
         return outputs
     
-    async def _execute_tools_if_needed(self, agent_input: AgentInput, agent_output: AgentOutput, debug: bool = False) -> AgentOutput:
-        """Execute tools if they are referenced in the agent's instruction"""
-        instruction = agent_output.next_instruction
-        
-        # Look for Python code blocks with tool calls
-        import re
-        # Pattern to match ```python ... ```</end_code>
-        code_pattern = r'```python\s*\n(.*?)\n```</end_code>'
-        code_matches = re.findall(code_pattern, instruction, re.DOTALL)
-        
-        if not code_matches:
+    async def _execute_tool_calls(self, agent_input: AgentInput, agent_output: AgentOutput, debug: bool = False) -> AgentOutput:
+        """Stage 3: 执行具体的工具调用"""
+        if not agent_output.tool_calls:
             return agent_output
         
-        # Execute each code block
         tool_results = []
         tools_used = []
         
-        for code_block in code_matches:
-            if debug:
-                print(f"Executing Python code block:\n{code_block}")
-            
-            # Parse the Python code to extract tool calls
-            try:
-                # Create a safe execution environment with available tools
-                tool_namespace = {}
-                for tool in agent_input.available_tools:
-                    tool_namespace[tool.name] = tool
-                
-                # Add common Python functions
-                tool_namespace.update({
-                    'print': print,
-                    'len': len,
-                    'str': str,
-                    'int': int,
-                    'float': float,
-                    'list': list,
-                    'dict': dict,
-                })
-                
-                # Capture output
-                import io
-                from contextlib import redirect_stdout
-                output_capture = io.StringIO()
-                
-                with redirect_stdout(output_capture):
-                    # Execute the code
-                    exec(code_block, tool_namespace)
-                
-                # Get the output
-                output = output_capture.getvalue()
-                if output.strip():
-                    tool_results.append(f"Code execution output:\n{output.strip()}")
-                else:
-                    tool_results.append("Code executed successfully with no output.")
-                
-                # Track which tools were used
-                for tool in agent_input.available_tools:
-                    if tool.name in code_block:
-                        tools_used.append(tool.name)
-                
-            except Exception as e:
-                tool_results.append(f"Code execution error: {str(e)}")
+        # 创建工具名称到工具对象的映射
+        tool_map = {tool.name: tool for tool in agent_input.available_tools}
         
-        # Update agent output with tool results
+        for tool_call in agent_output.tool_calls:
+            tool_name = tool_call.get("tool_name")
+            parameters = tool_call.get("parameters", {})
+            description = tool_call.get("description", "")
+            
+            if debug:
+                print(f"Executing tool: {tool_name} with params: {parameters}")
+            
+            try:
+                if tool_name in tool_map:
+                    tool = tool_map[tool_name]
+                    # 执行工具 - 首先调用方法，然后检查结果是否需要await
+                    result = tool(**parameters)
+                    
+                    # 检查结果是否是awaitable（协程对象）
+                    if inspect.isawaitable(result):
+                        result = await result
+                    
+                    tool_results.append(f"Tool '{tool_name}' executed successfully:\n{result}")
+                    tools_used.append(tool_name)
+                    
+                    if debug:
+                        print(f"Tool '{tool_name}' result: {result}")
+                else:
+                    error_msg = f"Tool '{tool_name}' not found in available tools"
+                    tool_results.append(error_msg)
+                    if debug:
+                        print(error_msg)
+                        
+            except Exception as e:
+                error_msg = f"Error executing tool '{tool_name}': {str(e)}"
+                tool_results.append(error_msg)
+                if debug:
+                    print(error_msg)
+        
+        # 更新agent output with tool results
         if tool_results:
             original_result = agent_output.current_result or ""
             combined_result = f"{original_result}\n\nTool Execution Results:\n" + "\n".join(tool_results)
             
-            # Create updated agent output
+            # 检查是否有工具执行错误
+            has_tool_errors = any("Error executing tool" in result for result in tool_results)
+            
+            # 如果有工具错误，设置agent状态为错误
+            next_state = AgentState.ERROR if has_tool_errors else agent_output.next_state
+            halt_condition = has_tool_errors or agent_output.halt_condition  # 错误时停止执行
+            
+            # 更新reasoning包含错误信息
+            updated_reasoning = agent_output.reasoning
+            if tools_used:
+                updated_reasoning += f" [Used tools: {', '.join(set(tools_used))}]"
+            if has_tool_errors:
+                updated_reasoning += " [Tool execution failed - see results for details]"
+            
+            # 创建更新的agent output
             updated_output = AgentOutput(
                 next_instruction=agent_output.next_instruction,
                 action_params=agent_output.action_params,
                 memory_updates=agent_output.memory_updates,
                 plan_updates=agent_output.plan_updates,
                 current_result=combined_result,
-                next_state=agent_output.next_state,
-                halt_condition=agent_output.halt_condition,
-                confidence=agent_output.confidence,
-                reasoning=agent_output.reasoning + f" [Used tools: {', '.join(set(tools_used))}]" if tools_used else agent_output.reasoning
+                next_state=next_state,
+                halt_condition=halt_condition,
+                confidence=0.1 if has_tool_errors else agent_output.confidence,  # 降低错误时的信心度
+                reasoning=updated_reasoning,
+                tool_calls=agent_output.tool_calls
             )
             return updated_output
         
         return agent_output
+
+    async def _determine_tool_calls(self, agent_input: AgentInput, agent_output: AgentOutput) -> List[Dict[str, Any]]:
+        """第二阶段：根据next_instruction确定是否需要工具调用，如果需要则生成具体的工具调用"""
+        if not agent_input.available_tools:
+            return []
+        
+        instruction = agent_output.next_instruction
+        
+        # 构建工具调用判断的提示词
+        tools_info = ""
+        for tool in agent_input.available_tools:
+            tools_info += f"- **{tool.name}**: {tool.description}\n"
+            if hasattr(tool, 'inputs') and tool.inputs:
+                inputs_desc = ", ".join([f"{k}: {v.get('description', v.get('type', 'any'))}" for k, v in tool.inputs.items()])
+                tools_info += f"  - Inputs: {inputs_desc}\n"
+        
+        tool_decision_prompt = f"""You are analyzing whether a task requires tool usage and generating the specific tool calls.
+
+## Current Instruction: {instruction}
+
+## Goal: {agent_input.goal}
+
+## Available Tools:
+{tools_info}
+
+## Current Memory:
+{agent_input.memory.working_memory if agent_input.memory.working_memory else "Empty"}
+
+Please analyze the instruction and determine:
+1. Does this instruction require using any of the available tools?
+2. If yes, which specific tools and with what parameters?
+
+Respond in JSON format:
+{{
+    "needs_tools": true/false,
+    "reasoning": "why tools are or aren't needed",
+    "tool_calls": [
+        {{
+            "tool_name": "exact_tool_name",
+            "parameters": {{
+                "param1": "value1",
+                "param2": "value2"
+            }},
+            "description": "what this tool call accomplishes"
+        }}
+    ]
+}}
+
+If no tools are needed, set "needs_tools" to false and "tool_calls" to an empty array.
+Only generate tool calls for actions that actually require external tools - not for simple analysis, reasoning, or text generation.
+"""
+        
+        try:
+            tool_response = await self.llm.generate(tool_decision_prompt)
+            tool_json = self._extract_json_from_output(tool_response)
+            tool_data = json.loads(tool_json)
+            
+            if tool_data.get("needs_tools", False):
+                return tool_data.get("tool_calls", [])
+            else:
+                return []
+                
+        except Exception as e:
+            # 如果工具调用判断失败，返回空列表，不影响主流程
+            return []
 
 
 class TuringMachineAgent(BaseAgent):
@@ -601,7 +683,7 @@ class TuringMachineAgent(BaseAgent):
         # Execute one step of the Turing Machine
         output = await self.turing_machine.step(agent_input, debug=kwargs.get("debug", False))
         
-        # Convert to BaseAgent expected format
+        # Convert to AgentResponse format
         response = output.current_result
         score = output.confidence
         terminated = output.halt_condition or output.next_state == AgentState.HALTED
@@ -611,10 +693,28 @@ class TuringMachineAgent(BaseAgent):
             "action_params": output.action_params,
             "state": output.next_state.value,
             "reasoning": output.reasoning,
-            "step_count": self.turing_machine.step_count
+            "step_count": self.turing_machine.step_count,
+            "success": output.next_state != AgentState.ERROR,
+            "error": output.reasoning if output.next_state == AgentState.ERROR else None
         }
         
-        return response, score, terminated, truncated, info
+        # 判断是否有错误
+        success = output.next_state != AgentState.ERROR
+        error_msg = None
+        if not success:
+            error_msg = output.reasoning or "Agent entered ERROR state"
+        
+        return AgentResponse(
+            response=response,
+            score=score,
+            terminated=terminated,
+            truncated=truncated,
+            info=info,
+            step_count=self.turing_machine.step_count,
+            state=output.next_state,
+            success=success,
+            error=error_msg
+        )
     
     def run(self, task: Union[str, Input], **kwargs) -> Any:
         """
@@ -676,12 +776,19 @@ class TuringMachineAgent(BaseAgent):
             score = output.confidence
             terminated = output.halt_condition or output.next_state == AgentState.HALTED
             truncated = False
+            
+            # 检查是否有错误状态
+            if output.next_state == AgentState.ERROR:
+                terminated = True  # 错误时终止执行
+            
             info = {
                 "action": output.next_instruction,
                 "action_params": output.action_params,
                 "state": output.next_state.value,
                 "reasoning": output.reasoning,
-                "step_count": self.turing_machine.step_count
+                "step_count": self.turing_machine.step_count,
+                "success": output.next_state != AgentState.ERROR,
+                "error": output.reasoning if output.next_state == AgentState.ERROR else None
             }
             
             result = (response, score, terminated, truncated, info)
