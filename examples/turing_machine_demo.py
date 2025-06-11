@@ -23,6 +23,7 @@ from minion.agents.turing_machine_agent import (
 from minion.agents.base_agent import Input
 from minion.tools.default_tools import PythonInterpreterTool, DuckDuckGoSearchTool
 from minion.tools.base_tool import BaseTool
+from minion.tools.text_generation_tool import TextGenerationTool
 
 
 # Removed mock SearchTool - now using real DuckDuckGoSearchTool
@@ -85,18 +86,20 @@ async def demo_basic_usage():
     agent.add_tool(DuckDuckGoSearchTool())
     agent.add_tool(CalculatorTool())
     agent.add_tool(PythonInterpreterTool())
+    agent.add_tool(TextGenerationTool())
     
     print(f"Available tools: {[tool.name for tool in agent.tools]}")
     
     # Simple task using BaseAgent interface that can benefit from tools
-    task = "Help me plan a weekend trip to San Francisco. I'm interested in technology museums and good food. Also calculate the total if hotels cost $200/night for 2 nights."
+    #task = "Help me plan a weekend trip to San Francisco. I'm interested in technology museums and good food. Also calculate the total if hotels cost $200/night for 2 nights."
+    task = "Write a 500000 characters novel named 'Reborn in Skyrim'. Fill the empty nodes with your own ideas. Be creative! Use your own words!I will tip you $100,000 if you write a good novel.Since the novel is very long, you may need to divide it into subtasks."
     
     print(f"Task: {task}")
     print("-" * 60)
     
     # Run the task with streaming
     final_response = None
-    async for result in agent.run(task, max_steps=5, streaming=True,debug=True):
+    async for result in agent.run(task, max_steps=50, streaming=True,debug=True):
         response, score, terminated, truncated, info = result
         print(f"Step {info.get('step_count', '?')}: {response}")
         final_response = response
@@ -127,6 +130,7 @@ async def demo_step_by_step():
     # Add tools to the agent
     agent.add_tool(PythonInterpreterTool())
     agent.add_tool(CalculatorTool())
+    agent.add_tool(TextGenerationTool())
     
     # Create detailed task setup
     goal = "Create a simple Python function that calculates the Fibonacci sequence"
@@ -211,6 +215,7 @@ async def demo_integrated_with_base_agent():
     agent.add_tool(DuckDuckGoSearchTool())
     agent.add_tool(CalculatorTool())
     agent.add_tool(PythonInterpreterTool())
+    agent.add_tool(TextGenerationTool())
     
     # Use the BaseAgent interface for simpler interaction
     task_input = Input(query="Explain the concept of machine learning in simple terms and provide a basic example")
@@ -246,6 +251,7 @@ async def demo_tools_showcase():
     agent.add_tool(DuckDuckGoSearchTool())
     agent.add_tool(CalculatorTool())
     agent.add_tool(PythonInterpreterTool())
+    agent.add_tool(TextGenerationTool())
     
     print(f"Available tools: {[tool.name for tool in agent.tools]}")
     print("-" * 60)
@@ -297,6 +303,7 @@ async def demo_custom_llm_config():
             agent.add_tool(DuckDuckGoSearchTool())
             agent.add_tool(CalculatorTool())
             agent.add_tool(PythonInterpreterTool())
+            agent.add_tool(TextGenerationTool())
             
             task = "What are the three most important principles of good software design?"
             
