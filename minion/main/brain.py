@@ -43,7 +43,7 @@ class Brain:
         memory_config=None,
         llm=create_llm_provider(config.models.get("default")),
         llms={},
-        python_env=None,
+        python_env=LocalPythonEnv(verbose=False, is_agent=True),
         stats_storer=None,
         tools=None,  # 新增: 支持工具集
     ):
@@ -121,7 +121,7 @@ Supporting navigation and spatial memory""",
         self.tools = tools or []
         
         # 优先使用LocalPythonEnv，避免Docker依赖
-        self.python_env = python_env or LocalPythonEnv(verbose=False, is_agent=True)
+        self.python_env = python_env
 
         self.stats_storer = stats_storer
 

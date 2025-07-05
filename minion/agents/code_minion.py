@@ -22,6 +22,8 @@ from .base_agent import BaseAgent
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
+from ..main.local_python_executor import LocalPythonExecutor
+from ..tools.default_tools import FinalAnswerTool
 
 logger = logging.getLogger(__name__)
 
@@ -48,119 +50,7 @@ class ThinkTool(BaseTool):
         return f"[{timestamp}] THOUGHT: {reflection}"
 
 
-class CodeExecutor:
-    """Safe code executor with sandboxing and security features."""
-    
-    def __init__(self, python_env=None):
-        self.python_env = python_env
-        self.forbidden_imports = {
-            'os', 'sys', 'subprocess', 'shutil', 'glob', 'tempfile',
-            'importlib', '__import__', 'eval', 'exec', 'compile',
-            'open', 'input', 'raw_input'
-        }
-        self.allowed_imports = {
-            'math', 'random', 'datetime', 'time', 'json', 'collections',
-            'itertools', 'functools', 'operator', 'statistics', 'decimal',
-            'fractions', 'numpy', 'pandas', 'matplotlib', 'seaborn',
-            'scipy', 'sympy', 'requests'
-        }
-    
-    def validate_code(self, code: str) -> Tuple[bool, str]:
-        """
-        Validate code for security and safety.
-        
-        Args:
-            code: Python code to validate
-            
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        try:
-            # Parse the code to check for syntax errors
-            ast.parse(code)
-            
-            # Check for forbidden patterns
-            forbidden_patterns = [
-                r'\b(os|sys|subprocess|shutil|glob|tempfile|importlib)\b',
-                r'\b(__import__|eval|exec|compile)\b',
-                r'\bopen\s*\(',
-                r'\binput\s*\(',
-                r'\braw_input\s*\(',
-                r'import\s+os',
-                r'from\s+os\s+import',
-                r'__.*__',  # Dunder methods (with some exceptions)
-            ]
-            
-            for pattern in forbidden_patterns:
-                if re.search(pattern, code):
-                    return False, f"Forbidden pattern detected: {pattern}"
-            
-            return True, ""
-            
-        except SyntaxError as e:
-            return False, f"Syntax error: {e}"
-        except Exception as e:
-            return False, f"Validation error: {e}"
-    
-    async def execute_code(self, code: str, context: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Any]:
-        """
-        Execute Python code safely.
-        
-        Args:
-            code: Python code to execute
-            context: Additional context variables
-            
-        Returns:
-            Tuple of (success, output, result)
-        """
-        # Validate code first
-        is_valid, error_msg = self.validate_code(code)
-        if not is_valid:
-            return False, f"Code validation failed: {error_msg}", None
-        
-        if self.python_env:
-            try:
-                # Use the existing python environment
-                result = await self.python_env.run(code)
-                return True, result, result
-            except Exception as e:
-                return False, f"Execution error: {e}", None
-        else:
-            # Fallback to local execution with restricted environment
-            try:
-                # Create a restricted global environment
-                restricted_globals = {
-                    '__builtins__': {
-                        'abs': abs, 'all': all, 'any': any, 'bin': bin,
-                        'bool': bool, 'chr': chr, 'dict': dict, 'dir': dir,
-                        'enumerate': enumerate, 'filter': filter, 'float': float,
-                        'format': format, 'frozenset': frozenset, 'hash': hash,
-                        'hex': hex, 'int': int, 'isinstance': isinstance,
-                        'issubclass': issubclass, 'iter': iter, 'len': len,
-                        'list': list, 'map': map, 'max': max, 'min': min,
-                        'next': next, 'oct': oct, 'ord': ord, 'pow': pow,
-                        'print': print, 'range': range, 'repr': repr,
-                        'reversed': reversed, 'round': round, 'set': set,
-                        'slice': slice, 'sorted': sorted, 'str': str,
-                        'sum': sum, 'tuple': tuple, 'type': type, 'zip': zip,
-                    }
-                }
-                
-                # Add context variables
-                if context:
-                    restricted_globals.update(context)
-                
-                # Execute the code
-                local_vars = {}
-                exec(code, restricted_globals, local_vars)
-                
-                # Return the result
-                result = local_vars.get('result', str(local_vars))
-                return True, str(result), result
-                
-            except Exception as e:
-                error_output = f"Execution error: {e}\n{traceback.format_exc()}"
-                return False, error_output, None
+
 
 
 class ThinkingEngine:
@@ -232,6 +122,7 @@ Let me analyze this step by step using code...
         return '\n'.join(formatted) if formatted else "No recent actions"
 
 
+#maybe we should call it CodeAgent?
 @dataclass
 class CodeMinion(BaseAgent):
     """
@@ -246,7 +137,7 @@ class CodeMinion(BaseAgent):
     
     name: str = "code_minion"
     thinking_engine: Optional[ThinkingEngine] = None
-    code_executor: Optional[CodeExecutor] = None
+    python_executor: Optional[LocalPythonExecutor] = None
     enable_reflection: bool = True
     max_code_length: int = 2000
     
@@ -257,13 +148,17 @@ class CodeMinion(BaseAgent):
         # Initialize thinking engine
         self.thinking_engine = ThinkingEngine(self)
         
-        # Initialize code executor
-        python_env = getattr(self.brain, 'python_env', None) if self.brain else None
-        self.code_executor = CodeExecutor(python_env=python_env)
+        # Initialize code executor (使用 LocalPythonExecutor)
+        self.python_executor = LocalPythonExecutor(
+            additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn"],
+            max_print_outputs_length=50000,
+            additional_functions={}
+        )
         
         # Add the think tool
         self.add_tool(ThinkTool())
-    
+        self.add_tool(FinalAnswerTool())
+
     async def execute_step(self, input_data: Input, **kwargs) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
         """
         Execute a step with enhanced code-based reasoning.
@@ -285,7 +180,10 @@ class CodeMinion(BaseAgent):
         try:
             if not self.brain:
                 raise ValueError("Brain is not initialized")
-            result = await self.brain.step(input=enhanced_input, tools=self.tools, **kwargs)
+            
+            # 处理tools参数，避免重复传递
+            tools = kwargs.pop('tools', self.tools)
+            result = await self.brain.step(input=enhanced_input, tools=tools, **kwargs)
             
             # Process any generated code
             if result and len(result) > 0:
@@ -313,11 +211,7 @@ you should write Python code to reason about problems and execute actions.
 2. Break down complex problems into smaller, manageable code snippets
 3. Use variables to store intermediate results and thoughts
 4. Write clear, readable code with comments explaining your reasoning
-5. Use the 'think' tool when you need to pause and reflect
-
-**Available Tools:**
-- think(reflection): Pause and reflect on the current situation
-- Any other tools provided in the context
+5. **CRUCIAL**: When you have the final answer, call `final_answer("your answer")` to end the task
 
 **Your Task:**
 {input_data.query}
@@ -325,11 +219,32 @@ you should write Python code to reason about problems and execute actions.
 **Instructions:**
 1. Start by writing code to understand the problem
 2. Break it down into steps using Python
-3. Execute each step and observe the results
-4. Use the think tool if you need to reconsider your approach
-5. Provide a final answer based on your code execution
+3. Execute each step and observe the results  
+4. **IMPORTANT**: When you have the final answer, call the `final_answer()` function with your answer
 
-Remember: Think in code, not just in words!
+**Example of proper completion:**
+```python
+# Step 1: Understand the problem
+# Step 2: Solve it step by step
+result = calculate_something()
+print(f"The answer is: {{result}}")
+
+# Step 3: Provide final answer using the built-in final_answer function
+# DO NOT define your own final_answer function - use the built-in one
+final_answer(f"The answer is {{result}}")
+```
+
+**Available Functions:**
+- `final_answer(answer)`: Built-in function to provide final answer and end the task
+- All standard Python functions (math, etc.)
+- Additional imports: numpy, pandas, matplotlib, seaborn
+
+**IMPORTANT RULES:**
+1. DO NOT define your own `final_answer` function - it is already provided as a built-in
+2. Call `final_answer(your_answer)` directly when you have the solution
+3. Think in code, not just in words!
+
+Remember: Always end by calling the built-in `final_answer()` function when you have the solution.
 """
         
         # Create a new Input with enhanced query
@@ -359,21 +274,33 @@ Remember: Think in code, not just in words!
                 processed_parts.append(f"\n[Code block {i+1} too long to execute safely]")
                 continue
             
-            if not self.code_executor:
-                processed_parts.append(f"\n[Code executor not available]")
+            if not self.python_executor:
+                processed_parts.append(f"\n[Python executor not available]")
                 continue
                 
-            success, output, result = await self.code_executor.execute_code(code)
-            
-            if success:
+            try:
+                # 使用 LocalPythonExecutor 执行代码
+                output, logs, is_final_answer = self.python_executor(code)
+                
                 processed_parts.append(f"\n[Code block {i+1} executed successfully]")
-                processed_parts.append(f"Output: {output}")
+                if logs:
+                    processed_parts.append(f"Output: {logs}")
+                if output is not None:
+                    processed_parts.append(f"Result: {output}")
                 
                 # Store result in state for future reference
-                state[f'code_result_{i}'] = result
-            else:
+                state[f'code_result_{i}'] = output
+                state[f'code_logs_{i}'] = logs
+                state[f'is_final_answer_{i}'] = is_final_answer
+                
+                # 如果是最终答案，设置全局标志
+                if is_final_answer:
+                    state['is_final_answer'] = True
+                    state['final_answer_value'] = output
+                    
+            except Exception as e:
                 processed_parts.append(f"\n[Code block {i+1} execution failed]")
-                processed_parts.append(f"Error: {output}")
+                processed_parts.append(f"Error: {str(e)}")
                 
                 # Increment error count
                 state['error_count'] = state.get('error_count', 0) + 1
@@ -385,6 +312,13 @@ Remember: Think in code, not just in words!
         # Look for code blocks marked with ```python or ```
         python_code_pattern = r'```(?:python)?\s*\n(.*?)\n```'
         matches = re.findall(python_code_pattern, text, re.DOTALL)
+        
+        # Try a different pattern that's more flexible
+        if not matches:
+            # Try without requiring newlines
+            alternative_pattern = r'```(?:python)?(.*?)```'
+            alt_matches = re.findall(alternative_pattern, text, re.DOTALL)
+            matches = [match.strip() for match in alt_matches if match.strip()]
         
         # Also look for inline code that looks like assignments or function calls
         inline_pattern = r'^\s*([a-zA-Z_][a-zA-Z0-9_]*\s*=.*|[a-zA-Z_][a-zA-Z0-9_]*\(.*\))$'
@@ -468,3 +402,29 @@ Use Python code to:
         input_obj = Input(query=analysis_query, route='python')
         result = await self.run(input_obj, **kwargs)
         return str(result)
+    
+    def is_done(self, result: Any, state: Dict[str, Any]) -> bool:
+        """
+        检查任务是否完成，通过检测 is_final_answer 标志来判断
+        """
+        # 先调用父类的is_done方法  
+        parent_done = super().is_done(result, state)
+        if parent_done:
+            return True
+        
+        # 检查状态中是否有 final_answer 标志
+        if state.get('is_final_answer', False):
+            return True
+        
+        return False
+    
+    def finalize(self, result: Any, state: Dict[str, Any]) -> Any:
+        """
+        整理最终结果，特别处理 final_answer 的情况
+        """
+        # 检查是否有最终答案值
+        if 'final_answer_value' in state:
+            return state['final_answer_value']
+        
+        # 调用父类的 finalize 方法
+        return super().finalize(result, state)

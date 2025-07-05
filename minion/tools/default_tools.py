@@ -17,6 +17,7 @@
 from dataclasses import dataclass
 from typing import Any
 from .base_tool import BaseTool
+from abc import ABC, abstractmethod
 
 @dataclass
 class PreTool:
@@ -129,6 +130,13 @@ class PythonInterpreterTool(BaseTool):
             return f"Error executing code: {str(e)}"
 
 
+class FinalAnswerException(Exception):
+    """Exception raised when final_answer tool is called to indicate task completion"""
+    def __init__(self, answer: Any):
+        self.answer = answer
+        super().__init__(f"{answer}")
+
+
 class FinalAnswerTool(BaseTool):
     name = "final_answer"
     description = "Provides a final answer to the given problem."
@@ -136,7 +144,8 @@ class FinalAnswerTool(BaseTool):
     output_type = "string"
 
     def forward(self, answer: Any) -> Any:
-        return answer
+        # 抛出 FinalAnswerException 来标识任务完成
+        raise FinalAnswerException(answer)
 
 
 class UserInputTool(BaseTool):

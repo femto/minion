@@ -15,6 +15,7 @@ from minion.actions.action_node import LLMActionNode
 from minion.schema.messages import user
 from minion.providers import create_llm_provider
 from minion.models.schemas import Answer  # Import the Answer model
+from minion.tools.default_tools import FinalAnswerException
 
 # @ell.complex(model="gpt-4o-mini")
 # def ell_call(ret):
@@ -405,6 +406,9 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                             
                             final_response += f"Tool {tool_name} execution result: {tool_result}\n"
                             
+                        except FinalAnswerException as e:
+                            # 特殊处理 FinalAnswerException
+                            final_response += f"FINAL_ANSWER_EXCEPTION:{e.answer}\n"
                         except Exception as e:
                             error_msg = f"Tool {tool_name} execution error: {str(e)}"
                             final_response += error_msg + "\n"
@@ -418,12 +422,73 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         import json
         import re
         
-        # 尝试解析工具调用（这里简化处理，实际需要根据具体LLM的响应格式）
-        # 查找函数调用模式
-        tool_call_pattern = r'(?:调用工具|使用工具|call tool|use tool).*?(\w+)\s*\((.*?)\)'
-        matches = re.finditer(tool_call_pattern, response, re.IGNORECASE | re.DOTALL)
+        # 首先尝试解析 XML 格式的工具调用
+        xml_tool_call_pattern = r'<tool_call>\s*<tool_name>(\w+)</tool_name>\s*<parameters>(.*?)</parameters>\s*</tool_call>'
+        xml_matches = re.finditer(xml_tool_call_pattern, response, re.IGNORECASE | re.DOTALL)
         
         final_response = response
+        
+        # 处理 XML 格式的工具调用
+        for match in xml_matches:
+            tool_name = match.group(1)
+            parameters_xml = match.group(2).strip()
+            
+            # 查找对应的工具
+            target_tool = None
+            for tool in tools:
+                if hasattr(tool, 'name') and tool.name == tool_name:
+                    target_tool = tool
+                    break
+                elif hasattr(tool, '__name__') and tool.__name__ == tool_name:
+                    target_tool = tool
+                    break
+            
+            if target_tool:
+                try:
+                    # 解析参数
+                    if hasattr(target_tool, 'forward'):
+                        # BaseTool 实例，从XML中提取参数
+                        if parameters_xml.strip():
+                            # 从XML中提取参数值
+                            if tool_name == 'final_answer':
+                                # 特殊处理 final_answer 工具
+                                answer_match = re.search(r'<answer>(.*?)</answer>', parameters_xml, re.DOTALL)
+                                if answer_match:
+                                    answer_value = answer_match.group(1).strip()
+                                    tool_result = target_tool.forward(answer_value)
+                                else:
+                                    tool_result = target_tool.forward(parameters_xml)
+                            else:
+                                # 其他工具的参数解析
+                                tool_result = target_tool.forward(parameters_xml)
+                        else:
+                            tool_result = target_tool.forward()
+                        
+                        # 检查是否是 awaitable，如果是则 await
+                        if inspect.iscoroutine(tool_result):
+                            tool_result = await tool_result
+                    else:
+                        tool_result = "Tool call failed: tool is not callable"
+                    
+                    # 替换响应中的工具调用为工具结果
+                    final_response = final_response.replace(
+                        match.group(0), 
+                        f"Tool {tool_name} execution result: {tool_result}"
+                    )
+                    
+                except FinalAnswerException as e:
+                    # 特殊处理 FinalAnswerException
+                    final_response = final_response.replace(
+                        match.group(0), 
+                        f"FINAL_ANSWER_EXCEPTION:{e.answer}"
+                    )
+                except Exception as e:
+                    error_msg = f"Tool {tool_name} execution error: {str(e)}"
+                    final_response = final_response.replace(match.group(0), error_msg)
+        
+        # 然后尝试解析传统的函数调用模式
+        tool_call_pattern = r'(?:调用工具|使用工具|call tool|use tool).*?(\w+)\s*\((.*?)\)'
+        matches = re.finditer(tool_call_pattern, final_response, re.IGNORECASE | re.DOTALL)
         
         for match in matches:
             tool_name = match.group(1)
@@ -475,6 +540,12 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                         f"Tool {tool_name} execution result: {tool_result}"
                     )
                     
+                except FinalAnswerException as e:
+                    # 特殊处理 FinalAnswerException
+                    final_response = final_response.replace(
+                        match.group(0), 
+                        f"FINAL_ANSWER_EXCEPTION:{e.answer}"
+                    )
                 except Exception as e:
                     error_msg = f"Tool {tool_name} execution error: {str(e)}"
                     final_response = final_response.replace(match.group(0), error_msg)

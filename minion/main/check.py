@@ -16,6 +16,7 @@ from minion.actions.lmp_action_node import LmpActionNode
 from minion.models.schemas import CheckResult
 from minion.utils.syncheck import run_with_timeout
 from minion.utils.process import run_code_in_separate_process
+from minion.utils.template import construct_simple_message
 
 def extract_root_content(text):
     pattern = r"(<root>.*?</root>)"
@@ -60,12 +61,19 @@ class CheckMinion(Minion):
         self.input.instruction = "let's think step by step to verify this answer"
 
     async def execute(self):
-        prompt = Template(CHECK_PROMPT)
-        prompt = prompt.render(input=self.input)
-
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        result = await node.execute(prompt, response_format=CheckResult, format="xml_simple", tools=tools)
+        
+        # 检查输入是否为消息列表（multimodal support）
+        if hasattr(self.input, 'query') and isinstance(self.input.query, list):
+            # 直接使用消息列表
+            messages = construct_simple_message(self.input.query)
+            result = await node.execute(messages, response_format=CheckResult, format="xml_simple", tools=tools)
+        else:
+            # 原有的模板渲染方式
+            prompt = Template(CHECK_PROMPT)
+            prompt = prompt.render(input=self.input)
+            result = await node.execute(prompt, response_format=CheckResult, format="xml_simple", tools=tools)
 
         self.answer_node = result
         self.answer = self.input.feedback = {
@@ -204,21 +212,43 @@ class DoctestMinion(CheckMinion):
         if not self.test_cases:
             return await super().execute()
             
-        prompt = Template(CHECK_PROMPT)
-        context = {
-            'input': self.input,
-            'test_cases': self.test_cases,
-            'test_type': 'doctest'
-        }
-        prompt = prompt.render(**context)
-        
-        return await self._execute_test(prompt)
+        # 检查输入是否为消息列表（multimodal support）
+        if hasattr(self.input, 'query') and isinstance(self.input.query, list):
+            # 为doctest创建包含测试信息的消息
+            enhanced_messages = list(self.input.query)  # 复制原消息列表
+            test_info = f"\n\nDoctest cases to verify:\n"
+            for i, test in enumerate(self.test_cases, 1):
+                test_info += f"Test {i}: {test.source}\nExpected: {test.want}\n"
+            
+            # 添加测试信息到最后一个消息
+            if enhanced_messages and isinstance(enhanced_messages[-1], str):
+                enhanced_messages[-1] += test_info
+            else:
+                enhanced_messages.append(test_info)
+                
+            messages = construct_simple_message(enhanced_messages)
+            return await self._execute_test(messages)
+        else:
+            # 原有的模板渲染方式
+            prompt = Template(CHECK_PROMPT)
+            context = {
+                'input': self.input,
+                'test_cases': self.test_cases,
+                'test_type': 'doctest'
+            }
+            prompt = prompt.render(**context)
+            return await self._execute_test(prompt)
 
-    async def _execute_test(self, prompt):
+    async def _execute_test(self, prompt_or_messages):
         """Execute test logic"""
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        result = await node.execute(prompt, response_format=CheckResult, tools=tools)
+        
+        # 根据输入类型调用不同的execute方法
+        if isinstance(prompt_or_messages, list):
+            result = await node.execute(prompt_or_messages, response_format=CheckResult, tools=tools)
+        else:
+            result = await node.execute(prompt_or_messages, response_format=CheckResult, tools=tools)
         
         self.answer_node = result
         self.answer = self.input.feedback = {
