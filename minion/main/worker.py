@@ -67,10 +67,12 @@ from minion.models.schemas import (
 from minion.utils.answer_extraction import extract_final_answer, extract_longest_json_from_string, extract_python, \
     extract_answer
 from minion.main.prompt import extract_think_and_answer
+from minion.utils.template import construct_messages_from_template, construct_simple_message
 
 class WorkerMinion(Minion):
     pass
 
+#don't register worker minion here for RawMinion
 class RawMinion(WorkerMinion):
     """Raw minion that directly queries LLM without any prompt processing or modifications"""
 
@@ -82,13 +84,25 @@ class RawMinion(WorkerMinion):
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
-        # In task mode, use task query instead of original query
         if self.task:
-            query = self.task.get("instruction", "") or self.task.get("task_description", "")
+            # Task mode: use TASK_INPUT template
+            template_str = TASK_INPUT
+            messages = construct_messages_from_template(
+                template_str, self.input, task=self.task
+            )
+            response = await node.execute(messages, tools=tools)
         else:
             query = self.input.query
-            
-        response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools)
+            # Support both string and multimodal queries
+            if isinstance(query, list):
+                # For multimodal queries, construct proper message format
+                # Create a temporary object with query and system_prompt
+                temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
+                messages = construct_simple_message(temp_input)
+                response = await node.execute(messages, tools=tools)
+            else:
+                # For simple string queries, use traditional approach
+                response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools)
 
         # Extract answer using DeepSeek think mode
         think_content, answer_content = extract_think_and_answer(response)
@@ -110,16 +124,19 @@ class NativeMinion(WorkerMinion):
     async def execute(self):
         if self.task:
             # Task mode: use TASK_INPUT template
-            prompt = Template(WORKER_PROMPT + TASK_INPUT)
-            prompt = prompt.render(input=self.input, task=self.task)
+            template_str = WORKER_PROMPT + TASK_INPUT
+            messages = construct_messages_from_template(
+                template_str, self.input, task=self.task
+            )
         else:
             # Normal mode: use original WORKER_PROMPT
-            prompt = Template(WORKER_PROMPT)
-            prompt = prompt.render(input=self.input)
+            messages = construct_messages_from_template(
+                WORKER_PROMPT, self.input
+            )
         
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        response = await node.execute(prompt, system_prompt=self.input.system_prompt, tools=tools)
+        response = await node.execute(messages, tools=tools)
         
         # Extract answer using DeepSeek think mode
         think_content, answer_content = extract_think_and_answer(response)
@@ -143,16 +160,19 @@ class CotMinion(WorkerMinion):
     async def execute(self):
         if self.task:
             # Task mode: use TASK_INPUT template
-            prompt = Template(COT_PROBLEM_INSTRUCTION + WORKER_PROMPT + TASK_INPUT)
-            prompt = prompt.render(input=self.input, task=self.task)
+            template_str = COT_PROBLEM_INSTRUCTION + WORKER_PROMPT + TASK_INPUT
+            messages = construct_messages_from_template(
+                template_str, self.input, task=self.task
+            )
         else:
             # Normal mode: use original prompt
-            prompt = Template(COT_PROBLEM_INSTRUCTION + WORKER_PROMPT)
-            prompt = prompt.render(input=self.input)
+            messages = construct_messages_from_template(
+                COT_PROBLEM_INSTRUCTION + WORKER_PROMPT, self.input
+            )
 
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
-        response = await node.execute(prompt, tools=tools)
+        response = await node.execute(messages, tools=tools)
         self.answer_node = node
 
         # Check post_processing setting, giving precedence to worker_config
@@ -214,16 +234,19 @@ class DcotMinion(WorkerMinion):
     async def execute(self):
         if self.task:
             # Task mode: use TASK_INPUT template
-            prompt = Template(DCOT_PROMPT + TASK_INPUT)
-            prompt = prompt.render(input=self.input, task=self.task)
+            template_str = DCOT_PROMPT + TASK_INPUT
+            messages = construct_messages_from_template(
+                template_str, self.input, task=self.task
+            )
         else:
             # Normal mode: use original prompt
-            prompt = Template(DCOT_PROMPT)
-            prompt = prompt.render(input=self.input)
+            messages = construct_messages_from_template(
+                DCOT_PROMPT, self.input
+            )
         
         node = LmpActionNode(self.brain.llm)
         #tools = (self.input.tools or []) + (self.brain.tools or [])
-        response = await node.execute(prompt, tools=None)
+        response = await node.execute(messages, tools=None)
         
         self.answer_node = node
         self.answer = self.input.answer = extract_answer(response)
@@ -394,12 +417,11 @@ class PlanMinion(WorkerMinion):
         await self.execute()
 
 
-@register_worker_minion
-class MathPlanMinion(PlanMinion):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.plan_prompt = MATH_PLAN_PROMPT
-
+# @register_worker_minion
+# class MathPlanMinion(PlanMinion):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.plan_prompt = MATH_PLAN_PROMPT
 
 class TaskMinion(WorkerMinion):
     def __init__(self, task=None, **kwargs):
@@ -953,8 +975,10 @@ class RouteMinion(Minion):
                     return filtered_registry[name], name
                 else:
                     # 尝试找到最相似的名称
-                    similar_name = most_similar_minion(name, filtered_registry.keys())
-                    logger.warning(f"Recommended route {name} not found, using similar route: {similar_name}")
+                    #similar_name = most_similar_minion(name, filtered_registry.keys())
+                    similar_name = "cot"
+                    #logger.warning(f"Recommended route {name} not found, using similar route: {similar_name}")
+                    logger.warning(f"Recommended route {name} not found, using cot")
                     return filtered_registry[similar_name], similar_name
             except Exception as e:
                 logger.error(f"Failed to get route using default brain.llm: {str(e)}")

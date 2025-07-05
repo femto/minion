@@ -25,7 +25,7 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", system_prompt: Optional[str] = None, tools=None, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, **kwargs) -> Any:
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
@@ -42,16 +42,6 @@ class LmpActionNode(LLMActionNode):
         elif isinstance(messages, list) and all(isinstance(msg, Message) for msg in messages):
             # Convert list of Message objects to list of dictionaries
             messages = [msg.model_dump() for msg in messages]
-
-        # Add system prompt with priority:
-        # 1. Explicit system message in messages list
-        # 2. system_prompt parameter
-        # 3. input.system_prompt
-        if not any(msg.get("role", "") == "system" if isinstance(msg, dict) else msg.role == "system" for msg in messages):
-            if system_prompt is not None:
-                messages.insert(0, {"role": "system", "content": system_prompt})
-            elif hasattr(self, 'input') and self.input and self.input.system_prompt:
-                messages.insert(0, {"role": "system", "content": self.input.system_prompt})
 
         # 处理 tools 参数
         if tools is not None:

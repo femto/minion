@@ -18,6 +18,7 @@ from minion import config
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.input import Input
 from minion.main.python_env import PythonEnv
+from minion.main.local_python_env import LocalPythonEnv
 from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
 from minion.providers import create_llm_provider
@@ -119,8 +120,8 @@ Supporting navigation and spatial memory""",
         # 设置工具集
         self.tools = tools or []
         
-        image_name = "intercode-python"
-        self.python_env = python_env or PythonEnv(image_name, verbose=False, is_agent=True)
+        # 优先使用LocalPythonEnv，避免Docker依赖
+        self.python_env = python_env or LocalPythonEnv(verbose=False, is_agent=True)
 
         self.stats_storer = stats_storer
 
@@ -144,12 +145,26 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    async def step(self, input=None, query="", query_type="", system_prompt: str = None, tools=None, **kwargs):
+    async def step(self, input=None, query="", query_type="", system_prompt: str = None, tools=None, messages=None, **kwargs):
         # 处理传入的tools
         current_tools = tools if tools is not None else self.tools
         
-        # 创建Input
-        input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
+        # 如果传入了messages，优先使用messages
+        if messages is not None:
+            # 从messages中提取query和system_prompt
+            if isinstance(messages, list):
+                for msg in messages:
+                    if isinstance(msg, dict):
+                        if msg.get("role") == "user":
+                            query = msg.get("content", query)
+                        elif msg.get("role") == "system" and system_prompt is None:
+                            system_prompt = msg.get("content", "")
+            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
+            input.query = query  # 覆盖query
+        else:
+            # 创建Input
+            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
+            
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64
         

@@ -57,7 +57,7 @@ class ExecutionState(BaseModel):
 class Input(BaseModel):
     """输入数据模型"""
     
-    query: str = ""  # 查询内容
+    query: Union[str, List[Any]] = ""  # 查询内容，支持文本和多媒体
     query_type: str = ""  # 查询类型
     query_id: Optional[Any] = None  # 查询ID
     query_time: datetime = Field(default_factory=datetime.utcnow)  # 查询时间

@@ -5,7 +5,6 @@ from minion.main.worker import (
     PythonMinion,
     MathMinion,
     PlanMinion,
-    MathPlanMinion,
     OptillmMinion,
 )
 from minion.main.local_python_env import LocalPythonEnv
@@ -23,8 +22,6 @@ __all__ = [
     'PythonMinion',
     'MathMinion',
     'PlanMinion',
-    'MathPlanMinion',
-    'MultiPlanMinion',
     'OptillmMinion',
     'LocalPythonEnv',
 ]
