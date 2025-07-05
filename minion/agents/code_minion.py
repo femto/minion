@@ -50,9 +50,6 @@ class ThinkTool(BaseTool):
         return f"[{timestamp}] THOUGHT: {reflection}"
 
 
-
-
-
 class ThinkingEngine:
     """Engine for managing different thinking strategies."""
     
@@ -122,7 +119,6 @@ Let me analyze this step by step using code...
         return '\n'.join(formatted) if formatted else "No recent actions"
 
 
-#maybe we should call it CodeAgent?
 @dataclass
 class CodeMinion(BaseAgent):
     """
@@ -190,8 +186,11 @@ class CodeMinion(BaseAgent):
                 response = result[0]
                 processed_response = await self._process_code_response(response, state)
                 
-                # Update the result with processed response
-                result = (processed_response, result[1], result[2], result[3], result[4])
+                # Check if final answer was found
+                terminated = state.get('is_final_answer', False)
+                
+                # Update the result with processed response and termination status
+                result = (processed_response, result[1], terminated, result[3], result[4])
             
             return result
             
@@ -217,32 +216,34 @@ you should write Python code to reason about problems and execute actions.
 {input_data.query}
 
 **Instructions:**
-1. Start by writing code to understand the problem
-2. Break it down into steps using Python
-3. Execute each step and observe the results  
-4. **IMPORTANT**: When you have the final answer, call the `final_answer()` function with your answer
+1. Write Python code in a single code block to solve the problem step by step
+2. Include all necessary imports and calculations in one block
+3. Use clear variable names and comments to explain your thinking
+4. **IMPORTANT**: End with `final_answer(your_result)` to provide the final answer
 
-**Example of proper completion:**
+**Example Pattern:**
 ```python
-# Step 1: Understand the problem
-# Step 2: Solve it step by step
+# Step 1: Import necessary modules
+import math
+
+# Step 2: Understand and solve the problem
+# [Your solution logic here]
 result = calculate_something()
 print(f"The answer is: {{result}}")
 
 # Step 3: Provide final answer using the built-in final_answer function
-# DO NOT define your own final_answer function - use the built-in one
-final_answer(f"The answer is {{result}}")
+final_answer(result)
 ```
 
 **Available Functions:**
 - `final_answer(answer)`: Built-in function to provide final answer and end the task
-- All standard Python functions (math, etc.)
-- Additional imports: numpy, pandas, matplotlib, seaborn
+- All standard Python functions and modules (math, numpy, pandas, etc.)
 
 **IMPORTANT RULES:**
 1. DO NOT define your own `final_answer` function - it is already provided as a built-in
 2. Call `final_answer(your_answer)` directly when you have the solution
-3. Think in code, not just in words!
+3. Put ALL your code in a SINGLE code block - don't split into multiple blocks
+4. Think in code, not just in words!
 
 Remember: Always end by calling the built-in `final_answer()` function when you have the solution.
 """
@@ -269,6 +270,7 @@ Remember: Always end by calling the built-in `final_answer()` function when you 
         processed_parts = []
         processed_parts.append(response)
         
+        # Process all code blocks, but check for final answer after each
         for i, code in enumerate(code_blocks):
             if len(code) > self.max_code_length:
                 processed_parts.append(f"\n[Code block {i+1} too long to execute safely]")
@@ -293,10 +295,12 @@ Remember: Always end by calling the built-in `final_answer()` function when you 
                 state[f'code_logs_{i}'] = logs
                 state[f'is_final_answer_{i}'] = is_final_answer
                 
-                # 如果是最终答案，设置全局标志
+                # 如果是最终答案，设置全局标志并立即返回
                 if is_final_answer:
                     state['is_final_answer'] = True
                     state['final_answer_value'] = output
+                    processed_parts.append(f"\n[TASK COMPLETED - Final answer: {output}]")
+                    return '\n'.join(processed_parts)
                     
             except Exception as e:
                 processed_parts.append(f"\n[Code block {i+1} execution failed]")
@@ -313,19 +317,15 @@ Remember: Always end by calling the built-in `final_answer()` function when you 
         python_code_pattern = r'```(?:python)?\s*\n(.*?)\n```'
         matches = re.findall(python_code_pattern, text, re.DOTALL)
         
-        # Try a different pattern that's more flexible
-        if not matches:
-            # Try without requiring newlines
-            alternative_pattern = r'```(?:python)?(.*?)```'
-            alt_matches = re.findall(alternative_pattern, text, re.DOTALL)
-            matches = [match.strip() for match in alt_matches if match.strip()]
+        # Clean up the matches
+        cleaned_matches = []
+        for match in matches:
+            # Remove common prefixes and clean up
+            cleaned = match.strip()
+            if cleaned and len(cleaned) > 10:  # Only include substantial code blocks
+                cleaned_matches.append(cleaned)
         
-        # Also look for inline code that looks like assignments or function calls
-        inline_pattern = r'^\s*([a-zA-Z_][a-zA-Z0-9_]*\s*=.*|[a-zA-Z_][a-zA-Z0-9_]*\(.*\))$'
-        lines = text.split('\n')
-        inline_matches = [line.strip() for line in lines if re.match(inline_pattern, line.strip())]
-        
-        return matches + inline_matches
+        return cleaned_matches
     
     async def _perform_reflection(self, state: Dict[str, Any]) -> None:
         """Perform self-reflection using the think tool."""
@@ -415,6 +415,12 @@ Use Python code to:
         # 检查状态中是否有 final_answer 标志
         if state.get('is_final_answer', False):
             return True
+        
+        # 检查result中是否有终止标志
+        if isinstance(result, tuple) and len(result) >= 3:
+            terminated = result[2]
+            if terminated:
+                return True
         
         return False
     
