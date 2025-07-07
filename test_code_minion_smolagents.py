@@ -7,6 +7,7 @@ Test script for CodeMinion with smolagents-style functionality
 import asyncio
 import sys
 import os
+import pytest
 
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -19,6 +20,7 @@ from minion.main.input import Input
 from minion.providers import create_llm_provider
 
 
+@pytest.mark.asyncio
 async def test_code_minion_circle_area():
     """Test CodeMinion with circle area calculation"""
     print("=== Testing CodeMinion with Circle Area Calculation ===")
@@ -56,6 +58,7 @@ async def test_code_minion_circle_area():
         return False
 
 
+@pytest.mark.asyncio
 async def test_code_minion_fibonacci():
     """Test CodeMinion with Fibonacci calculation"""
     print("\n=== Testing CodeMinion with Fibonacci Sequence ===")
@@ -88,6 +91,7 @@ async def test_code_minion_fibonacci():
         return False
 
 
+@pytest.mark.asyncio
 async def test_code_minion_with_error():
     """Test CodeMinion error handling and retry"""
     print("\n=== Testing CodeMinion Error Handling ===")
@@ -121,6 +125,7 @@ async def test_code_minion_with_error():
         return False
 
 
+@pytest.mark.asyncio
 async def test_code_minion_data_analysis():
     """Test CodeMinion with data analysis"""
     print("\n=== Testing CodeMinion with Data Analysis ===")
@@ -164,6 +169,7 @@ async def test_code_minion_data_analysis():
         return False
 
 
+@pytest.mark.asyncio
 async def test_local_python_executor_interface():
     """Test LocalPythonExecutor interface directly"""
     print("\n=== Testing LocalPythonExecutor Interface ===")
