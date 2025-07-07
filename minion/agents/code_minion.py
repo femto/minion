@@ -22,7 +22,7 @@ from .base_agent import BaseAgent
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
-from ..main.local_python_executor import LocalPythonExecutor
+from ..main.local_python_executor import LocalPythonExecutor, AsyncLocalPythonExecutor
 from ..tools.default_tools import FinalAnswerTool
 
 logger = logging.getLogger(__name__)
@@ -133,13 +133,15 @@ class CodeMinion(BaseAgent):
     - Self-reflection capabilities
     - ReAct (Reason-Act-Observe) cycles
     - Safe code execution
+    - Support for both sync and async tools
     """
     
     name: str = "code_minion"
     thinking_engine: Optional[ThinkingEngine] = None
-    python_executor: Optional[LocalPythonExecutor] = None
+    python_executor: Optional[Union[LocalPythonExecutor, AsyncLocalPythonExecutor]] = None
     enable_reflection: bool = True
     max_code_length: int = 2000
+    use_async_executor: bool = False  # New option to enable async tool support
     
     def __post_init__(self):
         """Initialize the CodeMinion with thinking capabilities."""
@@ -148,12 +150,19 @@ class CodeMinion(BaseAgent):
         # Initialize thinking engine
         self.thinking_engine = ThinkingEngine(self)
         
-        # Initialize code executor (使用 LocalPythonExecutor)
-        self.python_executor = LocalPythonExecutor(
-            additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn"],
-            max_print_outputs_length=50000,
-            additional_functions={}
-        )
+        # Initialize code executor (choosing between sync and async versions)
+        if self.use_async_executor:
+            self.python_executor = AsyncLocalPythonExecutor(
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn"],
+                max_print_outputs_length=50000,
+                additional_functions={}
+            )
+        else:
+            self.python_executor = LocalPythonExecutor(
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn"],
+                max_print_outputs_length=50000,
+                additional_functions={}
+            )
         
         # Add the think tool
         self.add_tool(ThinkTool())
@@ -279,8 +288,11 @@ Remember: Always end by calling the built-in `final_answer()` function when you 
                 continue
                 
             try:
-                # 使用 LocalPythonExecutor 执行代码
-                output, logs, is_final_answer = self.python_executor(code)
+                # Handle both sync and async executors
+                if isinstance(self.python_executor, AsyncLocalPythonExecutor):
+                    output, logs, is_final_answer = await self.python_executor(code)
+                else:
+                    output, logs, is_final_answer = self.python_executor(code)
                 
                 processed_parts.append(f"\n[Code block {i+1} executed successfully]")
                 if logs:
@@ -428,3 +440,29 @@ Use Python code to:
         
         # 调用父类的 finalize 方法
         return super().finalize(result, state)
+    
+    def enable_async_tools(self):
+        """
+        Enable async tool support by switching to AsyncLocalPythonExecutor.
+        """
+        if not self.use_async_executor:
+            self.use_async_executor = True
+            # Recreate executor with async support
+            old_executor = self.python_executor
+            self.python_executor = AsyncLocalPythonExecutor(
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn"],
+                max_print_outputs_length=50000,
+                additional_functions={}
+            )
+            # Transfer state if old executor exists
+            if old_executor:
+                self.python_executor.send_variables(old_executor.state)
+                if old_executor.static_tools:
+                    self.python_executor.static_tools = old_executor.static_tools
+    
+    def send_tools_to_executor(self, tools: Dict[str, "BaseTool"]):
+        """
+        Send tools to the Python executor.
+        """
+        if self.python_executor:
+            self.python_executor.send_tools(tools)

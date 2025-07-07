@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import ast
+import asyncio
 import builtins
 import difflib
 import inspect
@@ -857,6 +858,97 @@ def evaluate_call(
         return func(*args, **kwargs)
 
 
+async def async_evaluate_call(
+    call: ast.Call,
+    state: dict[str, Any],
+    static_tools: dict[str, Callable],
+    custom_tools: dict[str, Callable],
+    authorized_imports: list[str],
+) -> Any:
+    if not isinstance(call.func, (ast.Call, ast.Lambda, ast.Attribute, ast.Name, ast.Subscript)):
+        raise InterpreterError(f"This is not a correct function: {call.func}).")
+
+    func, func_name = None, None
+
+    if isinstance(call.func, ast.Call):
+        func = await async_evaluate_ast(call.func, state, static_tools, custom_tools, authorized_imports)
+    elif isinstance(call.func, ast.Lambda):
+        func = await async_evaluate_ast(call.func, state, static_tools, custom_tools, authorized_imports)
+    elif isinstance(call.func, ast.Attribute):
+        obj = await async_evaluate_ast(call.func.value, state, static_tools, custom_tools, authorized_imports)
+        func_name = call.func.attr
+        if not hasattr(obj, func_name):
+            raise InterpreterError(f"Object {obj} has no attribute {func_name}")
+        func = getattr(obj, func_name)
+    elif isinstance(call.func, ast.Name):
+        func_name = call.func.id
+        if func_name in state:
+            func = state[func_name]
+        elif func_name in static_tools:
+            func = static_tools[func_name]
+        elif func_name in custom_tools:
+            func = custom_tools[func_name]
+        elif func_name in ERRORS:
+            func = ERRORS[func_name]
+        else:
+            raise InterpreterError(
+                f"Forbidden function evaluation: '{call.func.id}' is not among the explicitly allowed tools or defined/imported in the preceding code"
+            )
+    elif isinstance(call.func, ast.Subscript):
+        func = await async_evaluate_ast(call.func, state, static_tools, custom_tools, authorized_imports)
+        if not callable(func):
+            raise InterpreterError(f"This is not a correct function: {call.func}).")
+        func_name = None
+
+    args = []
+    for arg in call.args:
+        if isinstance(arg, ast.Starred):
+            args.extend(await async_evaluate_ast(arg.value, state, static_tools, custom_tools, authorized_imports))
+        else:
+            args.append(await async_evaluate_ast(arg, state, static_tools, custom_tools, authorized_imports))
+
+    kwargs = {}
+    for keyword in call.keywords:
+        kwargs[keyword.arg] = await async_evaluate_ast(keyword.value, state, static_tools, custom_tools, authorized_imports)
+
+    if func_name == "super":
+        if not args:
+            if "__class__" in state and "self" in state:
+                return super(state["__class__"], state["self"])
+            else:
+                raise InterpreterError("super() needs at least one argument")
+        cls = args[0]
+        if not isinstance(cls, type):
+            raise InterpreterError("super() argument 1 must be type")
+        if len(args) == 1:
+            return super(cls)
+        elif len(args) == 2:
+            instance = args[1]
+            return super(cls, instance)
+        else:
+            raise InterpreterError("super() takes at most 2 arguments")
+    elif func_name == "print":
+        state["_print_outputs"] += " ".join(map(str, args)) + "\n"
+        return None
+    else:  # Assume it's a callable object
+        if (inspect.getmodule(func) == builtins) and inspect.isbuiltin(func) and (func not in static_tools.values()):
+            raise InterpreterError(
+                f"Invoking a builtin function that has not been explicitly added as a tool is not allowed ({func_name})."
+            )
+        
+        # Check if the function is async and handle accordingly
+        if inspect.iscoroutinefunction(func):
+            result = await func(*args, **kwargs)
+        else:
+            result = func(*args, **kwargs)
+        
+        # Check if the result is a coroutine that needs to be awaited
+        if asyncio.iscoroutine(result):
+            result = await result
+            
+        return result
+
+
 def evaluate_subscript(
     subscript: ast.Subscript,
     state: dict[str, Any],
@@ -1486,6 +1578,32 @@ def evaluate_ast(
         raise InterpreterError(f"{expression.__class__.__name__} is not supported.")
 
 
+async def async_evaluate_ast(
+    expression: ast.AST,
+    state: dict[str, Any],
+    static_tools: dict[str, Callable],
+    custom_tools: dict[str, Callable],
+    authorized_imports: list[str] = BASE_BUILTIN_MODULES,
+):
+    """
+    Async version of evaluate_ast that can handle both sync and async function calls.
+    For simplicity, this only handles async function calls and delegates everything else to the sync version.
+    """
+    if state.setdefault("_operations_count", {"counter": 0})["counter"] >= MAX_OPERATIONS:
+        raise InterpreterError(
+            f"Reached the max number of operations of {MAX_OPERATIONS}. Maybe there is an infinite loop somewhere in the code, or you're just asking too many calculations."
+        )
+    state["_operations_count"]["counter"] += 1
+    
+    # Handle function calls with async support
+    if isinstance(expression, ast.Call):
+        return await async_evaluate_call(expression, state, static_tools, custom_tools, authorized_imports)
+    else:
+        # For all other expressions, delegate to the sync version
+        # This covers all the complex cases without duplicating code
+        return evaluate_ast(expression, state, static_tools, custom_tools, authorized_imports)
+
+
 class FinalAnswerException(Exception):
     def __init__(self, value):
         self.value = value
@@ -1568,8 +1686,120 @@ def evaluate_python_code(
         )
 
 
+async def async_evaluate_python_code(
+    code: str,
+    static_tools: dict[str, Callable] | None = None,
+    custom_tools: dict[str, Callable] | None = None,
+    state: dict[str, Any] | None = None,
+    authorized_imports: list[str] = BASE_BUILTIN_MODULES,
+    max_print_outputs_length: int = DEFAULT_MAX_LEN_OUTPUT,
+):
+    """
+    Async version of evaluate_python_code that can handle both sync and async function calls.
+    """
+    try:
+        expression = ast.parse(code)
+    except SyntaxError as e:
+        raise InterpreterError(
+            f"Code parsing failed on line {e.lineno} due to: {type(e).__name__}\n"
+            f"{e.text}"
+            f"{' ' * (e.offset or 0)}^\n"
+            f"Error: {str(e)}"
+        )
+
+    if state is None:
+        state = {}
+    static_tools = static_tools.copy() if static_tools is not None else {}
+    custom_tools = custom_tools if custom_tools is not None else {}
+    result = None
+    state["_print_outputs"] = PrintContainer()
+    state["_operations_count"] = {"counter": 0}
+
+    if "final_answer" in static_tools:
+        previous_final_answer = static_tools["final_answer"]
+
+        def final_answer(*args, **kwargs):  # Allow arbitrary arguments to be passed
+            raise FinalAnswerException(previous_final_answer(*args, **kwargs))
+
+        static_tools["final_answer"] = final_answer
+
+    try:
+        for node in expression.body:
+            result = await async_evaluate_ast(node, state, static_tools, custom_tools, authorized_imports)
+        state["_print_outputs"].value = truncate_content(
+            str(state["_print_outputs"]), max_length=max_print_outputs_length
+        )
+        is_final_answer = False
+        return result, is_final_answer
+    except FinalAnswerException as e:
+        state["_print_outputs"].value = truncate_content(
+            str(state["_print_outputs"]), max_length=max_print_outputs_length
+        )
+        is_final_answer = True
+        return e.value, is_final_answer
+    except Exception as e:
+        state["_print_outputs"].value = truncate_content(
+            str(state["_print_outputs"]), max_length=max_print_outputs_length
+        )
+        raise InterpreterError(
+            f"Code execution failed at line '{ast.get_source_segment(code, node)}' due to: {type(e).__name__}: {e}"
+        )
+
+
 class PythonExecutor:
     pass
+
+
+class AsyncLocalPythonExecutor(PythonExecutor):
+    """
+    Async version of LocalPythonExecutor that supports both sync and async tools.
+    
+    This executor can handle async function calls from tools while maintaining
+    backward compatibility with synchronous tools and functions.
+    
+    Args:
+        additional_authorized_imports (`list[str]`):
+            Additional authorized imports for the executor.
+        max_print_outputs_length (`int`, defaults to `DEFAULT_MAX_LEN_OUTPUT=50_000`):
+            Maximum length of the print outputs.
+        additional_functions (`dict[str, Callable]`, *optional*):
+            Additional Python functions to be added to the executor.
+    """
+
+    def __init__(
+        self,
+        additional_authorized_imports: list[str],
+        max_print_outputs_length: int | None = None,
+        additional_functions: dict[str, Callable] | None = None,
+    ):
+        self.custom_tools = {}
+        self.state = {"__name__": "__main__"}
+        self.max_print_outputs_length = max_print_outputs_length
+        if max_print_outputs_length is None:
+            self.max_print_outputs_length = DEFAULT_MAX_LEN_OUTPUT
+        self.additional_authorized_imports = additional_authorized_imports
+        self.authorized_imports = list(set(BASE_BUILTIN_MODULES) | set(self.additional_authorized_imports))
+        self.static_tools = None
+        self.additional_functions = additional_functions or {}
+
+    async def __call__(self, code_action: str) -> tuple[Any, str, bool]:
+        output, is_final_answer = await async_evaluate_python_code(
+            code_action,
+            static_tools=self.static_tools,
+            custom_tools=self.custom_tools,
+            state=self.state,
+            authorized_imports=self.authorized_imports,
+            max_print_outputs_length=self.max_print_outputs_length,
+        )
+        logs = str(self.state["_print_outputs"])
+        return output, logs, is_final_answer
+
+    def send_variables(self, variables: dict):
+        self.state.update(variables)
+
+    def send_tools(self, tools: dict[str, "BaseTool"]):
+        # Combine agent tools, base Python tools, and additional Python functions
+        self.static_tools = {**tools, **BASE_PYTHON_TOOLS.copy(), **self.additional_functions}
 
 
 class LocalPythonExecutor(PythonExecutor):
@@ -1627,4 +1857,4 @@ class LocalPythonExecutor(PythonExecutor):
         self.static_tools = {**tools, **BASE_PYTHON_TOOLS.copy(), **self.additional_functions}
 
 
-__all__ = ["evaluate_python_code", "LocalPythonExecutor"]
+__all__ = ["evaluate_python_code", "LocalPythonExecutor", "async_evaluate_python_code", "AsyncLocalPythonExecutor"]
