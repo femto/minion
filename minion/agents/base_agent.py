@@ -6,6 +6,7 @@ import asyncio
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
+from minion.types.agent_response import AgentResponse
 
 @dataclass
 class BaseAgent:
@@ -99,19 +100,14 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, input_data: Any, **kwargs) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
+    async def step(self, input_data: Any, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
             input_data: 输入数据（可以是状态字典或Input对象）
             **kwargs: 其他参数，直接传递给brain
         Returns:
-            Tuple[response, score, terminated, truncated, info]
-            - response: 响应内容
-            - score: 分数
-            - terminated: 是否终止
-            - truncated: 是否截断
-            - info: 额外信息
+            AgentResponse: 结构化的响应对象，支持tuple解包以保持向后兼容性
         """
         if isinstance(input_data, dict) and "input" in input_data:
             # 从状态字典提取Input
@@ -135,23 +131,34 @@ class BaseAgent:
         # 执行主要步骤
         result = await self.execute_step(input_obj, tools=tools, **kwargs)
         
+        # 确保result是AgentResponse格式
+        if not isinstance(result, AgentResponse):
+            # 如果是旧的5-tuple格式，转换为AgentResponse
+            result = AgentResponse.from_tuple(result)
+        
         # 执行后处理操作
         await self.post_step(input_obj, result)
         
         return result
     
-    async def execute_step(self, input_data: Input, **kwargs) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
+    async def execute_step(self, input_data: Input, **kwargs) -> AgentResponse:
         """
         执行实际的步骤操作，默认委托给brain处理。子类可以重写此方法以自定义执行逻辑。
         Args:
             input_data: 输入数据
             **kwargs: 其他参数
         Returns:
-            Tuple[response, score, terminated, truncated, info]
+            AgentResponse: 结构化的响应对象
         """
         # 明确传递tools参数给brain
         tools = kwargs.pop("tools", self.tools)
-        return await self.brain.step(input=input_data, tools=tools, **kwargs)
+        result = await self.brain.step(input=input_data, tools=tools, **kwargs)
+        
+        # 确保返回AgentResponse格式
+        if not isinstance(result, AgentResponse):
+            result = AgentResponse.from_tuple(result)
+        
+        return result
     
     async def pre_step(self, input_data: Input, kwargs: Dict[str, Any]) -> Tuple[Input, Dict[str, Any]]:
         """

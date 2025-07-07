@@ -298,26 +298,8 @@ Now Begin!
         
         return enhanced_input
     
-    async def step(self, input_data: Any, **kwargs) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
-        """
-        重写step方法以支持AgentResponse同时保持向后兼容性
-        
-        Args:
-            input_data: 输入数据
-            **kwargs: 其他参数
-            
-        Returns:
-            5-tuple格式的结果以保持向后兼容性
-        """
-        # 调用我们的execute_step方法，它返回AgentResponse
-        agent_response = await self.execute_step(
-            input_data if isinstance(input_data, Input) else 
-            Input(query=str(input_data)), 
-            **kwargs
-        )
-        
-        # 转换为5-tuple格式以保持向后兼容性
-        return agent_response.to_tuple()
+    # step方法现在由BaseAgent处理，无需覆盖
+    # BaseAgent.step已经返回AgentResponse，并且支持tuple解包向后兼容性
     
     async def _process_code_response(self, response: str, state: Dict[str, Any]) -> str:
         """Process and execute any code found in the response, supporting Thought-Code-Observation cycle."""
