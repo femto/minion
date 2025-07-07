@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from minion import config
-from minion.agents import CodeMinion
+from minion.agents import CodeAgent
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.main.brain import Brain
 from minion.providers import create_llm_provider
@@ -36,7 +36,7 @@ async def simple_test():
         brain = Brain(python_env=python_env, llm=llm)
         
         # Create CodeMinion
-        code_minion = CodeMinion(brain=brain)
+        code_minion = CodeAgent(brain=brain)
         
         print("CodeMinion created successfully!")
         print(f"- Name: {code_minion.name}")

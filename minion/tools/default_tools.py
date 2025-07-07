@@ -145,7 +145,7 @@ class FinalAnswerTool(BaseTool):
 
     def forward(self, answer: Any) -> Any:
         # 抛出 FinalAnswerException 来标识任务完成
-        raise FinalAnswerException(answer)
+        return answer
 
 
 class UserInputTool(BaseTool):

@@ -579,22 +579,41 @@ Previous error:
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
             context = {"code": f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"}
-            # Execute the code in the Python environment using step()
-            # The context contains the code with query/run ID tags
-            result = self.python_env.step(context["code"])
-            obs = result[0]  # obs
-
-            if obs["error"]:
-                error = obs["error"]
-                logger.error(error)
-                self.answer = self.input.answer = f"output:{obs['output']}, error:{obs['error']}"
-                continue  # try again?
-            output, error = obs["output"], obs["error"]
-            self.answer = self.input.answer = output #answer is only output
-            # print("#####OUTPUT#####")
-            # print(output)
+            
+            # Check if python_env has step or __call__ method
+            if hasattr(self.python_env, 'step'):
+                # Legacy python env (LocalPythonEnv, RpycPythonEnv)
+                result = self.python_env.step(context["code"])
+                obs = result[0]  # obs
+                
+                if obs["error"]:
+                    error = obs["error"]
+                    logger.error(error)
+                    self.answer = self.input.answer = f"output:{obs['output']}, error:{obs['error']}"
+                    continue  # try again?
+                output, error = obs["output"], obs["error"]
+                self.answer = self.input.answer = output #answer is only output
+            else:
+                # LocalPythonExecutor with __call__ method
+                try:
+                    output, logs, is_final_answer = self.python_env(context["code"])
+                    if isinstance(output, Exception):
+                        error = str(output)
+                        logger.error(error)
+                        self.answer = self.input.answer = f"error: {error}"
+                        continue
+                    else:
+                        # Use logs as output if available, otherwise use output
+                        result_text = logs if logs else str(output)
+                        self.answer = self.input.answer = result_text
+                except Exception as e:
+                    error = str(e)
+                    logger.error(error)
+                    self.answer = self.input.answer = f"error: {error}"
+                    continue
+            
             print(f"###answer###:{self.answer}")
-            return self.answer  # obs
+            return self.answer
 
         return self.answer
 
@@ -706,6 +725,254 @@ Previous error:
             with open(file_path, "w") as f:
                 f.write(content)
 
+@register_worker_minion
+class CodeMinion(PythonMinion):
+    """
+    Code Minion using smolagents-style approach: 
+    Thought -> Code -> Observation cycle with <end_code> support
+    """
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.input.instruction = "Solve this problem by writing Python code. Use the 'Thought -> Code -> Observation' approach."
+        self.max_iterations = 3
+        
+        # Initialize LocalPythonExecutor with tools like smolagents
+        if hasattr(self, 'python_env') and self.python_env:
+            # Send variables (state) to the python executor
+            variables = getattr(self.input, 'symbols', {})
+            self.python_env.send_variables(variables=variables)
+            
+            # Send tools to the python executor
+            brain_tools = getattr(self.brain, 'tools', [])
+            input_tools = getattr(self.input, 'tools', [])
+            all_tools = {}
+            
+            # Convert tools to dict format expected by send_tools
+            for tool in (brain_tools + input_tools):
+                if hasattr(tool, 'name'):
+                    all_tools[tool.name] = tool
+            
+            self.python_env.send_tools(all_tools)
+        
+    def construct_prompt(self, query, task=None, error=""):
+        """Construct smolagents-style prompt with <end_code> support"""
+        
+        # Get available tools description
+        available_tools = []
+        if self.brain.tools:
+            for tool in self.brain.tools:
+                if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                    available_tools.append(f"- {tool.name}: {tool.description}")
+        
+        tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
+        
+        # Construct the main query content
+        if task:
+            query_content = f"""
+**Task:** {task.get('instruction', query)}
+**Description:** {task.get('task_description', '')}
+"""
+            # Add dependent outputs if available
+            if task.get("dependent"):
+                dependent_info = "\n**Dependent outputs:**\n"
+                for dependent in task["dependent"]:
+                    dependent_key = dependent.get("dependent_key")
+                    if dependent_key in self.input.symbols:
+                        symbol = self.input.symbols[dependent_key]
+                        dependent_info += f"- {dependent_key}: {symbol.output}\n"
+                query_content += dependent_info
+        else:
+            query_content = f"**Problem:** {query}"
+        
+        # Add error information if available
+        error_info = ""
+        if error:
+            error_info = f"""
+**Previous Error:** 
+{error}
+
+Please fix the error and try again.
+"""
+        
+        # Construct the complete prompt
+        prompt = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
+To do so, you have been given access to a list of tools. Each tool is actually a Python function which you can call by writing Python code. You can use the tool by writing Python code that calls the function.
+
+You are provided with the following tools:
+{tools_description}
+
+You will be given a task to solve as best you can. To solve the task, you must plan and execute Python code step by step until you have solved the task.
+
+Here is the format you should follow:
+**Thought:** Your reasoning about what to do next
+**Code:** 
+```python
+# Your Python code here
+```<end_code>
+
+**Observation:** [This will be filled automatically with the execution result]
+
+Continue this Thought/Code/Observation cycle until you solve the task completely.
+
+{query_content}
+
+{error_info}
+
+Let's start! Remember to end your code blocks with <end_code>.
+"""
+        
+        return prompt
+    
+    async def execute(self):
+        """Execute with smolagents-style Thought -> Code -> Observation cycle"""
+        
+        # Determine the query to use
+        if self.task:
+            query = self.task.get("instruction", "") or self.task.get("task_description", "")
+        else:
+            query = self.input.query
+        
+        error = ""
+        full_conversation = []
+        
+        for iteration in range(self.max_iterations):
+            # Construct the prompt
+            prompt = self.construct_prompt(query, self.task, error)
+            
+            # Add previous conversation context
+            if full_conversation:
+                prompt += "\n\n**Previous attempts:**\n" + "\n".join(full_conversation)
+            
+            # Get LLM response
+            node = LmpActionNode(llm=self.brain.llm)
+            tools = (self.input.tools or []) + (self.brain.tools or [])
+            response = await node.execute(prompt, tools=None)
+            
+            # Extract and execute code
+            code_blocks = self.extract_code_blocks(response)
+            
+            if not code_blocks:
+                # No code found, return the response as-is
+                self.answer = self.input.answer = response
+                return self.answer
+            
+            # Execute the first code block
+            code = code_blocks[0]
+            print(f"Executing code:\n{code}")
+            
+            # Execute the code using python_env
+            try:
+                # Use LocalPythonExecutor's __call__ method
+                # It returns (output, logs, is_final_answer)
+                output, logs, is_final_answer = self.python_env(code)
+                
+                # Check if there was an error (output could be Exception)
+                if isinstance(output, Exception):
+                    error = str(output)
+                    logger.error(f"Code execution error: {error}")
+                    observation = f"**Observation:** Error occurred:\n{error}"
+                    
+                    # Add to conversation history
+                    full_conversation.append(f"**Attempt {iteration + 1}:**")
+                    full_conversation.append(response)
+                    full_conversation.append(observation)
+                    
+                    # Try again with error feedback
+                    continue
+                else:
+                    # Success!
+                    # Format the observation with both output and logs
+                    observation_parts = []
+                    if logs:
+                        observation_parts.append(f"Logs:\n{logs}")
+                    if output is not None:
+                        observation_parts.append(f"Output: {output}")
+                    
+                    observation = f"**Observation:** Code executed successfully:\n" + "\n".join(observation_parts)
+                    
+                    # Use the final answer from LocalPythonExecutor if available
+                    if is_final_answer:
+                        self.answer = self.input.answer = output
+                        print(f"Final answer detected: {self.answer}")
+                        return self.answer
+                    
+                    # Otherwise check if this looks like a final answer
+                    result_text = logs if logs else str(output)
+                    if self.is_final_answer(result_text):
+                        self.answer = self.input.answer = result_text
+                        print(f"Final answer: {self.answer}")
+                        return self.answer
+                    
+                    # Add to conversation and continue
+                    full_conversation.append(f"**Attempt {iteration + 1}:**")
+                    full_conversation.append(response)
+                    full_conversation.append(observation)
+                    
+                    # If we have a good result, we can return it
+                    if iteration == self.max_iterations - 1:
+                        self.answer = self.input.answer = result_text
+                        return self.answer
+                    
+                    # Continue for more iterations if needed
+                    error = ""
+                    
+            except Exception as e:
+                error = str(e)
+                logger.error(f"Execution error: {error}")
+                observation = f"**Observation:** Execution failed:\n{error}"
+                
+                full_conversation.append(f"**Attempt {iteration + 1}:**")
+                full_conversation.append(response)
+                full_conversation.append(observation)
+                
+                continue
+        
+        # If we've exhausted all iterations, return the last response
+        self.answer = self.input.answer = response
+        return self.answer
+    
+    def extract_code_blocks(self, text):
+        """Extract Python code blocks from text, supporting <end_code> format"""
+        code_blocks = []
+        
+        # Simple pattern: look for code blocks ending with <end_code>
+        if '<end_code>' in text:
+            # Find code blocks that end with <end_code>
+            end_code_pattern = r'```(?:python|py)?\s*\n(.*?)<end_code>'
+            matches = re.findall(end_code_pattern, text, re.DOTALL)
+            for match in matches:
+                cleaned = match.strip()
+                # Remove trailing ``` if present
+                if cleaned.endswith('```'):
+                    cleaned = cleaned[:-3].strip()
+                if cleaned:
+                    code_blocks.append(cleaned)
+        
+        return code_blocks
+    
+    def is_final_answer(self, output):
+        """Check if the output looks like a final answer"""
+        # Simple heuristics to detect final answers
+        final_indicators = [
+            "final answer",
+            "result:",
+            "solution:",
+            "answer:",
+            "total:",
+            "calculated:"
+        ]
+        
+        output_lower = output.lower()
+        for indicator in final_indicators:
+            if indicator in output_lower:
+                return True
+        
+        # Check if output contains numeric results
+        if re.search(r'\d+\.?\d*', output):
+            return True
+        
+        return False
 
 @register_worker_minion
 class MathMinion(PythonMinion):

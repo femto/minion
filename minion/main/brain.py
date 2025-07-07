@@ -185,7 +185,16 @@ Supporting navigation and spatial memory""",
         return await mind.step(input)
 
     def cleanup_python_env(self, input):
-        self.python_env.step(f"<id>{input.query_id}</id>RESET_CONTAINER_SPECIAL_KEYWORD")
+        if hasattr(self.python_env, 'step'):
+            # Legacy python env (LocalPythonEnv, RpycPythonEnv)
+            self.python_env.step(f"<id>{input.query_id}</id>RESET_CONTAINER_SPECIAL_KEYWORD")
+        else:
+            # LocalPythonExecutor - reset by re-initializing state and tools
+            if hasattr(self.python_env, 'send_variables'):
+                self.python_env.send_variables(variables={})
+            if hasattr(self.python_env, 'send_tools'):
+                # Re-send tools to ensure clean state
+                self.python_env.send_tools({})
 
     async def choose_mind(self, input):
         mind_template = Template(

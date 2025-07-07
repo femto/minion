@@ -75,11 +75,13 @@ from alfworld_planner_brain import run_planner_brain, ALFWorldPlannerBrain
 custom_task = "find two soapbottle and put them in cabinet"
 asyncio.run(run_planner_brain(custom_task))
 
+
 # Or use the class directly for more control
 async def run_custom_planner():
-    planner = ALFWorldPlannerBrain(model_name="gpt-4o")
-    results = await planner.run(custom_task="find a knife and put it in the drawer")
-    await planner.save_results(results, "my_results.json")
+   planner = ALFWorldPlannerBrain(model_name="gpt-4o")
+   results = await planner.run_async(custom_task="find a knife and put it in the drawer")
+   await planner.save_results(results, "my_results.json")
+
 
 asyncio.run(run_custom_planner())
 ```
