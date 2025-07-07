@@ -42,11 +42,15 @@ class AgentResponse:
         从原有的5-tuple格式创建AgentResponse实例
         
         Args:
-            tuple_result: (response, score, terminated, truncated, info) 格式的结果
+            tuple_result: (response, score, terminated, truncated, info) 格式的结果，或已有的AgentResponse
             
         Returns:
             AgentResponse实例
         """
+        # 如果输入已经是AgentResponse，直接返回
+        if isinstance(tuple_result, cls):
+            return tuple_result
+        
         if not isinstance(tuple_result, tuple) or len(tuple_result) < 5:
             # 如果不是标准格式，创建一个基本的响应
             return cls(response=tuple_result)
@@ -137,4 +141,16 @@ class AgentResponse:
         Returns:
             bool: 是否完成
         """
-        return self.terminated or self.is_final_answer 
+        return self.terminated or self.is_final_answer
+    
+    def __iter__(self):
+        """
+        使AgentResponse可以像tuple一样被解包
+        
+        这提供了向后兼容性，允许现有代码继续使用tuple解包：
+        response, score, terminated, truncated, info = agent_response
+        
+        Returns:
+            Iterator over (response, score, terminated, truncated, info)
+        """
+        return iter(self.to_tuple()) 

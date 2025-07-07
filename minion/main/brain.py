@@ -22,6 +22,7 @@ from minion.main.local_python_env import LocalPythonEnv
 from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
 from minion.providers import create_llm_provider
+from minion.types.agent_response import AgentResponse
 
 class Mind(BaseModel):
     id: str = "UnnamedMind"
@@ -29,10 +30,11 @@ class Mind(BaseModel):
     brain: Any = None  # Brain
 
     async def step(self, input):
-
         moderator = ModeratorMinion(input=input, brain=self.brain)
-        answer = await moderator.execute()
-        return answer, 0.0, False, False, {}  # terminated: false, truncated:false, info:{}
+        agent_response = await moderator.execute()
+        
+        # 直接返回ModeratorMinion的AgentResponse，保持所有状态信息
+        return agent_response
 
 
 class Brain:
@@ -181,8 +183,14 @@ Supporting navigation and spatial memory""",
             self.llm.config.temperature = 1
         mind = self.minds[mind_id]
         
-        # 执行步骤
-        return await mind.step(input)
+        # 执行步骤，确保返回AgentResponse
+        result = await mind.step(input)
+        
+        # 确保结果是AgentResponse格式
+        if not isinstance(result, AgentResponse):
+            result = AgentResponse.from_tuple(result)
+            
+        return result
 
     def cleanup_python_env(self, input):
         if hasattr(self.python_env, 'step'):

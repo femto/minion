@@ -36,6 +36,7 @@ from minion.main.minion import (
     register_worker_minion,
     RESULT_STRATEGY_REGISTRY,
 )
+from minion.types.agent_response import AgentResponse
 from minion.main.prompt import (
     ASK_PROMPT_JINJA,
     COT_PROBLEM_INSTRUCTION,
@@ -111,7 +112,15 @@ class RawMinion(WorkerMinion):
         
         self.answer_raw = self.input.answer_raw = response
         self.input.answer = self.answer
-        return self.answer
+        
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 @register_worker_minion
 class NativeMinion(WorkerMinion):
@@ -145,7 +154,15 @@ class NativeMinion(WorkerMinion):
         
         self.raw_answer = self.input.answer_raw = response
         self.input.answer = self.answer
-        return self.answer
+        
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 
 @register_worker_minion
@@ -193,7 +210,15 @@ class CotMinion(WorkerMinion):
 
         self.input.answer = self.answer
         self.answer_raw = self.input.answer_raw = response
-        return self.answer
+        
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 # class DotMinion(WorkerMinion):
 #     """Diagram of Thought (DoT) Strategy"""
@@ -252,7 +277,14 @@ class DcotMinion(WorkerMinion):
         self.answer = self.input.answer = extract_answer(response)
         self.answer_raw = self.input.answer_raw = response
         
-        return self.answer
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 
 # @register_worker_minion
@@ -613,9 +645,23 @@ Previous error:
                     continue
             
             print(f"###answer###:{self.answer}")
-            return self.answer
+            # Return AgentResponse for successful execution
+            return AgentResponse(
+                response=self.answer,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={'execution_successful': True}
+            )
 
-        return self.answer
+        # Return AgentResponse even if all attempts failed
+        return AgentResponse(
+            response=self.answer,
+            score=0.0,
+            terminated=False,
+            truncated=False,
+            info={'execution_failed': True}
+        )
 
     async def execute_code_solution(self):
         error = ""
@@ -660,7 +706,15 @@ Previous error:
             code = await node.execute(prompt, tools=None)
             code = extract_python(code, self.input.entry_point)
             self.answer = self.input.answer = code
-            return self.answer
+            
+            # Return AgentResponse instead of just the answer
+            return AgentResponse(
+                response=self.answer,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={'code_generated': True}
+            )
 
     async def execute_generation(self):
         error = ""
@@ -702,7 +756,15 @@ Previous error:
             file_structure = self.extract_file_structure(file_structure_text)
             self.save_files(file_structure)
             self.answer = self.input.answer = file_structure_text
-            return self.answer
+            
+            # Return AgentResponse instead of just the answer
+            return AgentResponse(
+                response=self.answer,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={'files_generated': True, 'file_count': len(file_structure)}
+            )
 
     def extract_file_structure(self, text):
         # 从LLM输出中提取项目结构和文件内容
@@ -855,7 +917,14 @@ Let's start! Remember to end your code blocks with <end_code>.
             if not code_blocks:
                 # No code found, return the response as-is
                 self.answer = self.input.answer = response
-                return self.answer
+                # Return AgentResponse for non-code response
+                return AgentResponse(
+                    response=self.answer,
+                    score=0.5,
+                    terminated=False,
+                    truncated=False,
+                    info={'no_code_found': True}
+                )
             
             # Execute the first code block
             code = code_blocks[0]
@@ -895,14 +964,32 @@ Let's start! Remember to end your code blocks with <end_code>.
                     if is_final_answer:
                         self.answer = self.input.answer = output
                         print(f"Final answer detected: {self.answer}")
-                        return self.answer
+                        # Return AgentResponse with final answer flag
+                        return AgentResponse(
+                            response=self.answer,
+                            score=1.0,
+                            terminated=True,
+                            truncated=False,
+                            final_answer=output,
+                            is_final_answer=True,
+                            info={'final_answer_detected': True}
+                        )
                     
                     # Otherwise check if this looks like a final answer
                     result_text = logs if logs else str(output)
                     if self.is_final_answer(result_text):
                         self.answer = self.input.answer = result_text
                         print(f"Final answer: {self.answer}")
-                        return self.answer
+                        # Return AgentResponse with final answer flag
+                        return AgentResponse(
+                            response=self.answer,
+                            score=1.0,
+                            terminated=True,
+                            truncated=False,
+                            final_answer=result_text,
+                            is_final_answer=True,
+                            info={'final_answer_heuristic': True}
+                        )
                     
                     # Add to conversation and continue
                     full_conversation.append(f"**Attempt {iteration + 1}:**")
@@ -912,7 +999,14 @@ Let's start! Remember to end your code blocks with <end_code>.
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
                         self.answer = self.input.answer = result_text
-                        return self.answer
+                        # Return AgentResponse for final iteration
+                        return AgentResponse(
+                            response=self.answer,
+                            score=0.8,
+                            terminated=False,
+                            truncated=True,
+                            info={'max_iterations_reached': True}
+                        )
                     
                     # Continue for more iterations if needed
                     error = ""
@@ -930,7 +1024,14 @@ Let's start! Remember to end your code blocks with <end_code>.
         
         # If we've exhausted all iterations, return the last response
         self.answer = self.input.answer = response
-        return self.answer
+        # Return AgentResponse for exhausted iterations
+        return AgentResponse(
+            response=self.answer,
+            score=0.3,
+            terminated=False,
+            truncated=True,
+            info={'all_iterations_failed': True}
+        )
     
     def extract_code_blocks(self, text):
         """Extract Python code blocks from text, supporting <end_code> format"""
@@ -953,14 +1054,14 @@ Let's start! Remember to end your code blocks with <end_code>.
     
     def is_final_answer(self, output):
         """Check if the output looks like a final answer"""
-        # Simple heuristics to detect final answers
+        # Only use explicit final answer indicators, not general numeric output
         final_indicators = [
-            "final answer",
-            "result:",
-            "solution:",
-            "answer:",
-            "total:",
-            "calculated:"
+            "final answer:",
+            "final result:",
+            "final solution:",
+            "the answer is:",
+            "result is:",
+            "solution is:"
         ]
         
         output_lower = output.lower()
@@ -968,9 +1069,8 @@ Let's start! Remember to end your code blocks with <end_code>.
             if indicator in output_lower:
                 return True
         
-        # Check if output contains numeric results
-        if re.search(r'\d+\.?\d*', output):
-            return True
+        # Remove the overly broad numeric check that was causing false positives
+        # Only rely on explicit final_answer() function calls detected by LocalPythonExecutor
         
         return False
 
@@ -1037,15 +1137,17 @@ class ModeratorMinion(Minion):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
         worker = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
-        answer = await worker.execute()
+        agent_response = await worker.execute()
 
         # Apply post-processing if specified
         if self.input.post_processing:
-            processed_answer = self.input.apply_post_processing(answer)
-        else:
-            processed_answer = answer
-        self.answer = processed_answer
-        return worker, processed_answer
+            processed_answer = self.input.apply_post_processing(agent_response.response)
+            # Update AgentResponse with processed answer but keep other info
+            agent_response.response = processed_answer
+        
+        self.answer = agent_response.response
+        self.agent_response = agent_response
+        return worker, agent_response
 
     async def choose_minion_and_run(self):
         # Check if we have ensemble configuration
@@ -1064,6 +1166,7 @@ class ModeratorMinion(Minion):
         strategy_class = RESULT_STRATEGY_REGISTRY.get(strategy_name, RESULT_STRATEGY_REGISTRY["majority_voting"])
         
         workers = []  # List to store actual worker instances
+        agent_responses = []  # List to store AgentResponse objects
         
         for worker_config in self.input.execution_config["workers"]:
             minion_name = worker_config["name"]
@@ -1075,8 +1178,9 @@ class ModeratorMinion(Minion):
                 self.execution_state["current_iteration"] = i
                 self.save_execution_state()
 
-                worker, _ = await self.invoke_minion(minion_name, worker_config)
+                worker, agent_response = await self.invoke_minion(minion_name, worker_config)
                 workers.append(worker)
+                agent_responses.append(agent_response)
 
         # Process results using the selected strategy
         strategy = strategy_class(
@@ -1086,10 +1190,25 @@ class ModeratorMinion(Minion):
         )
         final_result = await strategy.execute()
         self.answer = self.input.answer = final_result
-        return final_result
+        
+        # Check if any of the responses indicates termination
+        should_terminate = any(resp.terminated or resp.is_final_answer for resp in agent_responses)
+        best_response = max(agent_responses, key=lambda x: x.score) if agent_responses else None
+        
+        # Return AgentResponse with ensemble result
+        return AgentResponse(
+            response=final_result,
+            score=best_response.score if best_response else 1.0,
+            terminated=should_terminate,
+            truncated=any(resp.truncated for resp in agent_responses),
+            final_answer=final_result if should_terminate else None,
+            is_final_answer=should_terminate,
+            info={'ensemble_count': len(agent_responses), 'strategy': strategy_name}
+        )
 
     async def execute_single(self):
-        return await self.invoke_minion(self.input.route)
+        worker, agent_response = await self.invoke_minion(self.input.route)
+        return agent_response
 
     async def execute(self):
         self.load_execution_state()
@@ -1097,20 +1216,23 @@ class ModeratorMinion(Minion):
         if self.input.execution_state.current_minion:
             # Resume from previous state, assume pre_processing already been done
             if hasattr(self.input, 'execution_config') and self.input.execution_config['type'] == "ensemble":
-                await self.execute_ensemble()
+                agent_response = await self.execute_ensemble()
             else:
-                await self.execute_single()
+                agent_response = await self.execute_single()
         else:
             # Start new execution
 
             # Execute pre-processing first
             await self.execute_pre_processing()
 
-            await self.choose_minion_and_run()
+            agent_response = await self.choose_minion_and_run()
 
         # Clean up python env
         self.brain.cleanup_python_env(input=self.input)
-        return self.answer
+        
+        # Update answer and return the AgentResponse from the minion
+        self.answer = agent_response.response
+        return agent_response
 
     def save_execution_state(self):
         """保存执行状态"""
@@ -1265,9 +1387,9 @@ class RouteMinion(Minion):
             max_iterations = max_iterations - self.input.execution_state.current_iteration
             
         # 执行并改进
-        await self.invoke_minion_and_improve(klass, name, max_iterations=max_iterations)
+        agent_response = await self.invoke_minion_and_improve(klass, name, max_iterations=max_iterations)
         
-        return self.answer
+        return agent_response
 
     async def invoke_minion(self, klass, improve=False):
         if isinstance(klass, str):
@@ -1281,11 +1403,24 @@ class RouteMinion(Minion):
         self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config)
         self.add_followers(self.current_minion)
         if improve:
-            await self.current_minion.improve()
+            minion_result = await self.current_minion.improve()
         else:
-            await self.current_minion.execute()
+            minion_result = await self.current_minion.execute()
 
-        answer_raw = self.current_minion.answer
+        # Check if minion returned AgentResponse or just answer
+        if isinstance(minion_result, AgentResponse):
+            self.agent_response = minion_result
+            answer_raw = minion_result.response
+        else:
+            # Fallback for minions that don't return AgentResponse yet
+            self.agent_response = AgentResponse(
+                response=minion_result,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={}
+            )
+            answer_raw = minion_result
 
         # Apply post-processing if specified
         post_processing = None
@@ -1301,23 +1436,27 @@ class RouteMinion(Minion):
 
         self.answer = self.input.answer = processed_answer
         self.answer_raw = self.input.answer_raw = answer_raw
-        return processed_answer
+        
+        # Update AgentResponse with processed answer but keep other info
+        self.agent_response.response = processed_answer
+        
+        return self.agent_response
 
     async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
         self.input.update_execution_state(current_iteration=0)
         self.save_execution_state()
 
-        processed_answer = await self.invoke_minion(klass)
+        agent_response = await self.invoke_minion(klass)
+        self.answer = agent_response.response
 
-        #self.answer = self.input.answer = answer_raw
-        await self.update_stats(name,self.answer, self.answer_raw)
+        await self.update_stats(name, self.answer, self.answer_raw)
 
         check = self.input.check
         if self.worker_config and 'check' in self.worker_config:
             check = self.worker_config["check"]
 
         if not check:
-            return self.answer
+            return agent_response
 
         for iteration in range(int(check)):
             self.input.update_execution_state(current_iteration=iteration)
@@ -1330,14 +1469,14 @@ class RouteMinion(Minion):
             self.save_execution_state()
 
             if check_result and check_result["correct"]:
-                return self.answer
+                return agent_response
 
             # If the check fails, try invoking the minion again
-            answer_raw = await self.invoke_minion(klass, improve=True)
-            self.answer = self.input.answer = answer_raw
+            agent_response = await self.invoke_minion(klass, improve=True)
+            self.answer = self.input.answer = agent_response.response
             await self.update_stats(name, self.answer, self.answer_raw)
 
-        return self.answer
+        return agent_response
 
     def save_execution_state(self):
         """保存执行状态"""
@@ -1455,7 +1594,14 @@ class OptillmMinion(WorkerMinion):
             raise ValueError(f"Unknown operation: {operation}")
 
         self.answer = self.input.answer = response
-        return self.answer
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'optillm_approach': approaches, 'operation': operation}
+        )
 
 
 
