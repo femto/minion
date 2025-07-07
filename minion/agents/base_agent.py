@@ -6,6 +6,7 @@ import asyncio
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
+from minion.types.agent_response import AgentResponse
 
 @dataclass
 class BaseAgent:
@@ -24,7 +25,7 @@ class BaseAgent:
         if self.brain is None:
             self.brain = Brain()
     
-    async def run(self, task: Union[str, Input], **kwargs) -> Any:
+    async def run_async(self, task: Union[str, Input], **kwargs) -> Any:
         """
         运行完整任务，自动多步执行直到完成
         
@@ -99,19 +100,14 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, input_data: Any, **kwargs) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
+    async def step(self, input_data: Any, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
             input_data: 输入数据（可以是状态字典或Input对象）
             **kwargs: 其他参数，直接传递给brain
         Returns:
-            Tuple[response, score, terminated, truncated, info]
-            - response: 响应内容
-            - score: 分数
-            - terminated: 是否终止
-            - truncated: 是否截断
-            - info: 额外信息
+            AgentResponse: 结构化的响应对象，支持tuple解包以保持向后兼容性
         """
         if isinstance(input_data, dict) and "input" in input_data:
             # 从状态字典提取Input
@@ -135,23 +131,34 @@ class BaseAgent:
         # 执行主要步骤
         result = await self.execute_step(input_obj, tools=tools, **kwargs)
         
+        # 确保result是AgentResponse格式
+        if not isinstance(result, AgentResponse):
+            # 如果是旧的5-tuple格式，转换为AgentResponse
+            result = AgentResponse.from_tuple(result)
+        
         # 执行后处理操作
         await self.post_step(input_obj, result)
         
         return result
     
-    async def execute_step(self, input_data: Input, **kwargs) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
+    async def execute_step(self, input_data: Input, **kwargs) -> AgentResponse:
         """
         执行实际的步骤操作，默认委托给brain处理。子类可以重写此方法以自定义执行逻辑。
         Args:
             input_data: 输入数据
             **kwargs: 其他参数
         Returns:
-            Tuple[response, score, terminated, truncated, info]
+            AgentResponse: 结构化的响应对象
         """
         # 明确传递tools参数给brain
         tools = kwargs.pop("tools", self.tools)
-        return await self.brain.step(input=input_data, tools=tools, **kwargs)
+        result = await self.brain.step(input=input_data, tools=tools, **kwargs)
+        
+        # 确保返回AgentResponse格式
+        if not isinstance(result, AgentResponse):
+            result = AgentResponse.from_tuple(result)
+        
+        return result
     
     async def pre_step(self, input_data: Input, kwargs: Dict[str, Any]) -> Tuple[Input, Dict[str, Any]]:
         """
@@ -164,12 +171,12 @@ class BaseAgent:
         """
         return input_data, kwargs
     
-    async def post_step(self, input_data: Input, result: Tuple[Any, float, bool, bool, Dict[str, Any]]) -> None:
+    async def post_step(self, input_data: Input, result: Any) -> None:
         """
         step执行后的处理操作
         Args:
             input_data: 输入数据
-            result: step的执行结果
+            result: step的执行结果 (可以是5-tuple或AgentResponse)
         """
         pass
     
@@ -202,7 +209,7 @@ class BaseAgent:
         根据步骤结果更新状态
         Args:
             state: 当前状态
-            result: 步骤执行结果
+            result: 步骤执行结果 (可以是5-tuple或AgentResponse)
         Returns:
             Dict: 更新后的状态
         """
@@ -210,8 +217,16 @@ class BaseAgent:
         state["history"].append(result)
         state["step_count"] += 1
         
-        # 提取结果的first元素作为下一步输入
-        response = result[0] if isinstance(result, tuple) and len(result) > 0 else result
+        # 提取响应内容作为下一步输入
+        if hasattr(result, 'response'):
+            # AgentResponse对象
+            response = result.response
+        elif isinstance(result, tuple) and len(result) > 0:
+            # 5-tuple格式
+            response = result[0]
+        else:
+            response = result
+            
         if isinstance(state["input"], Input):
             state["input"].query = f"上一步结果: {response}\n继续执行任务: {state['task']}"
             
@@ -221,12 +236,18 @@ class BaseAgent:
         """
         判断任务是否完成
         Args:
-            result: 当前步骤结果
+            result: 当前步骤结果 (可以是5-tuple或AgentResponse)
             state: 当前状态
         Returns:
             bool: 是否完成
         """
-        # 检查是否有明确的终止信号
+        # 检查AgentResponse类型
+        if hasattr(result, 'is_done') and callable(result.is_done):
+            return result.is_done()
+        elif hasattr(result, 'terminated') or hasattr(result, 'is_final_answer'):
+            return getattr(result, 'terminated', False) or getattr(result, 'is_final_answer', False)
+        
+        # 检查5-tuple格式
         if isinstance(result, tuple) and len(result) >= 3:
             # 返回格式为 (response, score, terminated, truncated, info)
             terminated = result[2]
@@ -242,16 +263,23 @@ class BaseAgent:
         """
         整理最终结果
         Args:
-            result: 最后一步结果
+            result: 最后一步结果 (可以是5-tuple或AgentResponse)
             state: 当前状态
         Returns:
             最终处理后的结果
         """
-        # 提取最终答案
+        # 检查AgentResponse类型
+        if hasattr(result, 'final_answer') and result.final_answer is not None:
+            return result.final_answer
+        elif hasattr(result, 'response'):
+            return result.response
+        
+        # 检查5-tuple格式
         if isinstance(result, tuple) and len(result) > 0:
             return result[0]  # 返回response部分
         elif isinstance(result, dict) and "final_answer" in result:
             return result["final_answer"]
+            
         return result
     
     def add_tool(self, tool: BaseTool) -> None:

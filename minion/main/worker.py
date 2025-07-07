@@ -36,6 +36,7 @@ from minion.main.minion import (
     register_worker_minion,
     RESULT_STRATEGY_REGISTRY,
 )
+from minion.types.agent_response import AgentResponse
 from minion.main.prompt import (
     ASK_PROMPT_JINJA,
     COT_PROBLEM_INSTRUCTION,
@@ -111,7 +112,15 @@ class RawMinion(WorkerMinion):
         
         self.answer_raw = self.input.answer_raw = response
         self.input.answer = self.answer
-        return self.answer
+        
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 @register_worker_minion
 class NativeMinion(WorkerMinion):
@@ -145,7 +154,15 @@ class NativeMinion(WorkerMinion):
         
         self.raw_answer = self.input.answer_raw = response
         self.input.answer = self.answer
-        return self.answer
+        
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 
 @register_worker_minion
@@ -193,7 +210,15 @@ class CotMinion(WorkerMinion):
 
         self.input.answer = self.answer
         self.answer_raw = self.input.answer_raw = response
-        return self.answer
+        
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 # class DotMinion(WorkerMinion):
 #     """Diagram of Thought (DoT) Strategy"""
@@ -252,7 +277,14 @@ class DcotMinion(WorkerMinion):
         self.answer = self.input.answer = extract_answer(response)
         self.answer_raw = self.input.answer_raw = response
         
-        return self.answer
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'raw_response': response}
+        )
 
 
 # @register_worker_minion
@@ -579,24 +611,57 @@ Previous error:
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
             context = {"code": f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"}
-            # Execute the code in the Python environment using step()
-            # The context contains the code with query/run ID tags
-            result = self.python_env.step(context["code"])
-            obs = result[0]  # obs
-
-            if obs["error"]:
-                error = obs["error"]
-                logger.error(error)
-                self.answer = self.input.answer = f"output:{obs['output']}, error:{obs['error']}"
-                continue  # try again?
-            output, error = obs["output"], obs["error"]
-            self.answer = self.input.answer = output #answer is only output
-            # print("#####OUTPUT#####")
-            # print(output)
+            
+            # Check if python_env has step or __call__ method
+            if hasattr(self.python_env, 'step'):
+                # Legacy python env (LocalPythonEnv, RpycPythonEnv)
+                result = self.python_env.step(context["code"])
+                obs = result[0]  # obs
+                
+                if obs["error"]:
+                    error = obs["error"]
+                    logger.error(error)
+                    self.answer = self.input.answer = f"output:{obs['output']}, error:{obs['error']}"
+                    continue  # try again?
+                output, error = obs["output"], obs["error"]
+                self.answer = self.input.answer = output #answer is only output
+            else:
+                # LocalPythonExecutor with __call__ method
+                try:
+                    output, logs, is_final_answer = self.python_env(context["code"])
+                    if isinstance(output, Exception):
+                        error = str(output)
+                        logger.error(error)
+                        self.answer = self.input.answer = f"error: {error}"
+                        continue
+                    else:
+                        # Use logs as output if available, otherwise use output
+                        result_text = logs if logs else str(output)
+                        self.answer = self.input.answer = result_text
+                except Exception as e:
+                    error = str(e)
+                    logger.error(error)
+                    self.answer = self.input.answer = f"error: {error}"
+                    continue
+            
             print(f"###answer###:{self.answer}")
-            return self.answer  # obs
+            # Return AgentResponse for successful execution
+            return AgentResponse(
+                response=self.answer,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={'execution_successful': True}
+            )
 
-        return self.answer
+        # Return AgentResponse even if all attempts failed
+        return AgentResponse(
+            response=self.answer,
+            score=0.0,
+            terminated=False,
+            truncated=False,
+            info={'execution_failed': True}
+        )
 
     async def execute_code_solution(self):
         error = ""
@@ -641,7 +706,15 @@ Previous error:
             code = await node.execute(prompt, tools=None)
             code = extract_python(code, self.input.entry_point)
             self.answer = self.input.answer = code
-            return self.answer
+            
+            # Return AgentResponse instead of just the answer
+            return AgentResponse(
+                response=self.answer,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={'code_generated': True}
+            )
 
     async def execute_generation(self):
         error = ""
@@ -683,7 +756,15 @@ Previous error:
             file_structure = self.extract_file_structure(file_structure_text)
             self.save_files(file_structure)
             self.answer = self.input.answer = file_structure_text
-            return self.answer
+            
+            # Return AgentResponse instead of just the answer
+            return AgentResponse(
+                response=self.answer,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={'files_generated': True, 'file_count': len(file_structure)}
+            )
 
     def extract_file_structure(self, text):
         # 从LLM输出中提取项目结构和文件内容
@@ -706,6 +787,292 @@ Previous error:
             with open(file_path, "w") as f:
                 f.write(content)
 
+@register_worker_minion
+class CodeMinion(PythonMinion):
+    """
+    Code Minion using smolagents-style approach: 
+    Thought -> Code -> Observation cycle with <end_code> support
+    """
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.input.instruction = "Solve this problem by writing Python code. Use the 'Thought -> Code -> Observation' approach."
+        self.max_iterations = 3
+        
+        # Initialize LocalPythonExecutor with tools like smolagents
+        if hasattr(self, 'python_env') and self.python_env:
+            # Send variables (state) to the python executor
+            variables = getattr(self.input, 'symbols', {})
+            self.python_env.send_variables(variables=variables)
+            
+            # Send tools to the python executor
+            brain_tools = getattr(self.brain, 'tools', [])
+            input_tools = getattr(self.input, 'tools', [])
+            all_tools = {}
+            
+            # Convert tools to dict format expected by send_tools
+            for tool in (brain_tools + input_tools):
+                if hasattr(tool, 'name'):
+                    all_tools[tool.name] = tool
+            
+            self.python_env.send_tools(all_tools)
+        
+    def construct_prompt(self, query, task=None, error=""):
+        """Construct smolagents-style prompt with <end_code> support"""
+        
+        # Get available tools description
+        available_tools = []
+        if self.brain.tools:
+            for tool in self.brain.tools:
+                if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                    available_tools.append(f"- {tool.name}: {tool.description}")
+        
+        tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
+        
+        # Construct the main query content
+        if task:
+            query_content = f"""
+**Task:** {task.get('instruction', query)}
+**Description:** {task.get('task_description', '')}
+"""
+            # Add dependent outputs if available
+            if task.get("dependent"):
+                dependent_info = "\n**Dependent outputs:**\n"
+                for dependent in task["dependent"]:
+                    dependent_key = dependent.get("dependent_key")
+                    if dependent_key in self.input.symbols:
+                        symbol = self.input.symbols[dependent_key]
+                        dependent_info += f"- {dependent_key}: {symbol.output}\n"
+                query_content += dependent_info
+        else:
+            query_content = f"**Problem:** {query}"
+        
+        # Add error information if available
+        error_info = ""
+        if error:
+            error_info = f"""
+**Previous Error:** 
+{error}
+
+Please fix the error and try again.
+"""
+        
+        # Construct the complete prompt
+        prompt = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
+To do so, you have been given access to a list of tools. Each tool is actually a Python function which you can call by writing Python code. You can use the tool by writing Python code that calls the function.
+
+You are provided with the following tools:
+{tools_description}
+
+You will be given a task to solve as best you can. To solve the task, you must plan and execute Python code step by step until you have solved the task.
+
+Here is the format you should follow:
+**Thought:** Your reasoning about what to do next
+**Code:** 
+```python
+# Your Python code here
+```<end_code>
+
+**Observation:** [This will be filled automatically with the execution result]
+
+Continue this Thought/Code/Observation cycle until you solve the task completely.
+
+{query_content}
+
+{error_info}
+
+Let's start! Remember to end your code blocks with <end_code>.
+"""
+        
+        return prompt
+    
+    async def execute(self):
+        """Execute with smolagents-style Thought -> Code -> Observation cycle"""
+        
+        # Determine the query to use
+        if self.task:
+            query = self.task.get("instruction", "") or self.task.get("task_description", "")
+        else:
+            query = self.input.query
+        
+        error = ""
+        full_conversation = []
+        
+        for iteration in range(self.max_iterations):
+            # Construct the prompt
+            prompt = self.construct_prompt(query, self.task, error)
+            
+            # Add previous conversation context
+            if full_conversation:
+                prompt += "\n\n**Previous attempts:**\n" + "\n".join(full_conversation)
+            
+            # Get LLM response
+            node = LmpActionNode(llm=self.brain.llm)
+            tools = (self.input.tools or []) + (self.brain.tools or [])
+            response = await node.execute(prompt, tools=None)
+            
+            # Extract and execute code
+            code_blocks = self.extract_code_blocks(response)
+            
+            if not code_blocks:
+                # No code found, return the response as-is
+                self.answer = self.input.answer = response
+                # Return AgentResponse for non-code response
+                return AgentResponse(
+                    response=self.answer,
+                    score=0.5,
+                    terminated=False,
+                    truncated=False,
+                    info={'no_code_found': True}
+                )
+            
+            # Execute the first code block
+            code = code_blocks[0]
+            print(f"Executing code:\n{code}")
+            
+            # Execute the code using python_env
+            try:
+                # Use LocalPythonExecutor's __call__ method
+                # It returns (output, logs, is_final_answer)
+                output, logs, is_final_answer = self.python_env(code)
+                
+                # Check if there was an error (output could be Exception)
+                if isinstance(output, Exception):
+                    error = str(output)
+                    logger.error(f"Code execution error: {error}")
+                    observation = f"**Observation:** Error occurred:\n{error}"
+                    
+                    # Add to conversation history
+                    full_conversation.append(f"**Attempt {iteration + 1}:**")
+                    full_conversation.append(response)
+                    full_conversation.append(observation)
+                    
+                    # Try again with error feedback
+                    continue
+                else:
+                    # Success!
+                    # Format the observation with both output and logs
+                    observation_parts = []
+                    if logs:
+                        observation_parts.append(f"Logs:\n{logs}")
+                    if output is not None:
+                        observation_parts.append(f"Output: {output}")
+                    
+                    observation = f"**Observation:** Code executed successfully:\n" + "\n".join(observation_parts)
+                    
+                    # Use the final answer from LocalPythonExecutor if available
+                    if is_final_answer:
+                        self.answer = self.input.answer = output
+                        print(f"Final answer detected: {self.answer}")
+                        # Return AgentResponse with final answer flag
+                        return AgentResponse(
+                            response=self.answer,
+                            score=1.0,
+                            terminated=True,
+                            truncated=False,
+                            final_answer=output,
+                            is_final_answer=True,
+                            info={'final_answer_detected': True}
+                        )
+                    
+                    # Otherwise check if this looks like a final answer
+                    result_text = logs if logs else str(output)
+                    if self.is_final_answer(result_text):
+                        self.answer = self.input.answer = result_text
+                        print(f"Final answer: {self.answer}")
+                        # Return AgentResponse with final answer flag
+                        return AgentResponse(
+                            response=self.answer,
+                            score=1.0,
+                            terminated=True,
+                            truncated=False,
+                            final_answer=result_text,
+                            is_final_answer=True,
+                            info={'final_answer_heuristic': True}
+                        )
+                    
+                    # Add to conversation and continue
+                    full_conversation.append(f"**Attempt {iteration + 1}:**")
+                    full_conversation.append(response)
+                    full_conversation.append(observation)
+                    
+                    # If we have a good result, we can return it
+                    if iteration == self.max_iterations - 1:
+                        self.answer = self.input.answer = result_text
+                        # Return AgentResponse for final iteration
+                        return AgentResponse(
+                            response=self.answer,
+                            score=0.8,
+                            terminated=False,
+                            truncated=True,
+                            info={'max_iterations_reached': True}
+                        )
+                    
+                    # Continue for more iterations if needed
+                    error = ""
+                    
+            except Exception as e:
+                error = str(e)
+                logger.error(f"Execution error: {error}")
+                observation = f"**Observation:** Execution failed:\n{error}"
+                
+                full_conversation.append(f"**Attempt {iteration + 1}:**")
+                full_conversation.append(response)
+                full_conversation.append(observation)
+                
+                continue
+        
+        # If we've exhausted all iterations, return the last response
+        self.answer = self.input.answer = response
+        # Return AgentResponse for exhausted iterations
+        return AgentResponse(
+            response=self.answer,
+            score=0.3,
+            terminated=False,
+            truncated=True,
+            info={'all_iterations_failed': True}
+        )
+    
+    def extract_code_blocks(self, text):
+        """Extract Python code blocks from text, supporting <end_code> format"""
+        code_blocks = []
+        
+        # Simple pattern: look for code blocks ending with <end_code>
+        if '<end_code>' in text:
+            # Find code blocks that end with <end_code>
+            end_code_pattern = r'```(?:python|py)?\s*\n(.*?)<end_code>'
+            matches = re.findall(end_code_pattern, text, re.DOTALL)
+            for match in matches:
+                cleaned = match.strip()
+                # Remove trailing ``` if present
+                if cleaned.endswith('```'):
+                    cleaned = cleaned[:-3].strip()
+                if cleaned:
+                    code_blocks.append(cleaned)
+        
+        return code_blocks
+    
+    def is_final_answer(self, output):
+        """Check if the output looks like a final answer"""
+        # Only use explicit final answer indicators, not general numeric output
+        final_indicators = [
+            "final answer:",
+            "final result:",
+            "final solution:",
+            "the answer is:",
+            "result is:",
+            "solution is:"
+        ]
+        
+        output_lower = output.lower()
+        for indicator in final_indicators:
+            if indicator in output_lower:
+                return True
+        
+        # Remove the overly broad numeric check that was causing false positives
+        # Only rely on explicit final_answer() function calls detected by LocalPythonExecutor
+        
+        return False
 
 @register_worker_minion
 class MathMinion(PythonMinion):
@@ -770,15 +1137,17 @@ class ModeratorMinion(Minion):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
         worker = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
-        answer = await worker.execute()
+        agent_response = await worker.execute()
 
         # Apply post-processing if specified
         if self.input.post_processing:
-            processed_answer = self.input.apply_post_processing(answer)
-        else:
-            processed_answer = answer
-        self.answer = processed_answer
-        return worker, processed_answer
+            processed_answer = self.input.apply_post_processing(agent_response.response)
+            # Update AgentResponse with processed answer but keep other info
+            agent_response.response = processed_answer
+        
+        self.answer = agent_response.response
+        self.agent_response = agent_response
+        return worker, agent_response
 
     async def choose_minion_and_run(self):
         # Check if we have ensemble configuration
@@ -797,6 +1166,7 @@ class ModeratorMinion(Minion):
         strategy_class = RESULT_STRATEGY_REGISTRY.get(strategy_name, RESULT_STRATEGY_REGISTRY["majority_voting"])
         
         workers = []  # List to store actual worker instances
+        agent_responses = []  # List to store AgentResponse objects
         
         for worker_config in self.input.execution_config["workers"]:
             minion_name = worker_config["name"]
@@ -808,8 +1178,9 @@ class ModeratorMinion(Minion):
                 self.execution_state["current_iteration"] = i
                 self.save_execution_state()
 
-                worker, _ = await self.invoke_minion(minion_name, worker_config)
+                worker, agent_response = await self.invoke_minion(minion_name, worker_config)
                 workers.append(worker)
+                agent_responses.append(agent_response)
 
         # Process results using the selected strategy
         strategy = strategy_class(
@@ -819,10 +1190,25 @@ class ModeratorMinion(Minion):
         )
         final_result = await strategy.execute()
         self.answer = self.input.answer = final_result
-        return final_result
+        
+        # Check if any of the responses indicates termination
+        should_terminate = any(resp.terminated or resp.is_final_answer for resp in agent_responses)
+        best_response = max(agent_responses, key=lambda x: x.score) if agent_responses else None
+        
+        # Return AgentResponse with ensemble result
+        return AgentResponse(
+            response=final_result,
+            score=best_response.score if best_response else 1.0,
+            terminated=should_terminate,
+            truncated=any(resp.truncated for resp in agent_responses),
+            final_answer=final_result if should_terminate else None,
+            is_final_answer=should_terminate,
+            info={'ensemble_count': len(agent_responses), 'strategy': strategy_name}
+        )
 
     async def execute_single(self):
-        return await self.invoke_minion(self.input.route)
+        worker, agent_response = await self.invoke_minion(self.input.route)
+        return agent_response
 
     async def execute(self):
         self.load_execution_state()
@@ -830,20 +1216,23 @@ class ModeratorMinion(Minion):
         if self.input.execution_state.current_minion:
             # Resume from previous state, assume pre_processing already been done
             if hasattr(self.input, 'execution_config') and self.input.execution_config['type'] == "ensemble":
-                await self.execute_ensemble()
+                agent_response = await self.execute_ensemble()
             else:
-                await self.execute_single()
+                agent_response = await self.execute_single()
         else:
             # Start new execution
 
             # Execute pre-processing first
             await self.execute_pre_processing()
 
-            await self.choose_minion_and_run()
+            agent_response = await self.choose_minion_and_run()
 
         # Clean up python env
         self.brain.cleanup_python_env(input=self.input)
-        return self.answer
+        
+        # Update answer and return the AgentResponse from the minion
+        self.answer = agent_response.response
+        return agent_response
 
     def save_execution_state(self):
         """保存执行状态"""
@@ -998,9 +1387,9 @@ class RouteMinion(Minion):
             max_iterations = max_iterations - self.input.execution_state.current_iteration
             
         # 执行并改进
-        await self.invoke_minion_and_improve(klass, name, max_iterations=max_iterations)
+        agent_response = await self.invoke_minion_and_improve(klass, name, max_iterations=max_iterations)
         
-        return self.answer
+        return agent_response
 
     async def invoke_minion(self, klass, improve=False):
         if isinstance(klass, str):
@@ -1014,11 +1403,24 @@ class RouteMinion(Minion):
         self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config)
         self.add_followers(self.current_minion)
         if improve:
-            await self.current_minion.improve()
+            minion_result = await self.current_minion.improve()
         else:
-            await self.current_minion.execute()
+            minion_result = await self.current_minion.execute()
 
-        answer_raw = self.current_minion.answer
+        # Check if minion returned AgentResponse or just answer
+        if isinstance(minion_result, AgentResponse):
+            self.agent_response = minion_result
+            answer_raw = minion_result.response
+        else:
+            # Fallback for minions that don't return AgentResponse yet
+            self.agent_response = AgentResponse(
+                response=minion_result,
+                score=1.0,
+                terminated=False,
+                truncated=False,
+                info={}
+            )
+            answer_raw = minion_result
 
         # Apply post-processing if specified
         post_processing = None
@@ -1034,23 +1436,27 @@ class RouteMinion(Minion):
 
         self.answer = self.input.answer = processed_answer
         self.answer_raw = self.input.answer_raw = answer_raw
-        return processed_answer
+        
+        # Update AgentResponse with processed answer but keep other info
+        self.agent_response.response = processed_answer
+        
+        return self.agent_response
 
     async def invoke_minion_and_improve(self, klass, name, max_iterations=3):
         self.input.update_execution_state(current_iteration=0)
         self.save_execution_state()
 
-        processed_answer = await self.invoke_minion(klass)
+        agent_response = await self.invoke_minion(klass)
+        self.answer = agent_response.response
 
-        #self.answer = self.input.answer = answer_raw
-        await self.update_stats(name,self.answer, self.answer_raw)
+        await self.update_stats(name, self.answer, self.answer_raw)
 
         check = self.input.check
         if self.worker_config and 'check' in self.worker_config:
             check = self.worker_config["check"]
 
         if not check:
-            return self.answer
+            return agent_response
 
         for iteration in range(int(check)):
             self.input.update_execution_state(current_iteration=iteration)
@@ -1063,14 +1469,14 @@ class RouteMinion(Minion):
             self.save_execution_state()
 
             if check_result and check_result["correct"]:
-                return self.answer
+                return agent_response
 
             # If the check fails, try invoking the minion again
-            answer_raw = await self.invoke_minion(klass, improve=True)
-            self.answer = self.input.answer = answer_raw
+            agent_response = await self.invoke_minion(klass, improve=True)
+            self.answer = self.input.answer = agent_response.response
             await self.update_stats(name, self.answer, self.answer_raw)
 
-        return self.answer
+        return agent_response
 
     def save_execution_state(self):
         """保存执行状态"""
@@ -1188,7 +1594,14 @@ class OptillmMinion(WorkerMinion):
             raise ValueError(f"Unknown operation: {operation}")
 
         self.answer = self.input.answer = response
-        return self.answer
+        # Return AgentResponse instead of just the answer
+        return AgentResponse(
+            response=self.answer,
+            score=1.0,
+            terminated=False,
+            truncated=False,
+            info={'optillm_approach': approaches, 'operation': operation}
+        )
 
 
 

@@ -29,14 +29,50 @@ def extract_final_answer(text):
     return text
 
 def extract_python(code: str, entrypoint: Optional[str] = None):
+    """
+    Extract Python code from text, supporting both standard and <end_code> formats.
+    This matches the smolagents logic for code extraction.
+    """
+    # First try to extract code blocks with <end_code> ending
+    code_blocks = []
+    
+    # Pattern 1: Standard ```python or ``` blocks (more flexible whitespace)
+    python_code_pattern = r'```(?:python|py)?\s*\n(.*?)\n\s*```'
+    matches = re.findall(python_code_pattern, code, re.DOTALL)
+    for match in matches:
+        cleaned = match.strip()
+        if cleaned and len(cleaned) > 5:  # Only include substantial code blocks
+            code_blocks.append(cleaned)
+    
+    # Pattern 2: Code blocks ending with <end_code>
+    end_code_pattern = r'```(?:python|py)?\s*\n(.*?)\n```<end_code>'
+    matches = re.findall(end_code_pattern, code, re.DOTALL)
+    for match in matches:
+        cleaned = match.strip()
+        if cleaned and len(cleaned) > 5:
+            code_blocks.append(cleaned)
+    
+    # Pattern 3: Code blocks with just <end_code> at the end (no closing ```)
+    loose_end_code_pattern = r'```(?:python|py)?\s*\n(.*?)<end_code>'
+    matches = re.findall(loose_end_code_pattern, code, re.DOTALL)
+    for match in matches:
+        cleaned = match.strip()
+        if cleaned and len(cleaned) > 5:
+            code_blocks.append(cleaned)
+    
+    # If we found code blocks, return the first one directly without sanitizing
+    # This prevents the sanitize function from truncating the code
+    if code_blocks:
+        extracted_code = code_blocks[0]  # Use the first code block found
+        # Only apply entrypoint filtering if specifically requested
+        if entrypoint:
+            return sanitize(extracted_code, entrypoint)
+        else:
+            return extracted_code
+    
+    # Fallback to original sanitize logic if no specific code blocks found
     return sanitize(code, entrypoint)
-    # Regex pattern to extract code inside ```python ``` blocks
-    # pattern = r"```python(.*?)```"
-    # match = re.search(pattern, text, re.DOTALL)
-    # if match:
-    #     # Return the extracted code, strip to remove leading/trailing newlines
-    #     return match.group(1).strip()
-    # return text
+
 def extract_longest_json_from_string(text):
     # Regular expression pattern to match all content between ```json and ```
     pattern = r"```json\s*([\s\S]*?)\s*```"
