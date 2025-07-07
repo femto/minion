@@ -20,6 +20,7 @@ from minion.main.input import Input
 from minion.providers import create_llm_provider
 
 
+@pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_code_minion_circle_area():
     """Test CodeMinion with circle area calculation"""
@@ -58,6 +59,7 @@ async def test_code_minion_circle_area():
         return False
 
 
+@pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_code_minion_fibonacci():
     """Test CodeMinion with Fibonacci calculation"""
@@ -91,6 +93,7 @@ async def test_code_minion_fibonacci():
         return False
 
 
+@pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_code_minion_with_error():
     """Test CodeMinion error handling and retry"""
@@ -125,6 +128,7 @@ async def test_code_minion_with_error():
         return False
 
 
+@pytest.mark.llm_integration
 @pytest.mark.asyncio
 async def test_code_minion_data_analysis():
     """Test CodeMinion with data analysis"""
