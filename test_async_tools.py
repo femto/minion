@@ -6,6 +6,7 @@ Test file for demonstrating asynchronous tool support in Code Minion Python exec
 
 import asyncio
 import time
+import pytest
 from minion.main.async_python_executor import AsyncPythonExecutor
 from minion.tools.async_example_tools import EXAMPLE_ASYNC_TOOLS
 from minion.tools.base_tool import tool
@@ -28,6 +29,7 @@ def sync_calculate(x: int, y: int) -> int:
     return x + y
 
 
+@pytest.mark.asyncio
 async def test_async_tool_execution():
     """Test basic async tool execution"""
     print("Testing async tool execution...")
@@ -133,6 +135,7 @@ print(f"Update result: {update_result}")
     print(f"Execution time: {end_time - start_time:.3f}s")
 
 
+@pytest.mark.asyncio
 async def test_async_file_operations():
     """Test async file operations"""
     print("\n=== Test 5: Async File Operations ===")
@@ -179,6 +182,7 @@ if os.path.exists("test_async.txt"):
     print(f"Execution time: {end_time - start_time:.3f}s")
 
 
+@pytest.mark.asyncio
 async def test_error_handling():
     """Test error handling in async tools"""
     print("\n=== Test 6: Error Handling ===")
@@ -216,6 +220,7 @@ except Exception as e:
     print(f"Execution time: {end_time - start_time:.3f}s")
 
 
+@pytest.mark.asyncio
 async def benchmark_async_vs_sync():
     """Benchmark async vs sync execution"""
     print("\n=== Benchmark: Async vs Sync Performance ===")
@@ -274,8 +279,61 @@ print(f"Completed {len(results)} sync operations")
     print(f"Speedup: {sync_time/async_time:.2f}x")
 
 
+@pytest.mark.asyncio
+async def test_all_async_features():
+    """Comprehensive test that runs all async features together"""
+    print("🚀 Testing all async features together")
+    
+    # This test combines multiple async operations to verify everything works together
+    executor = AsyncPythonExecutor(
+        additional_authorized_imports=["asyncio", "time"],
+        max_print_outputs_length=10000
+    )
+    
+    tools = {**EXAMPLE_ASYNC_TOOLS, "sync_calculate": sync_calculate}
+    executor.send_tools(tools)
+    
+    # Combined test code
+    code = """
+import asyncio
+
+# Test 1: Simple async operation
+pi_result = await async_calculate_pi(50)
+print(f"Pi calculation: {pi_result}")
+
+# Test 2: Concurrent operations
+concurrent_tasks = [
+    async_fetch_data("test1", 0.1),
+    async_fetch_data("test2", 0.1),
+]
+concurrent_results = await asyncio.gather(*concurrent_tasks)
+print(f"Concurrent operations completed: {len(concurrent_results)}")
+
+# Test 3: Mixed sync/async
+sync_result = sync_calculate(5, 10)
+async_result = await async_fetch_data("mixed_test", 0.05)
+print(f"Mixed results - sync: {sync_result}, async: {async_result['status']}")
+
+# Test 4: Database simulation
+db_result = await async_database("test query", "SELECT")
+print(f"Database query result: {db_result['operation']}")
+"""
+    
+    output, logs, is_final = await executor(code)
+    
+    # Basic assertions
+    assert output is not None or logs
+    assert "Pi calculation:" in logs
+    assert "Concurrent operations completed:" in logs
+    assert "Mixed results" in logs
+    assert "Database query result:" in logs
+    
+    print("✅ All async features test passed!")
+
+
+# Keep the original main function for standalone execution
 async def main():
-    """Run all tests"""
+    """Run all tests when executed directly"""
     print("🚀 Starting Async Tool Support Tests for Code Minion")
     print("=" * 60)
     
@@ -284,6 +342,7 @@ async def main():
         await test_async_file_operations()
         await test_error_handling()
         await benchmark_async_vs_sync()
+        await test_all_async_features()
         
         print("\n" + "=" * 60)
         print("✅ All tests completed successfully!")
@@ -296,4 +355,5 @@ async def main():
 
 
 if __name__ == "__main__":
+    # Only run main when executed directly, not when imported by pytest
     asyncio.run(main())
