@@ -43,9 +43,9 @@ class Brain:
         id=None,
         memory=None,
         memory_config=None,
-        llm=create_llm_provider(config.models.get("default")),
+        llm=None,
         llms={},
-        python_env=LocalPythonEnv(verbose=False, is_agent=True),
+        python_env=None,
         stats_storer=None,
         tools=None,  # 新增: 支持工具集
     ):
@@ -98,7 +98,14 @@ Supporting navigation and spatial memory""",
                 self.mem = memory = Memory.from_config(memory_config)
 
         # Process default llm
-        if isinstance(llm, str):
+        if llm is None:
+            # Try to create from default config if available
+            default_config = config.models.get("default")
+            if default_config:
+                self.llm = create_llm_provider(default_config)
+            else:
+                self.llm = None
+        elif isinstance(llm, str):
             self.llm = create_llm_provider(config.models.get(llm))
         else:
             self.llm = llm
@@ -123,7 +130,7 @@ Supporting navigation and spatial memory""",
         self.tools = tools or []
         
         # 优先使用LocalPythonEnv，避免Docker依赖
-        self.python_env = python_env
+        self.python_env = python_env or LocalPythonEnv(verbose=False, is_agent=True)
 
         self.stats_storer = stats_storer
 

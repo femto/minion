@@ -33,14 +33,17 @@ class ImageDetail(str, Enum):
 
 class LLMConfig(BaseModel):
     api_type: str = "openai"
-    api_key: str
+    api_key: str = ""  # For most providers
+    access_key_id: Optional[str] = None  # For AWS Bedrock
+    secret_access_key: Optional[str] = None  # For AWS Bedrock
     api_version: Optional[str] = None
     # base_url: Optional[HttpUrl] = None
     base_url: Optional[str] = None
-    model: str
+    model: str = ""
     temperature: float = 0.7
     max_tokens: int = 4000
     vision_enabled: bool = False
+    region: Optional[str] = None  # For AWS Bedrock and other cloud providers
 
     class Config:
         use_enum_values = True

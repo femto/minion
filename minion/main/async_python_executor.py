@@ -87,6 +87,95 @@ def async_safer_eval(func: Callable):
     return _check_return
 
 
+def create_async_function(
+    func_def: Union[ast.FunctionDef, ast.AsyncFunctionDef],
+    state: dict[str, Any],
+    static_tools: dict[str, Union[Callable, AsyncBaseTool]],
+    custom_tools: dict[str, Union[Callable, AsyncBaseTool]],
+    authorized_imports: list[str],
+) -> Callable:
+    """
+    Create a function (sync or async) from AST FunctionDef or AsyncFunctionDef
+    """
+    source_code = ast.unparse(func_def)
+    is_async = isinstance(func_def, ast.AsyncFunctionDef)
+
+    if is_async:
+        async def new_async_func(*args: Any, **kwargs: Any) -> Any:
+            func_state = state.copy()
+            arg_names = [arg.arg for arg in func_def.args.args]
+            default_values = []
+            for d in func_def.args.defaults:
+                default_values.append(await evaluate_async_ast(d, state, static_tools, custom_tools, authorized_imports))
+
+            # Apply default values
+            defaults = dict(zip(arg_names[-len(default_values) :], default_values))
+
+            # Set positional arguments
+            for name, value in zip(arg_names, args):
+                func_state[name] = value
+
+            # Set keyword arguments
+            for name, value in kwargs.items():
+                func_state[name] = value
+
+            # Handle variable arguments
+            if func_def.args.vararg:
+                vararg_name = func_def.args.vararg.arg
+                func_state[vararg_name] = args
+
+            if func_def.args.kwarg:
+                kwarg_name = func_def.args.kwarg.arg
+                func_state[kwarg_name] = kwargs
+
+            # Set default values for arguments that were not provided
+            for name, value in defaults.items():
+                if name not in func_state:
+                    func_state[name] = value
+
+            # Update function state with self and __class__
+            if func_def.args.args and func_def.args.args[0].arg == "self":
+                if args:
+                    func_state["self"] = args[0]
+                    func_state["__class__"] = args[0].__class__
+
+            result = None
+            try:
+                for stmt in func_def.body:
+                    result = await evaluate_async_ast(stmt, func_state, static_tools, custom_tools, authorized_imports)
+            except ReturnException as e:
+                result = e.value
+
+            if func_def.name == "__init__":
+                return None
+
+            return result
+        
+        # Store original AST, source code, and name
+        new_async_func.__ast__ = func_def
+        new_async_func.__source__ = source_code
+        new_async_func.__name__ = func_def.name
+        return new_async_func
+    else:
+        # Use the existing create_function for sync functions
+        from .local_python_executor import create_function
+        return create_function(func_def, state, static_tools, custom_tools, authorized_imports)
+
+
+def evaluate_async_function_def(
+    func_def: Union[ast.FunctionDef, ast.AsyncFunctionDef],
+    state: dict[str, Any],
+    static_tools: dict[str, Union[Callable, AsyncBaseTool]],
+    custom_tools: dict[str, Union[Callable, AsyncBaseTool]],
+    authorized_imports: list[str],
+) -> Callable:
+    """
+    Evaluate a function definition (sync or async) and add it to custom tools
+    """
+    custom_tools[func_def.name] = create_async_function(func_def, state, static_tools, custom_tools, authorized_imports)
+    return custom_tools[func_def.name]
+
+
 async def evaluate_async_call(
     call: ast.Call,
     state: dict[str, Any],
@@ -397,6 +486,10 @@ async def evaluate_async_ast(
         return await evaluate_async_condition(expression, *common_params)
     elif isinstance(expression, ast.For):
         return await evaluate_async_for(expression, *common_params)
+    elif isinstance(expression, ast.FunctionDef):
+        return evaluate_async_function_def(expression, *common_params)
+    elif isinstance(expression, ast.AsyncFunctionDef):
+        return evaluate_async_function_def(expression, *common_params)
     elif isinstance(expression, ast.Assign):
         # For assignments, we need async version due to set_async_value
         targets = []

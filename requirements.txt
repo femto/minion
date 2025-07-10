@@ -32,6 +32,10 @@ ell-ai
 optillm
 colorama
 
+# AWS Bedrock support
+boto3
+botocore
+
 #ldb dependencies
 jsonlines==3.1.0
 datasets
