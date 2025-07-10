@@ -9,7 +9,7 @@ This agent extends the BaseAgent to provide:
 - Memory integration for learning
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass
 import re
 import traceback
@@ -21,6 +21,7 @@ from minion.types.agent_response import AgentResponse
 from ..tools.base_tool import BaseTool
 from ..main.input import Input
 from ..main.local_python_executor import LocalPythonExecutor
+from ..main.async_python_executor import AsyncPythonExecutor
 from ..tools.default_tools import FinalAnswerTool
 
 logger = logging.getLogger(__name__)
@@ -127,13 +128,15 @@ class CodeAgent(BaseAgent):
     - Self-reflection capabilities
     - ReAct (Reason-Act-Observe) cycles
     - Safe code execution
+    - Async tool support
     """
     
     name: str = "code_agent"
     thinking_engine: Optional[ThinkingEngine] = None
-    python_executor: Optional[LocalPythonExecutor] = None
+    python_executor: Optional[Union[LocalPythonExecutor, AsyncPythonExecutor]] = None
     enable_reflection: bool = True
     max_code_length: int = 2000
+    use_async_executor: bool = True  # New parameter to control async support
     
     def __post_init__(self):
         """Initialize the CodeMinion with thinking capabilities."""
@@ -142,12 +145,19 @@ class CodeAgent(BaseAgent):
         # Initialize thinking engine
         self.thinking_engine = ThinkingEngine(self)
         
-        # Initialize code executor (使用 LocalPythonExecutor)
-        self.python_executor = LocalPythonExecutor(
-            additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv"],
-            max_print_outputs_length=50000,
-            additional_functions={}
-        )
+        # Initialize code executor based on use_async_executor flag
+        if self.use_async_executor:
+            self.python_executor = AsyncPythonExecutor(
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv", "asyncio"],
+                max_print_outputs_length=50000,
+                additional_functions={}
+            )
+        else:
+            self.python_executor = LocalPythonExecutor(
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv"],
+                max_print_outputs_length=50000,
+                additional_functions={}
+            )
         
         # Add the think tool and final answer tool
         self.add_tool(ThinkTool())
@@ -232,9 +242,26 @@ class CodeAgent(BaseAgent):
         if self.tools:
             for tool in self.tools:
                 if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                    available_tools.append(f"- {tool.name}: {tool.description}")
+                    tool_desc = f"- {tool.name}: {tool.description}"
+                    # Add async indicator if using async executor
+                    if self.use_async_executor and hasattr(tool, 'forward'):
+                        import asyncio
+                        if asyncio.iscoroutinefunction(tool.forward):
+                            tool_desc += " (async)"
+                    available_tools.append(tool_desc)
         
         tools_description = "\n".join(available_tools) if available_tools else "- final_answer: Provide the final answer to complete the task"
+        
+        # Add async-specific instructions if using async executor
+        async_instructions = ""
+        if self.use_async_executor:
+            async_instructions = """
+**Async Tool Support:**
+- You can use async tools with `await` syntax: `result = await async_tool_name(args)`
+- For concurrent execution, use `asyncio.gather()`: `results = await asyncio.gather(task1, task2, task3)`
+- Regular (sync) tools can be used normally without `await`
+- The `asyncio` module is available for advanced async operations
+"""
         
         enhanced_query = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
 To do so, you have been given access to a list of tools: these tools are basically Python functions which you can call with code.
@@ -248,7 +275,7 @@ In the end you have to return a final answer using the `final_answer` tool.
 
 **Available Tools:**
 {tools_description}
-
+{async_instructions}
 **Your Task:**
 {input_data.query}
 
@@ -265,6 +292,7 @@ In the end you have to return a final answer using the `final_answer` tool.
 10. Don't give up! You're in charge of solving the task, not providing directions to solve it.
 11. **CRUCIAL**: Make sure your code is well-defined and complete. Include all necessary imports, define all variables, and ensure the code can run independently.
 12. **IMPORTANT**: When you have the final answer, call `final_answer(your_result)` to complete the task.
+13. **ASYNC TOOLS**: For async tools, use `await` syntax and consider using `asyncio.gather()` for concurrent execution.
 
 **Example Pattern:**
 Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
@@ -283,6 +311,7 @@ final_answer(result)
 - End code blocks with ```<end_code>
 - Use print() to output intermediate results
 - Call final_answer() when you have the solution
+- Use `await` for async tools and `asyncio.gather()` for concurrent execution
 
 Now Begin!
 """
@@ -326,8 +355,11 @@ Now Begin!
                 continue
                 
             try:
-                # 使用 LocalPythonExecutor 执行代码
-                output, logs, is_final_answer = self.python_executor(code)
+                # 使用 AsyncPythonExecutor 或 LocalPythonExecutor 执行代码
+                if self.use_async_executor:
+                    output, logs, is_final_answer = await self.python_executor(code)
+                else:
+                    output, logs, is_final_answer = self.python_executor(code)
                 
                 # 构建观察反馈
                 observation_parts = [f"\n**Observation:** Code block {i+1} executed successfully."]
@@ -543,24 +575,32 @@ Use Python code to:
         return super().finalize(result, state)
 
     def _update_executor_tools(self):
-        """Update the LocalPythonExecutor with current tools."""
+        """Update the Python executor with current tools."""
         if self.python_executor and self.tools:
-            # Convert tools to a format that LocalPythonExecutor can understand
-            tool_functions = {}
-            for tool in self.tools:
-                if hasattr(tool, 'forward') and hasattr(tool, 'name'):
-                    # Create a wrapper function for the tool
-                    def create_tool_wrapper(tool_instance):
-                        def tool_wrapper(*args, **kwargs):
-                            return tool_instance.forward(*args, **kwargs)
-                        tool_wrapper.__name__ = tool_instance.name
-                        tool_wrapper.__doc__ = tool_instance.description
-                        return tool_wrapper
-                    
-                    tool_functions[tool.name] = create_tool_wrapper(tool)
-            
-            # Send tools to the executor
-            self.python_executor.send_tools(tool_functions)
+            if self.use_async_executor:
+                # For AsyncPythonExecutor, pass tools directly - it will handle async/sync conversion
+                tool_dict = {}
+                for tool in self.tools:
+                    if hasattr(tool, 'name'):
+                        tool_dict[tool.name] = tool
+                self.python_executor.send_tools(tool_dict)
+            else:
+                # For LocalPythonExecutor, convert tools to wrapper functions
+                tool_functions = {}
+                for tool in self.tools:
+                    if hasattr(tool, 'forward') and hasattr(tool, 'name'):
+                        # Create a wrapper function for the tool
+                        def create_tool_wrapper(tool_instance):
+                            def tool_wrapper(*args, **kwargs):
+                                return tool_instance.forward(*args, **kwargs)
+                            tool_wrapper.__name__ = tool_instance.name
+                            tool_wrapper.__doc__ = tool_instance.description
+                            return tool_wrapper
+                        
+                        tool_functions[tool.name] = create_tool_wrapper(tool)
+                
+                # Send tools to the executor
+                self.python_executor.send_tools(tool_functions)
     
     def add_tool(self, tool: BaseTool):
         """Add a tool and update the executor."""

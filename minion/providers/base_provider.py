@@ -79,9 +79,9 @@ class BaseProvider(ABC):
         """Generate streaming completion from messages"""
         pass
 
-    #@abstractmethod
-    async def generate_stream_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None,
-                                       **kwargs) -> Any:
+    @abstractmethod
+    async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Any:
+        """Generate streaming completion from messages, returning a response object"""
         pass
 
 
