@@ -275,9 +275,9 @@ async def main():
     
     try:
         await demo_basic_async_tools()
-        # await demo_concurrent_execution()
-        # await demo_complex_workflow()
-        # await demo_performance_comparison()
+        await demo_concurrent_execution()
+        await demo_complex_workflow()
+        await demo_performance_comparison()
         
         print("\n🎉 所有演示完成！")
         print("\n💡 总结:")
