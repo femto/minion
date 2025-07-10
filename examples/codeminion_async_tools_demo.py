@@ -12,14 +12,13 @@ import os
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from minion.tools.async_base_tool import AsyncBaseTool, async_tool
+from minion.tools.async_base_tool import AsyncBaseTool
 from minion.main.brain import Brain
 from minion.main.async_python_executor import AsyncPythonExecutor
 
 
 # 创建一系列实用的异步工具
 
-@async_tool
 async def async_fetch_weather(city: str) -> dict:
     """
     异步获取天气信息
@@ -46,7 +45,6 @@ async def async_fetch_weather(city: str) -> dict:
     })
 
 
-@async_tool
 async def async_currency_converter(amount: float, from_currency: str, to_currency: str) -> dict:
     """
     异步货币转换工具
@@ -60,6 +58,13 @@ async def async_currency_converter(amount: float, from_currency: str, to_currenc
         转换结果
     """
     await asyncio.sleep(0.2)  # 模拟API调用
+    
+    # 确保amount是数字类型
+    if isinstance(amount, str):
+        try:
+            amount = float(amount)
+        except ValueError:
+            return {"error": f"Invalid amount: {amount}"}
     
     # 模拟汇率数据 (相对于USD)
     rates = {
@@ -151,7 +156,7 @@ async def demo_basic_async_tools():
     print("=" * 50)
     
     # 创建使用 AsyncPythonExecutor 的 Brain
-    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio"])
+    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio", "multi_tool_use"])
     brain = Brain(python_env=async_executor, llm="gpt-4o")
     
     # 创建异步工具
@@ -182,7 +187,7 @@ async def demo_concurrent_execution():
     print("\n🚀 演示2: 并发执行多个异步工具")
     print("=" * 50)
     
-    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio"])
+    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio", "multi_tool_use"])
     brain = Brain(python_env=async_executor, llm="gpt-4o")
     
     async_tools = [async_fetch_weather, async_currency_converter, AsyncDataAnalyzer()]
@@ -210,7 +215,7 @@ async def demo_complex_workflow():
     print("\n⚡ 演示3: 复杂异步工具工作流")
     print("=" * 50)
     
-    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio"])
+    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio", "multi_tool_use"])
     brain = Brain(python_env=async_executor, llm="gpt-4o")
     
     async_tools = [async_fetch_weather, async_currency_converter, AsyncDataAnalyzer()]
@@ -241,7 +246,7 @@ async def demo_performance_comparison():
     print("\n⏱️ 演示4: 异步vs同步性能对比")
     print("=" * 50)
     
-    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio", "time"])
+    async_executor = AsyncPythonExecutor(additional_authorized_imports=["asyncio", "time", "multi_tool_use"])
     brain = Brain(python_env=async_executor, llm="gpt-4o")
     
     async_tools = [async_fetch_weather, async_currency_converter]
@@ -275,9 +280,9 @@ async def main():
     
     try:
         await demo_basic_async_tools()
-        await demo_concurrent_execution()
-        await demo_complex_workflow()
-        await demo_performance_comparison()
+        # await demo_concurrent_execution()
+        # await demo_complex_workflow()
+        # await demo_performance_comparison()
         
         print("\n🎉 所有演示完成！")
         print("\n💡 总结:")

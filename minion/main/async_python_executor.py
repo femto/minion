@@ -628,7 +628,9 @@ class AsyncPythonExecutor:
         if max_print_outputs_length is None:
             self.max_print_outputs_length = DEFAULT_MAX_LEN_OUTPUT
         self.additional_authorized_imports = additional_authorized_imports
-        self.authorized_imports = list(set(BASE_BUILTIN_MODULES) | set(self.additional_authorized_imports))
+        # Add multi_tool_use and inspect to authorized imports for GPT parallel tool calls
+        authorized_imports_with_multi_tool = list(set(BASE_BUILTIN_MODULES) | set(self.additional_authorized_imports) | {"multi_tool_use", "inspect"})
+        self.authorized_imports = authorized_imports_with_multi_tool
         self.static_tools = None
         self.additional_functions = additional_functions or {}
 
@@ -653,6 +655,8 @@ class AsyncPythonExecutor:
         Send tools to the async executor. Automatically wraps sync tools in async adapters.
         """
         from ..tools.base_tool import BaseTool
+        import sys
+        import types
         
         converted_tools = {}
         for name, tool in tools.items():
@@ -666,8 +670,38 @@ class AsyncPythonExecutor:
                 # Regular function, keep as is
                 converted_tools[name] = tool
         
-        # Combine converted tools, base Python tools, and additional Python functions
-        self.static_tools = {**converted_tools, **BASE_PYTHON_TOOLS.copy(), **self.additional_functions}
+        # Add multi_tool_use module for GPT's parallel tool calls
+        from ..tools.multi_tool_use import parallel, smart_parallel
+        
+        # Create a real module object for multi_tool_use
+        multi_tool_use_module = types.ModuleType("multi_tool_use")
+        multi_tool_use_module.parallel = smart_parallel  # Use smart version for better compatibility
+        
+        # Register the module in sys.modules so it can be imported
+        sys.modules["multi_tool_use"] = multi_tool_use_module
+        
+        # Combine converted tools, base Python tools, and additional Python functions first
+        self.static_tools = {
+            **converted_tools, 
+            **BASE_PYTHON_TOOLS.copy(), 
+            **self.additional_functions,
+            "multi_tool_use": multi_tool_use_module,  # Add the real module
+        }
+        
+        # Create a functions namespace object to hold tools
+        functions_namespace = types.SimpleNamespace()
+        for name, tool in converted_tools.items():
+            # Add tools to functions namespace with both original name and function name
+            setattr(functions_namespace, name, tool)
+            if hasattr(tool, '__name__'):
+                setattr(functions_namespace, tool.__name__, tool)
+        
+        # Add the functions namespace to static_tools
+        self.static_tools["functions"] = functions_namespace
+        
+        # Also add multi_tool_use and functions to the state as global objects for direct access
+        self.state["multi_tool_use"] = multi_tool_use_module
+        self.state["functions"] = functions_namespace
 
 
 __all__ = ["evaluate_async_python_code", "AsyncPythonExecutor"]

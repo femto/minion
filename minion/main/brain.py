@@ -43,7 +43,7 @@ class Brain:
         id=None,
         memory=None,
         memory_config=None,
-        llm=None,
+        llm=create_llm_provider(config.models.get("default")),
         llms={},
         python_env=None,
         stats_storer=None,
@@ -98,14 +98,7 @@ Supporting navigation and spatial memory""",
                 self.mem = memory = Memory.from_config(memory_config)
 
         # Process default llm
-        if llm is None:
-            # Try to create from default config if available
-            default_config = config.models.get("default")
-            if default_config:
-                self.llm = create_llm_provider(default_config)
-            else:
-                self.llm = None
-        elif isinstance(llm, str):
+        if isinstance(llm, str):
             self.llm = create_llm_provider(config.models.get(llm))
         else:
             self.llm = llm
@@ -204,12 +197,11 @@ Supporting navigation and spatial memory""",
             # Legacy python env (LocalPythonEnv, RpycPythonEnv)
             self.python_env.step(f"<id>{input.query_id}</id>RESET_CONTAINER_SPECIAL_KEYWORD")
         else:
-            # LocalPythonExecutor - reset by re-initializing state and tools
+            # LocalPythonExecutor - reset by re-initializing state only
             if hasattr(self.python_env, 'send_variables'):
                 self.python_env.send_variables(variables={})
-            if hasattr(self.python_env, 'send_tools'):
-                # Re-send tools to ensure clean state
-                self.python_env.send_tools({})
+            # Don't clear tools - they should persist across executions
+            # Tools are only set when starting a new session with new tools
 
     async def choose_mind(self, input):
         mind_template = Template(

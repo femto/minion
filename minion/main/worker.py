@@ -821,7 +821,15 @@ class CodeMinion(PythonMinion):
             # Convert tools to dict format expected by send_tools
             for tool in (brain_tools + input_tools):
                 if hasattr(tool, 'name'):
+                    # Tool object with name attribute
                     all_tools[tool.name] = tool
+                elif callable(tool) and hasattr(tool, '__name__'):
+                    # Function with __name__ attribute
+                    all_tools[tool.__name__] = tool
+                elif callable(tool):
+                    # Generic callable, use str representation as fallback
+                    tool_name = getattr(tool, '__name__', str(tool))
+                    all_tools[tool_name] = tool
             
             self.python_env.send_tools(all_tools)
         
