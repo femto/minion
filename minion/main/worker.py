@@ -5,6 +5,7 @@
 @Author  : femto Zheng
 @File    : brain.py
 """
+import asyncio
 import json
 import os
 import re
@@ -626,9 +627,16 @@ Previous error:
                 output, error = obs["output"], obs["error"]
                 self.answer = self.input.answer = output #answer is only output
             else:
-                # LocalPythonExecutor with __call__ method
+                # LocalPythonExecutor or AsyncPythonExecutor with __call__ method
                 try:
-                    output, logs, is_final_answer = self.python_env(context["code"])
+                    # Check if it's an async executor (AsyncPythonExecutor)
+                    if hasattr(self.python_env, '__call__') and asyncio.iscoroutinefunction(self.python_env.__call__):
+                        # Async executor - await the call
+                        output, logs, is_final_answer = await self.python_env(context["code"])
+                    else:
+                        # Sync executor - regular call
+                        output, logs, is_final_answer = self.python_env(context["code"])
+                        
                     if isinstance(output, Exception):
                         error = str(output)
                         logger.error(error)
@@ -813,7 +821,15 @@ class CodeMinion(PythonMinion):
             # Convert tools to dict format expected by send_tools
             for tool in (brain_tools + input_tools):
                 if hasattr(tool, 'name'):
+                    # Tool object with name attribute
                     all_tools[tool.name] = tool
+                elif callable(tool) and hasattr(tool, '__name__'):
+                    # Function with __name__ attribute
+                    all_tools[tool.__name__] = tool
+                elif callable(tool):
+                    # Generic callable, use str representation as fallback
+                    tool_name = getattr(tool, '__name__', str(tool))
+                    all_tools[tool_name] = tool
             
             self.python_env.send_tools(all_tools)
         
@@ -909,7 +925,7 @@ Let's start! Remember to end your code blocks with <end_code>.
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
             tools = (self.input.tools or []) + (self.brain.tools or [])
-            response = await node.execute(prompt, tools=None)
+            response = await node.execute(prompt, tools=tools)
             
             # Extract and execute code
             code_blocks = self.extract_code_blocks(response)
@@ -932,9 +948,13 @@ Let's start! Remember to end your code blocks with <end_code>.
             
             # Execute the code using python_env
             try:
-                # Use LocalPythonExecutor's __call__ method
-                # It returns (output, logs, is_final_answer)
-                output, logs, is_final_answer = self.python_env(code)
+                # Check if it's an async executor (AsyncPythonExecutor)
+                if hasattr(self.python_env, '__call__') and asyncio.iscoroutinefunction(self.python_env.__call__):
+                    # Async executor - await the call
+                    output, logs, is_final_answer = await self.python_env(code)
+                else:
+                    # Sync executor - regular call (LocalPythonExecutor)
+                    output, logs, is_final_answer = self.python_env(code)
                 
                 # Check if there was an error (output could be Exception)
                 if isinstance(output, Exception):
