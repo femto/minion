@@ -17,6 +17,7 @@ from minion.main.stats_storer import (
     MultipleStatsStorer,
     SqlStatsStorer,
 )
+from minion.types.agent_response import AgentResponse
 
 
 # Load JSONL file
@@ -193,7 +194,7 @@ async def solve_single_question(item, route="cot", stats_storer=None, **kwargs):
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=stats_storer, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
-    obs, score, *_ = await brain.step(
+    result = await brain.step(
         query=question,
         route=route,
         execution_config=load_execution_config("math_ensemble.json"),
@@ -205,8 +206,8 @@ async def solve_single_question(item, route="cot", stats_storer=None, **kwargs):
         # stats={},
         # stats_output="aime/stat_output.json"
     )
-    # print(obs)
-    user_answer = obs
+    # print(result.response)
+    user_answer = result.response
 
     if math_equal(user_answer, correct_answer):
         return {"result": 1, "item": item}

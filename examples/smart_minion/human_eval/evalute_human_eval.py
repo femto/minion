@@ -17,6 +17,7 @@ from minion.utils.syncheck import run_with_timeout
 from minion.utils.utils import extract_number_from_string
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
+from minion.types.agent_response import AgentResponse
 
 
 # Load JSONL file
@@ -247,7 +248,7 @@ async def solve_question(item):
         if test_case["problem_id"] == item["task_id"]:
             metadata["test_cases"] = test_case.get("test", [])
             break
-    answer, score, *_ = await brain.step(
+    result = await brain.step(
         query="""Please provide a complete function implementation including:
 - Full function definition
 - All necessary logic
@@ -261,7 +262,7 @@ Here is the function to implement:
         execution_config=load_execution_config(ensemble_logic_path),
         metadata=metadata
     )
-    return answer
+    return result.response
 
 #model = "gpt-4o-mini"
 model = "default"
