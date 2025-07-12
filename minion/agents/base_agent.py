@@ -41,6 +41,9 @@ class BaseAgent:
         Extract MCPToolset objects from tools parameter and move them to _mcp_toolsets.
         This enables direct passing of MCPToolset objects in the tools parameter.
         """
+        if self._is_setup:
+            raise RuntimeError("Cannot modify toolsets after setup")
+            
         # Check if any tools are MCPToolset objects
         mcp_toolsets = []
         regular_tools = []
@@ -81,6 +84,9 @@ class BaseAgent:
 
         # Initialize brain with tools
         self.brain = Brain(tools=tools)
+        
+        # Mark agent as setup
+        self._is_setup = True
     
     async def close(self):
         """
