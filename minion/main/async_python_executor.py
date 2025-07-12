@@ -653,14 +653,21 @@ class AsyncPythonExecutor:
     def send_tools(self, tools: dict[str, Any]):
         """
         Send tools to the async executor. Automatically wraps sync tools in async adapters.
+        Handles meta tools (AgentStateAwareTool) specially - they are available in code but not exposed to LLM.
         """
         from ..tools.base_tool import BaseTool
+        from ..tools.agent_state_aware_tool import AgentStateAwareTool
         import sys
         import types
         
         converted_tools = {}
+        meta_tools = {}  # 分离meta工具
+        
         for name, tool in tools.items():
-            if isinstance(tool, AsyncBaseTool):
+            if isinstance(tool, AgentStateAwareTool):
+                # Meta工具特殊处理 - 不暴露给LLM
+                meta_tools[name] = tool
+            elif isinstance(tool, AsyncBaseTool):
                 # Already async, use directly
                 converted_tools[name] = tool
             elif hasattr(tool, 'forward') and isinstance(tool, BaseTool):  # BaseTool instance
@@ -669,6 +676,9 @@ class AsyncPythonExecutor:
             else:
                 # Regular function, keep as is
                 converted_tools[name] = tool
+        
+        # 注册内置meta工具
+        meta_tools.update(self._get_builtin_meta_tools())
         
         # Add multi_tool_use module for GPT's parallel tool calls
         from ..tools.multi_tool_use import parallel, smart_parallel
@@ -680,17 +690,39 @@ class AsyncPythonExecutor:
         # Register the module in sys.modules so it can be imported
         sys.modules["multi_tool_use"] = multi_tool_use_module
         
+        # 创建meta工具调用函数
+        def meta_call(tool_name: str, *args, **kwargs):
+            """调用meta工具的函数 - 对LLM透明"""
+            if tool_name in meta_tools:
+                import asyncio
+                tool = meta_tools[tool_name]
+                # 如果在异步上下文中，直接调用
+                try:
+                    loop = asyncio.get_running_loop()
+                    if loop.is_running():
+                        # 在异步上下文中，使用create_task
+                        task = asyncio.create_task(tool(*args, **kwargs))
+                        return task
+                    else:
+                        return asyncio.run(tool(*args, **kwargs))
+                except RuntimeError:
+                    return asyncio.run(tool(*args, **kwargs))
+            else:
+                raise ValueError(f"Meta tool '{tool_name}' not found")
+        
         # Combine converted tools, base Python tools, and additional Python functions first
         self.static_tools = {
             **converted_tools, 
+            **meta_tools,  # 添加meta工具到static_tools（但不到functions命名空间）
             **BASE_PYTHON_TOOLS.copy(), 
             **self.additional_functions,
             "multi_tool_use": multi_tool_use_module,  # Add the real module
+            "_meta_call": meta_call,  # 添加meta工具调用函数
         }
         
-        # Create a functions namespace object to hold tools
+        # Create a functions namespace object to hold tools (ONLY for LLM-visible tools)
         functions_namespace = types.SimpleNamespace()
-        for name, tool in converted_tools.items():
+        for name, tool in converted_tools.items():  # 注意：只包含converted_tools，不包含meta_tools
             # Add tools to functions namespace with both original name and function name
             setattr(functions_namespace, name, tool)
             if hasattr(tool, '__name__'):
@@ -702,6 +734,22 @@ class AsyncPythonExecutor:
         # Also add multi_tool_use and functions to the state as global objects for direct access
         self.state["multi_tool_use"] = multi_tool_use_module
         self.state["functions"] = functions_namespace
+        self.state["_meta_call"] = meta_call  # 添加到state以便代码调用
+        
+        # 记录meta工具信息（用于调试）
+        if meta_tools:
+            self.state["_meta_tools_available"] = list(meta_tools.keys())
+    
+    def _get_builtin_meta_tools(self) -> dict[str, Any]:
+        """获取内置的meta工具"""
+        from ..tools.think_in_code_tool import ThinkInCodeTool
+        from ..tools.meta_tools import PlanTool, ReflectionTool
+        
+        return {
+            "think": ThinkInCodeTool(),
+            "plan": PlanTool(),
+            "reflect": ReflectionTool(),
+        }
 
 
 __all__ = ["evaluate_async_python_code", "AsyncPythonExecutor"]
