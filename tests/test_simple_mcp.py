@@ -7,6 +7,7 @@
 
 import asyncio
 import logging
+import pytest
 from minion.agents.base_agent import BaseAgent
 from minion.tools.mcp import (
     MCPToolset,
@@ -20,6 +21,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.asyncio
 async def test_basic_mcp_api():
     """测试基本的MCP API"""
     logger.info("测试基本MCP API...")
@@ -44,6 +46,7 @@ async def test_basic_mcp_api():
     logger.info("✓ 基本MCP API测试通过")
 
 
+@pytest.mark.asyncio
 async def test_toolset_creation():
     """测试工具集创建"""
     logger.info("测试工具集创建...")
@@ -66,6 +69,7 @@ async def test_toolset_creation():
     logger.info("✓ 工具集创建测试通过")
 
 
+@pytest.mark.asyncio
 async def test_multiple_toolsets():
     """测试多个工具集"""
     logger.info("测试多个工具集...")
@@ -95,6 +99,7 @@ async def test_multiple_toolsets():
     logger.info("✓ 多工具集测试通过")
 
 
+@pytest.mark.asyncio
 async def test_api_simplicity():
     """测试API简洁性"""
     logger.info("测试API简洁性...")
@@ -112,6 +117,7 @@ async def test_api_simplicity():
     logger.info("✓ API简洁性测试通过")
 
 
+@pytest.mark.asyncio
 async def test_parameter_handling():
     """测试参数处理"""
     logger.info("测试参数处理...")
@@ -138,6 +144,7 @@ async def test_parameter_handling():
     logger.info("✓ 参数处理测试通过")
 
 
+@pytest.mark.asyncio
 async def test_factory_functions():
     """测试工厂函数"""
     logger.info("测试工厂函数...")
@@ -167,6 +174,7 @@ async def test_factory_functions():
     logger.info("✓ 工厂函数测试通过")
 
 
+@pytest.mark.asyncio
 async def test_agent_tool_separation():
     """测试代理和工具的分离"""
     logger.info("测试代理和工具的分离...")
