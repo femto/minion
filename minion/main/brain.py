@@ -7,7 +7,7 @@
 """
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict
 
 from jinja2 import Template
 from mem0 import Memory
@@ -147,9 +147,36 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    async def step(self, input=None, query="", query_type="", system_prompt: str = None, tools=None, messages=None, **kwargs):
+    async def step(self, state: Dict[str, Any] = None, **config_kwargs):
+        # 处理state参数
+        if state is None:
+            state = {}
+            
+        # 从状态中提取参数
+        input = state.get("input")
+        query = config_kwargs.get("query", "")
+        query_type = config_kwargs.get("query_type", "")
+        system_prompt = config_kwargs.get("system_prompt")
+        tools = config_kwargs.get("tools")
+        messages = config_kwargs.get("messages")
+        
+        # 验证state中必须有input
+        if input is None:
+            if not query:
+                raise ValueError("State must contain 'input' or query must be provided in config_kwargs")
+            # 从 query 创建 Input，移除已使用的参数避免重复
+            input_kwargs = config_kwargs.copy()
+            input_kwargs.pop('query', None)
+            input_kwargs.pop('query_type', None) 
+            input_kwargs.pop('system_prompt', None)
+            input_kwargs.pop('tools', None)
+            input_kwargs.pop('messages', None)
+            
+            input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
+            state["input"] = input
+        
         # 处理传入的tools
-        current_tools = tools if tools is not None else self.tools
+        current_tools = tools if tools is not None else state.get("tools", self.tools)
         
         # 如果传入了messages，优先使用messages
         if messages is not None:
@@ -161,11 +188,11 @@ Supporting navigation and spatial memory""",
                             query = msg.get("content", query)
                         elif msg.get("role") == "system" and system_prompt is None:
                             system_prompt = msg.get("content", "")
-            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
+            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **config_kwargs)
             input.query = query  # 覆盖query
         else:
             # 创建Input
-            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **kwargs)
+            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **config_kwargs)
             
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64

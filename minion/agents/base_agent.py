@@ -140,14 +140,19 @@ class BaseAgent:
         if not self._is_setup:
             raise RuntimeError(f"Agent {self.name} not setup. Call setup() first.")
 
-    async def run_async(self, task: Union[str, Input], **kwargs) -> Any:
+    async def run_async(self, 
+                       task: Optional[Union[str, Input]] = None,
+                       state: Optional[Dict[str, Any]] = None, 
+                       max_steps: Optional[int] = None,
+                       **kwargs) -> Any:
         """
-        运行完整任务，自动多步执行直到完成
+        运行完整任务，自动多步执行直到完成，支持从中断状态恢复
         
         Args:
-            task: 任务描述或Input对象
+            task: 任务描述或Input对象 (state为None时必须提供)
+            state: 已有状态，用于恢复中断的执行
+            max_steps: 最大步数
             **kwargs: 附加参数，可包含:
-                - max_steps: 最大步数
                 - tools: 临时工具覆盖
                 - streaming: 若为True则使用异步迭代器返回中间结果
                 - 其他参数会传递给brain.step
@@ -158,11 +163,30 @@ class BaseAgent:
         self._ensure_setup()
         
         # 处理参数
-        max_steps = kwargs.pop("max_steps", self.max_steps)
         streaming = kwargs.pop("streaming", False)
         
-        # 初始化任务状态
-        state = self.init_state(task, **kwargs)
+        # 处理状态初始化或恢复
+        if state is None:
+            if task is None:
+                raise ValueError("Either 'task' or 'state' must be provided")
+            state = self.init_state(task, **kwargs)
+        else:
+            # 使用已有状态，可选择更新task
+            if task is not None:
+                if isinstance(task, str):
+                    state["task"] = task
+                    # 更新input对象的query
+                    if "input" in state and hasattr(state["input"], 'query'):
+                        state["input"].query = task
+                else:
+                    state["task"] = task.query
+                    state["input"] = task
+        
+        # 确定最大步数
+        max_steps = max_steps or self.max_steps
+        
+        # 保存当前状态引用，便于外部访问
+        self._current_state = state
         
         if streaming:
             # 返回异步迭代器
@@ -217,36 +241,36 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, input_data: Any, **kwargs) -> AgentResponse:
+    async def step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
-            input_data: 输入数据（可以是状态字典或Input对象）
+            state: 状态字典，包含 input, tools 等必要信息
             **kwargs: 其他参数，直接传递给brain
         Returns:
             AgentResponse: 结构化的响应对象，支持tuple解包以保持向后兼容性
         """
-        if isinstance(input_data, dict) and "input" in input_data:
-            # 从状态字典提取Input
-            input_obj = input_data["input"]
-        elif not isinstance(input_data, Input):
+        if "input" not in state:
+            raise ValueError("State must contain 'input' key with Input object")
+            
+        input_obj = state["input"]
+        if not isinstance(input_obj, Input):
             # 将字符串转为Input
-            input_obj = Input(query=str(input_data))
-        else:
-            input_obj = input_data
+            input_obj = Input(query=str(input_obj))
+            state["input"] = input_obj
             
         # 预处理输入
         input_obj, kwargs = await self.pre_step(input_obj, kwargs)
         
         # 执行主要步骤，优先使用状态中的tools
         tools = kwargs.pop("tools", None)
-        if tools is None and isinstance(input_data, dict) and "tools" in input_data:
-            tools = input_data.get("tools", self.tools)
+        if tools is None:
+            tools = state.get("tools", self.tools)
         if tools is None:
             tools = self.tools
             
         # 执行主要步骤
-        result = await self.execute_step(input_obj, tools=tools, **kwargs)
+        result = await self.execute_step(state, **kwargs)
         
         # 确保result是AgentResponse格式
         if not isinstance(result, AgentResponse):
@@ -254,22 +278,21 @@ class BaseAgent:
             result = AgentResponse.from_tuple(result)
         
         # 执行后处理操作
-        await self.post_step(input_obj, result)
+        await self.post_step(state["input"], result)
         
         return result
     
-    async def execute_step(self, input_data: Input, **kwargs) -> AgentResponse:
+    async def execute_step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
         """
         执行实际的步骤操作，默认委托给brain处理。子类可以重写此方法以自定义执行逻辑。
         Args:
-            input_data: 输入数据
+            state: 状态字典，包含 input, tools 等信息
             **kwargs: 其他参数
         Returns:
             AgentResponse: 结构化的响应对象
         """
-        # 明确传递tools参数给brain
-        tools = kwargs.pop("tools", self.tools)
-        result = await self.brain.step(input=input_data, tools=tools, **kwargs)
+        # 传递状态给brain.step
+        result = await self.brain.step(state, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):
@@ -573,3 +596,37 @@ class BaseAgent:
                 return response
                 
         return []
+    
+    def get_current_state(self) -> Dict[str, Any]:
+        """
+        获取当前执行状态
+        Returns:
+            Dict[str, Any]: 当前状态的副本
+        """
+        if hasattr(self, '_current_state') and self._current_state:
+            return self._current_state.copy()
+        else:
+            raise ValueError("No current state available. Run agent first.")
+    
+    def save_state(self, filepath: str) -> None:
+        """
+        保存状态到文件
+        Args:
+            filepath: 保存路径
+        """
+        import pickle
+        state = self.get_current_state()
+        with open(filepath, 'wb') as f:
+            pickle.dump(state, f)
+    
+    def load_state(self, filepath: str) -> Dict[str, Any]:
+        """
+        从文件加载状态
+        Args:
+            filepath: 文件路径
+        Returns:
+            Dict[str, Any]: 加载的状态
+        """
+        import pickle
+        with open(filepath, 'rb') as f:
+            return pickle.load(f)
