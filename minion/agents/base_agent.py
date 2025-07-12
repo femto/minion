@@ -26,45 +26,66 @@ class BaseAgent:
     
     # 生命周期管理
     _is_setup: bool = field(default=False, init=False)
-    _mcp_toolsets: List[Any] = field(default_factory=list, init=False)  # List of MCPToolSet instances
+    _mcp_toolsets: List[Any] = field(default_factory=list, init=False)  # List of MCPToolset instances
     
     def __post_init__(self):
         """初始化后的处理"""
         if self.brain is None:
             self.brain = Brain()
+        
+        # Automatically handle MCPToolset objects in tools parameter
+        self._extract_mcp_toolsets_from_tools()
+    
+    def _extract_mcp_toolsets_from_tools(self):
+        """
+        Extract MCPToolset objects from tools parameter and move them to _mcp_toolsets.
+        This enables direct passing of MCPToolset objects in the tools parameter.
+        """
+        # Check if any tools are MCPToolset objects
+        mcp_toolsets = []
+        regular_tools = []
+        
+        for tool in self.tools:
+            # Check if it's an MCPToolset object
+            if hasattr(tool, '_ensure_setup') and hasattr(tool, 'connection_params'):
+                mcp_toolsets.append(tool)
+            else:
+                regular_tools.append(tool)
+        
+        # Update the tools list to only contain regular tools
+        self.tools = regular_tools
+        
+        # Add MCPToolset objects to _mcp_toolsets
+        for toolset in mcp_toolsets:
+            self._mcp_toolsets.append(toolset)
+            logger.info(f"Auto-detected MCPToolset {getattr(toolset, 'name', 'unnamed')} from tools parameter")
     
     async def setup(self):
-        """
-        Agent初始化设置，在开始使用agent前调用
-        这里会初始化所有的MCPToolSet和其他资源
-        """
-        if self._is_setup:
-            logger.warning(f"Agent {self.name} already setup")
-            return
-        
-        logger.info(f"Setting up agent {self.name}")
-        
-        # 设置所有MCPToolSet
+        """Setup agent with tools"""
+        # Setup MCP toolsets
         for toolset in self._mcp_toolsets:
-            if hasattr(toolset, 'setup') and callable(toolset.setup):
-                setup_method = getattr(toolset, 'setup')
-                if inspect.iscoroutinefunction(setup_method):
-                    await setup_method()
-                else:
-                    setup_method()
-                # 将toolset中的工具添加到agent的工具列表
-                if hasattr(toolset, 'get_tools'):
-                    mcp_tools = toolset.get_tools()
-                    self.tools.extend(mcp_tools)
-                    logger.info(f"Added {len(mcp_tools)} MCP tools from {getattr(toolset, 'name', 'unnamed')} toolset")
-        
-        self._is_setup = True
-        logger.info(f"Agent {self.name} setup completed")
+            try:
+                await toolset._ensure_setup()
+                if not toolset.is_healthy:
+                    logger.warning(f"MCP toolset {toolset.name} failed to setup: {toolset.setup_error}")
+            except Exception as e:
+                logger.error(f"Failed to setup MCP toolset {toolset.name}: {e}")
+
+        # Get tools from healthy toolsets
+        tools = []
+        for toolset in self._mcp_toolsets:
+            if toolset.is_healthy:
+                tools.extend(toolset.get_tools())
+            else:
+                logger.warning(f"Skipping unhealthy MCP toolset {toolset.name}")
+
+        # Initialize brain with tools
+        self.brain = Brain(tools=tools)
     
     async def close(self):
         """
         Agent清理关闭，在停止使用agent时调用
-        这里会清理所有的MCPToolSet和其他资源
+        这里会清理所有的MCPToolset和其他资源
         """
         if not self._is_setup:
             logger.warning(f"Agent {self.name} not setup, skipping cleanup")
@@ -72,18 +93,13 @@ class BaseAgent:
         
         logger.info(f"Closing agent {self.name}")
         
-        # 清理所有MCPToolSet
+        # 清理所有MCPToolset
         for toolset in self._mcp_toolsets:
-            if hasattr(toolset, 'close') and callable(toolset.close):
-                try:
-                    close_method = getattr(toolset, 'close')
-                    if inspect.iscoroutinefunction(close_method):
-                        await close_method()
-                    else:
-                        close_method()
-                    logger.info(f"Closed MCP toolset {getattr(toolset, 'name', 'unnamed')}")
-                except Exception as e:
-                    logger.error(f"Error closing MCP toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
+            try:
+                await toolset.close()
+                logger.info(f"Closed MCP toolset {getattr(toolset, 'name', 'unnamed')}")
+            except Exception as e:
+                logger.error(f"Error closing MCP toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
         
         # 清理MCP相关的工具
         self.tools = [tool for tool in self.tools if not self._is_mcp_tool(tool)]
@@ -106,22 +122,7 @@ class BaseAgent:
         """支持async context manager"""
         await self.close()
     
-    def add_mcp_toolset(self, toolset: Any) -> None:
-        """
-        添加MCP工具集到agent
-        
-        Args:
-            toolset: MCPToolSet实例
-        """
-        if self._is_setup:
-            raise RuntimeError(f"Cannot add MCP toolset to agent {self.name} after setup. Add toolsets before calling setup().")
-        
-        self._mcp_toolsets.append(toolset)
-        logger.info(f"Added MCP toolset {getattr(toolset, 'name', 'unnamed')} to agent {self.name}")
-    
-    def get_mcp_toolsets(self) -> List[Any]:
-        """获取所有MCP工具集"""
-        return self._mcp_toolsets.copy()
+
     
     @property
     def is_setup(self) -> bool:

@@ -1,342 +1,287 @@
-import json
 import logging
 from contextlib import AsyncExitStack
-from datetime import timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union, overload, Callable
-
-from typing_extensions import NotRequired, TypeAlias, TypedDict, Unpack
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+import os
+import asyncio
+from datetime import timedelta
 
 from minion.tools import BaseTool
-from .mcp_integration import BrainTool, format_mcp_result
 
 if TYPE_CHECKING:
     from mcp import ClientSession
 
 logger = logging.getLogger(__name__)
 
-# Type alias for tool names
-ToolName: TypeAlias = str
 
-ServerType: TypeAlias = Literal["stdio", "sse", "http"]
-
-
-class StdioServerParameters_T(TypedDict):
-    command: str
-    args: NotRequired[List[str]]
-    env: NotRequired[Dict[str, str]]
-    cwd: NotRequired[Union[str, Path, None]]
+def format_mcp_result(result) -> str:
+    """Format MCP tool result for display"""
+    if hasattr(result, 'content'):
+        return result.content
+    elif isinstance(result, list):
+        return '\n'.join(str(item) for item in result)
+    else:
+        return str(result)
 
 
-class SSEServerParameters_T(TypedDict):
-    url: str
-    headers: NotRequired[Dict[str, Any]]
-    timeout: NotRequired[float]
-    sse_read_timeout: NotRequired[float]
-
-
-class StreamableHTTPParameters_T(TypedDict):
-    url: str
-    headers: NotRequired[dict[str, Any]]
-    timeout: NotRequired[timedelta]
-    sse_read_timeout: NotRequired[timedelta]
-    terminate_on_close: NotRequired[bool]
-
-
-class MCPToolSet:
+class BrainTool(BaseTool):
     """
-    MCP工具集，参考Google ADK Python的ToolSet设计
-    绑定到agent的生命周期，在agent setup时创建，agent close时清理
+    Adapter class to convert MCP tools to brain.step compatible format
+    """
+    def __init__(self, name: str, description: str, parameters: Dict[str, Any], session: "ClientSession", timeout: float = 10):
+        super().__init__()
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self.session = session
+        self.timeout = timeout
+
+        # Add attributes expected by minion framework
+        self.__name__ = name
+        self.__doc__ = description
+        self.__input_schema__ = parameters
+
+    async def forward(self, **kwargs) -> str:
+        """Execute the tool with given parameters"""
+        try:
+            async with asyncio.timeout(self.timeout):
+                result = await self.session.call_tool(self.name, kwargs)
+                return format_mcp_result(result)
+        except asyncio.TimeoutError:
+            error_msg = f"Tool {self.name} execution timed out after {self.timeout} seconds"
+            logger.error(error_msg)
+            return f"Error: {error_msg}"
+        except Exception as e:
+            logger.error(f"Error executing tool {self.name}: {e}")
+            return f"Error: {str(e)}"
+
+
+class StdioServerParameters:
+    """Connection parameters for stdio MCP servers"""
+    def __init__(self, command: str, args: Optional[List[str]] = None, env: Optional[Dict[str, str]] = None, cwd: Optional[Union[str, Path]] = None):
+        self.command = command
+        self.args = args or []
+        # Merge with current environment variables instead of replacing
+        self.env = {**os.environ, **(env or {})}
+        self.cwd = cwd
+
+
+class SSEServerParameters:
+    """Connection parameters for SSE MCP servers"""
+    def __init__(self, url: str, headers: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None, sse_read_timeout: Optional[float] = None):
+        self.url = url
+        self.headers = headers or {}
+        self.timeout = timeout
+        self.sse_read_timeout = sse_read_timeout
+
+
+class MCPToolset:
+    """
+    Simplified MCP toolset that follows Google ADK pattern.
+    Can be passed directly in the tools parameter when creating an agent.
     """
     
-    def __init__(self, name: str = "mcp_toolset"):
+    def __init__(
+        self, 
+        connection_params: Union[StdioServerParameters, SSEServerParameters], 
+        name: Optional[str] = None,
+        setup_timeout: float = 10,  # 10 seconds timeout for setup
+        session_timeout: float = 10,  # 10 seconds timeout for session operations
+        ignore_setup_errors: bool = False,  # Whether to ignore setup errors
+    ):
         """
-        初始化MCP工具集
+        Initialize MCPToolset with connection parameters
         
         Args:
-            name: 工具集名称
+            connection_params: Either StdioServerParameters or SSEServerParameters
+            name: Optional name for the toolset
+            setup_timeout: Timeout in seconds for toolset setup
+            session_timeout: Timeout in seconds for all session operations (tool calls, etc)
+            ignore_setup_errors: If True, setup errors will be logged but not raised
         """
-        self.name = name
-        # Initialize MCP sessions as a dictionary of ClientSession objects
-        self.sessions: Dict[ToolName, Any] = {}  # Use Any for ClientSession type
-        self.exit_stack: Optional[AsyncExitStack] = None
-        self.available_tools: List[BrainTool] = []
-        self._is_initialized = False
-
-    async def setup(self):
-        """
-        设置MCP工具集，在agent setup时调用
-        """
-        if self._is_initialized:
-            logger.warning(f"MCPToolSet {self.name} already initialized")
-            return
-            
-        self.exit_stack = AsyncExitStack()
-        await self.exit_stack.__aenter__()
-        self._is_initialized = True
-        logger.info(f"MCPToolSet {self.name} initialized")
-
-    async def close(self):
-        """
-        清理MCP工具集资源，在agent close时调用
-        """
-        if not self._is_initialized:
-            logger.warning(f"MCPToolSet {self.name} not initialized, skipping cleanup")
-            return
-            
-        if self.exit_stack:
-            try:
-                await self.exit_stack.aclose()
-                logger.info(f"MCPToolSet {self.name} cleanup completed")
-            except Exception as e:
-                logger.error(f"Error during MCPToolSet {self.name} cleanup: {e}")
-            finally:
-                self.exit_stack = None
-                self.sessions.clear()
-                self.available_tools.clear()
-                self._is_initialized = False
-
-    async def __aenter__(self):
-        """Enter the context manager"""
-        await self.setup()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit the context manager"""
-        await self.close()
+        self.connection_params = connection_params
+        self.name = name or f"mcp_toolset_{id(self)}"
+        self._exit_stack: Optional[AsyncExitStack] = None
+        self._is_setup = False
+        self._tools: List[BrainTool] = []
+        self._setup_timeout = setup_timeout
+        self._session_timeout = timedelta(seconds=session_timeout)  # Convert to timedelta
+        self._ignore_setup_errors = ignore_setup_errors
+        self._setup_error: Optional[Exception] = None
 
     @property
-    def is_initialized(self) -> bool:
-        """检查工具集是否已初始化"""
-        return self._is_initialized
+    def is_healthy(self) -> bool:
+        """Return True if the toolset is setup and healthy"""
+        return self._is_setup and not self._setup_error
 
-    def _ensure_initialized(self):
-        """确保工具集已初始化"""
-        if not self._is_initialized:
-            raise RuntimeError(f"MCPToolSet {self.name} not initialized. Call setup() first.")
+    @property
+    def setup_error(self) -> Optional[Exception]:
+        """Return the setup error if any"""
+        return self._setup_error
 
-    @overload
-    async def add_mcp_server(self, type: Literal["stdio"], **params: Unpack[StdioServerParameters_T]): ...
-
-    @overload
-    async def add_mcp_server(self, type: Literal["sse"], **params: Unpack[SSEServerParameters_T]): ...
-
-    @overload
-    async def add_mcp_server(self, type: Literal["http"], **params: Unpack[StreamableHTTPParameters_T]): ...
-
-    async def add_mcp_server(self, type: ServerType, **params: Any):
-        """Connect to an MCP server and add its tools to available tools
-
-        Args:
-            type (`str`):
-                Type of the server to connect to. Can be one of:
-                - "stdio": Standard input/output server (local)
-                - "sse": Server-sent events (SSE) server
-                - "http": StreamableHTTP server
-            **params (`Dict[str, Any]`):
-                Server parameters that can be either:
-                    - For stdio servers:
-                        - command (str): The command to run the MCP server
-                        - args (List[str], optional): Arguments for the command
-                        - env (Dict[str, str], optional): Environment variables for the command
-                        - cwd (Union[str, Path, None], optional): Working directory for the command
-                    - For SSE servers:
-                        - url (str): The URL of the SSE server
-                        - headers (Dict[str, Any], optional): Headers for the SSE connection
-                        - timeout (float, optional): Connection timeout
-                        - sse_read_timeout (float, optional): SSE read timeout
-                    - For StreamableHTTP servers:
-                        - url (str): The URL of the StreamableHTTP server
-                        - headers (Dict[str, Any], optional): Headers for the StreamableHTTP connection
-                        - timeout (timedelta, optional): Connection timeout
-                        - sse_read_timeout (timedelta, optional): SSE read timeout
-                        - terminate_on_close (bool, optional): Whether to terminate on close
-        """
-        self._ensure_initialized()
+    async def _setup(self):
+        """Internal setup method that does the actual work"""
+        self._exit_stack = AsyncExitStack()
+        await self._exit_stack.__aenter__()
         
-        if not self.exit_stack:
-            raise RuntimeError("exit_stack is not initialized")
-            
         try:
-            from mcp import ClientSession, StdioServerParameters  # type: ignore
-            from mcp import types as mcp_types  # type: ignore
+            from mcp import ClientSession, StdioServerParameters as MCPStdioParams  # type: ignore
+            from datetime import timedelta  # Add import at top of file
         except ImportError as e:
             logger.error(f"MCP library not available: {e}")
             raise RuntimeError(f"MCP library not available: {e}")
-
-        # Determine server type and create appropriate parameters
-        if type == "stdio":
-            # Handle stdio server
+        
+        # Connect to MCP server
+        if isinstance(self.connection_params, StdioServerParameters):
             try:
                 from mcp.client.stdio import stdio_client  # type: ignore
             except ImportError as e:
                 logger.error(f"MCP stdio client not available: {e}")
                 raise RuntimeError(f"MCP stdio client not available: {e}")
-
-            logger.info(f"Connecting to stdio MCP server with command: {params['command']} {params.get('args', [])}")
-
-            client_kwargs = {"command": params["command"]}
-            for key in ["args", "env", "cwd"]:
-                if params.get(key) is not None:
-                    client_kwargs[key] = params[key]
-            server_params = StdioServerParameters(**client_kwargs)
-            read, write = await self.exit_stack.enter_async_context(stdio_client(server_params))
-        elif type == "sse":
-            # Handle SSE server
+            
+            logger.info(f"Connecting to stdio MCP server: {self.connection_params.command} {self.connection_params.args}")
+            
+            server_params = MCPStdioParams(
+                command=self.connection_params.command,
+                args=self.connection_params.args,
+                env=self.connection_params.env,
+                cwd=self.connection_params.cwd
+            )
+            read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
+            
+        elif isinstance(self.connection_params, SSEServerParameters):
             try:
                 from mcp.client.sse import sse_client  # type: ignore
             except ImportError as e:
                 logger.error(f"MCP SSE client not available: {e}")
                 raise RuntimeError(f"MCP SSE client not available: {e}")
-
-            logger.info(f"Connecting to SSE MCP server at: {params['url']}")
-
-            client_kwargs = {"url": params["url"]}
-            for key in ["headers", "timeout", "sse_read_timeout"]:
-                if params.get(key) is not None:
-                    client_kwargs[key] = params[key]
-            read, write = await self.exit_stack.enter_async_context(sse_client(**client_kwargs))
-        elif type == "http":
-            # Handle StreamableHTTP server
-            try:
-                from mcp.client.streamable_http import streamablehttp_client  # type: ignore
-            except ImportError as e:
-                logger.error(f"MCP HTTP client not available: {e}")
-                raise RuntimeError(f"MCP HTTP client not available: {e}")
-
-            logger.info(f"Connecting to StreamableHTTP MCP server at: {params['url']}")
-
-            client_kwargs = {"url": params["url"]}
-            for key in ["headers", "timeout", "sse_read_timeout", "terminate_on_close"]:
-                if params.get(key) is not None:
-                    client_kwargs[key] = params[key]
-            read, write, _ = await self.exit_stack.enter_async_context(streamablehttp_client(**client_kwargs))
+            
+            logger.info(f"Connecting to SSE MCP server: {self.connection_params.url}")
+            
+            client_kwargs = {"url": self.connection_params.url}
+            if self.connection_params.headers:
+                client_kwargs["headers"] = self.connection_params.headers
+            if self.connection_params.timeout is not None:
+                client_kwargs["timeout"] = self.connection_params.timeout
+            if self.connection_params.sse_read_timeout is not None:
+                client_kwargs["sse_read_timeout"] = self.connection_params.sse_read_timeout
+            
+            read, write = await self._exit_stack.enter_async_context(sse_client(**client_kwargs))
         else:
-            raise ValueError(f"Unsupported server type: {type}")
-
-        session = await self.exit_stack.enter_async_context(
+            raise ValueError(f"Unsupported connection parameters type: {type(self.connection_params)}")
+        
+        # Create session with timeout
+        session = await self._exit_stack.enter_async_context(
             ClientSession(
-                read_stream=read,
+                read_stream=read, 
                 write_stream=write,
-                client_info=mcp_types.Implementation(
-                    name=f"minion.{self.name}",
-                    version="1.0.0",
-                ),
+                read_timeout_seconds=self._session_timeout  # Now it's a timedelta
             )
         )
-
-        logger.debug("Initializing session...")
+        
+        # Initialize session
         await session.initialize()
-
-        # List available tools
+        
+        # Get tools
         response = await session.list_tools()
-        logger.debug("Connected to server with tools:", [tool.name for tool in response.tools])
-
+        logger.info(f"Connected to MCP server with {len(response.tools)} tools")
+        
+        # Convert to BrainTool objects - no need to pass timeout since it's handled by session
+        self._tools = []
         for tool in response.tools:
-            if tool.name in self.sessions:
-                logger.warning(f"Tool '{tool.name}' already defined by another server. Skipping.")
-                continue
-
-            # Map tool names to their server for later lookup
-            self.sessions[tool.name] = session
-
-            # Create BrainTool wrapper
             brain_tool = BrainTool(
                 name=tool.name,
                 description=tool.description,
                 parameters=tool.inputSchema,
                 session=session
             )
-            
-            # Add tool to the list of available tools
-            self.available_tools.append(brain_tool)
+            self._tools.append(brain_tool)
+        
+        logger.info(f"MCPToolset '{self.name}' setup completed with {len(self._tools)} tools")
+
+    async def _ensure_setup(self) -> None:
+        """Ensure toolset is setup, with timeout handling"""
+        if self._is_setup:
+            return
+
+        try:
+            async with asyncio.timeout(self._setup_timeout):
+                await self._setup()
+                self._is_setup = True
+                self._setup_error = None
+        except Exception as e:
+            self._setup_error = e
+            logger.error(f"Failed to setup MCPToolset {self.name}: {e}")
+            if not self._ignore_setup_errors:
+                raise
 
     def get_tools(self) -> List[BrainTool]:
-        """获取工具集中的所有工具"""
-        self._ensure_initialized()
-        return self.available_tools.copy()
-
-    def get_tool_functions(self) -> Dict[str, Callable]:
-        """Get dictionary of tool functions for direct execution"""
-        self._ensure_initialized()
-        return {tool.name: tool for tool in self.available_tools}
-
-    def get_tool_specs(self) -> List[Dict[str, Any]]:
-        """Get list of tool specifications in ChatCompletion format"""
-        self._ensure_initialized()
-        return [tool.to_function_spec() for tool in self.available_tools]
-
-    def get_tools_dict(self) -> List[Dict[str, Any]]:
-        """Get list of tools as dictionaries"""
-        self._ensure_initialized()
-        return [tool.to_dict() for tool in self.available_tools]
-
-    async def add_filesystem_tool(self, workspace_paths: Optional[List[str]] = None) -> None:
         """
-        Add filesystem MCP tool to the toolset
-        
-        Args:
-            workspace_paths: List of paths to allow access to. Defaults to current directory.
+        Get list of tools, returns empty list if setup failed and errors are ignored
         """
-        self._ensure_initialized()
-        
-        if workspace_paths is None:
-            import os
-            workspace_paths = [os.path.abspath(".")]
-        
-        try:
-            await self.add_mcp_server(
-                "stdio",
-                command="npx",
-                args=["-y", "@modelcontextprotocol/server-filesystem"] + workspace_paths
-            )
-            logger.info(f"✓ Added filesystem tool with paths: {workspace_paths}")
-        except Exception as e:
-            logger.error(f"Failed to add filesystem tool: {e}")
-            raise
+        if not self.is_healthy:
+            logger.warning(f"MCPToolset {self.name} is not healthy, returning empty tool list")
+            return []
+        return self._tools
+
+    async def close(self):
+        """Close the toolset and clean up resources"""
+        if self._exit_stack:
+            await self._exit_stack.aclose()
+            self._exit_stack = None
+            self._is_setup = False
+        self._tools.clear()
+        logger.info(f"MCPToolset '{self.name}' closed")
+
+    def __repr__(self):
+        return f"MCPToolset(name={self.name}, setup={self._is_setup})"
 
 
-class MCPToolConfig:
-    """Configuration for different MCP tools"""
-    
-    FILESYSTEM_DEFAULT = {
-        "type": "stdio",
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem"],
-        "workspace_paths": None  # Will be set to current directory at runtime
-    }
-    
-    @staticmethod
-    def get_filesystem_config(workspace_paths: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Get filesystem tool configuration"""
-        config = MCPToolConfig.FILESYSTEM_DEFAULT.copy()
-        if workspace_paths is None:
-            import os
-            workspace_paths = [os.path.abspath(".")]
-        
-        config["workspace_paths"] = workspace_paths
-        config["args"] = ["-y", "@modelcontextprotocol/server-filesystem"] + workspace_paths
-        return config
-
-
-def create_filesystem_toolset_factory(workspace_paths: Optional[List[str]] = None):
+# Factory functions for common MCP servers
+def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None, name: Optional[str] = None) -> MCPToolset:
     """
-    Create a factory function for the filesystem toolset
+    Create a filesystem MCP toolset
     
     Args:
         workspace_paths: List of paths to allow access to
+        name: Optional name for the toolset
         
     Returns:
-        Async function that creates and sets up a filesystem toolset
+        MCPToolset configured for filesystem access
     """
     if workspace_paths is None:
         import os
         workspace_paths = [os.path.abspath(".")]
+    else:
+        import os
+        # Convert all paths to absolute paths
+        workspace_paths = [os.path.abspath(path) for path in workspace_paths]
     
-    async def create_toolset() -> MCPToolSet:
-        toolset = MCPToolSet("filesystem_toolset")
-        await toolset.setup()
-        await toolset.add_filesystem_tool(workspace_paths)
-        return toolset
+    return MCPToolset(
+        connection_params=StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-filesystem"] + workspace_paths
+        ),
+        name=name or "filesystem_toolset"
+    )
+
+
+def create_brave_search_toolset(api_key: str, name: Optional[str] = None) -> MCPToolset:
+    """
+    Create a Brave Search MCP toolset
     
-    return create_toolset
+    Args:
+        api_key: Brave Search API key
+        name: Optional name for the toolset
+        
+    Returns:
+        MCPToolset configured for Brave Search
+    """
+    return MCPToolset(
+        connection_params=StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-brave-search"],
+            env={"BRAVE_API_KEY": api_key}
+        ),
+        name=name or "brave_search_toolset"
+    )
