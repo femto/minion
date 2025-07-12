@@ -130,6 +130,10 @@ class PythonInterpreterTool(BaseTool):
             return f"Error executing code: {str(e)}"
 
 
+#deprecate this, use python executor's FinalAnswerException
+#this is raised and handled in LmpActionNode's _handle_tool_calls
+#but we don't raise FinalAnswerException in Tool call(normal) agent's FinalAnswerTool
+#or rather, we don't give FinalAnswerTool to Tool call(normal) agent
 class FinalAnswerException(Exception):
     """Exception raised when final_answer tool is called to indicate task completion"""
     def __init__(self, answer: Any):

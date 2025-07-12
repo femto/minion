@@ -21,6 +21,7 @@ from minion.utils.utils import extract_number_from_string
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
 from minion.utils.process import run_code_in_separate_process
+from minion.types.agent_response import AgentResponse
 
 # Load JSONL file
 def load_json(file_path):
@@ -216,7 +217,7 @@ async def solve_question(item):
     ensemble_logic_path = os.path.join(current_dir, "aime_config.json")
     # 加载测试用例
 
-    answer, score, *_ = await brain.step(
+    result = await brain.step(
         query=item["problem"],
         mind_id="left_mind", #deepseek r1 skips choose mind
         system_prompt="""You are DeepSeek-R1, an AI assistant created exclusively by the Chinese Company DeepSeek. You'll provide helpful, harmless, and detailed responses to all user inquiries. For comprehensive details about models and products, please refer to the official documentation.
@@ -249,7 +250,7 @@ Knowledge cutoff: {{current_date}}
 """,
         execution_config=load_execution_config(ensemble_logic_path),
     )
-    return answer
+    return result.answer
 
 #model = "gpt-4o"
 #model = "claude"

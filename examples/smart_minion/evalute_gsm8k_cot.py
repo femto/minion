@@ -14,6 +14,7 @@ from minion.main.answer_extraction import math_equal
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.main.utils import extract_number_from_string
+from minion.types.agent_response import AgentResponse
 
 
 # Load JSONL file
@@ -185,9 +186,9 @@ async def solve_question(question, route=None):
     # For example, this could be a math solver or text parser
     brain = Brain(stats_storer=None, python_env=RpycPythonEnv(ports=3007), llm=llm)
 
-    obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config("gsm8k_ensemble.json"))
-    # print(obs)
-    return obs
+    result = await brain.step(query=question, execution_config=load_execution_config("gsm8k_ensemble.json"))
+    # print(result.response)
+    return result.response
 
 
 def generate_random_indices(n, n_samples, test=False):

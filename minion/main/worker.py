@@ -158,7 +158,8 @@ class NativeMinion(WorkerMinion):
         
         # Return AgentResponse instead of just the answer
         return AgentResponse(
-            response=self.answer,
+            raw_response=response,
+            answer=self.answer,
             score=1.0,
             terminated=False,
             truncated=False,
@@ -214,9 +215,11 @@ class CotMinion(WorkerMinion):
         
         # Return AgentResponse instead of just the answer
         return AgentResponse(
-            response=self.answer,
+            raw_response=response,
+            answer=self.answer,
+            is_final_answer=True,
             score=1.0,
-            terminated=False,
+            terminated=True,
             truncated=False,
             info={'raw_response': response}
         )
@@ -655,7 +658,8 @@ Previous error:
             print(f"###answer###:{self.answer}")
             # Return AgentResponse for successful execution
             return AgentResponse(
-                response=self.answer,
+                raw_response=self.answer,
+                answer=self.answer,
                 score=1.0,
                 terminated=False,
                 truncated=False,
@@ -664,7 +668,8 @@ Previous error:
 
         # Return AgentResponse even if all attempts failed
         return AgentResponse(
-            response=self.answer,
+            raw_response=self.answer,
+            answer=self.answer,
             score=0.0,
             terminated=False,
             truncated=False,
@@ -717,7 +722,8 @@ Previous error:
             
             # Return AgentResponse instead of just the answer
             return AgentResponse(
-                response=self.answer,
+                raw_response=self.answer,
+                answer=self.answer,
                 score=1.0,
                 terminated=False,
                 truncated=False,
@@ -767,7 +773,8 @@ Previous error:
             
             # Return AgentResponse instead of just the answer
             return AgentResponse(
-                response=self.answer,
+                raw_response=self.answer,
+                answer=self.answer,
                 score=1.0,
                 terminated=False,
                 truncated=False,
@@ -935,7 +942,8 @@ Let's start! Remember to end your code blocks with <end_code>.
                 self.answer = self.input.answer = response
                 # Return AgentResponse for non-code response
                 return AgentResponse(
-                    response=self.answer,
+                    raw_response=response,
+                    answer=self.answer,
                     score=0.5,
                     terminated=False,
                     truncated=False,
@@ -986,12 +994,12 @@ Let's start! Remember to end your code blocks with <end_code>.
                         print(f"Final answer detected: {self.answer}")
                         # Return AgentResponse with final answer flag
                         return AgentResponse(
-                            response=self.answer,
+                            raw_response=output,
+                            answer=output,
+                            is_final_answer=True,
                             score=1.0,
                             terminated=True,
                             truncated=False,
-                            final_answer=output,
-                            is_final_answer=True,
                             info={'final_answer_detected': True}
                         )
                     
@@ -1002,12 +1010,12 @@ Let's start! Remember to end your code blocks with <end_code>.
                         print(f"Final answer: {self.answer}")
                         # Return AgentResponse with final answer flag
                         return AgentResponse(
-                            response=self.answer,
+                            raw_response=result_text,
+                            answer=result_text,
+                            is_final_answer=True,
                             score=1.0,
                             terminated=True,
                             truncated=False,
-                            final_answer=result_text,
-                            is_final_answer=True,
                             info={'final_answer_heuristic': True}
                         )
                     
@@ -1021,7 +1029,8 @@ Let's start! Remember to end your code blocks with <end_code>.
                         self.answer = self.input.answer = result_text
                         # Return AgentResponse for final iteration
                         return AgentResponse(
-                            response=self.answer,
+                            raw_response=self.answer,
+                            answer=self.answer,
                             score=0.8,
                             terminated=False,
                             truncated=True,
@@ -1046,7 +1055,8 @@ Let's start! Remember to end your code blocks with <end_code>.
         self.answer = self.input.answer = response
         # Return AgentResponse for exhausted iterations
         return AgentResponse(
-            response=self.answer,
+            raw_response=self.answer,
+            answer=self.answer,
             score=0.3,
             terminated=False,
             truncated=True,
@@ -1161,11 +1171,11 @@ class ModeratorMinion(Minion):
 
         # Apply post-processing if specified
         if self.input.post_processing:
-            processed_answer = self.input.apply_post_processing(agent_response.response)
+            processed_answer = self.input.apply_post_processing(agent_response.raw_response)
             # Update AgentResponse with processed answer but keep other info
-            agent_response.response = processed_answer
-        
-        self.answer = agent_response.response
+            agent_response.raw_response = processed_answer
+
+        self.answer = agent_response.answer
         self.agent_response = agent_response
         return worker, agent_response
 
@@ -1251,7 +1261,7 @@ class ModeratorMinion(Minion):
         self.brain.cleanup_python_env(input=self.input)
         
         # Update answer and return the AgentResponse from the minion
-        self.answer = agent_response.response
+        self.answer = agent_response.answer
         return agent_response
 
     def save_execution_state(self):
@@ -1430,11 +1440,12 @@ class RouteMinion(Minion):
         # Check if minion returned AgentResponse or just answer
         if isinstance(minion_result, AgentResponse):
             self.agent_response = minion_result
-            answer_raw = minion_result.response
+            answer_raw = minion_result.raw_response
         else:
             # Fallback for minions that don't return AgentResponse yet
             self.agent_response = AgentResponse(
-                response=minion_result,
+                raw_response=minion_result,
+                answer=minion_result,
                 score=1.0,
                 terminated=False,
                 truncated=False,
@@ -1450,15 +1461,16 @@ class RouteMinion(Minion):
             post_processing = self.input.post_processing
 
         if post_processing:
-            processed_answer = self.input.apply_post_processing(answer_raw, post_processing)
+            processed_response = self.input.apply_post_processing(answer_raw, post_processing)
         else:
-            processed_answer = answer_raw
+            processed_response = answer_raw
 
-        self.answer = self.input.answer = processed_answer
-        self.answer_raw = self.input.answer_raw = answer_raw
+        # Only update raw_response, preserve answer and is_final_answer
+        self.agent_response.raw_response = processed_response
         
-        # Update AgentResponse with processed answer but keep other info
-        self.agent_response.response = processed_answer
+        # Update input state for compatibility
+        self.answer = self.input.answer = self.agent_response.answer
+        self.answer_raw = self.input.answer_raw = processed_response
         
         return self.agent_response
 
@@ -1467,7 +1479,7 @@ class RouteMinion(Minion):
         self.save_execution_state()
 
         agent_response = await self.invoke_minion(klass)
-        self.answer = agent_response.response
+        self.answer = agent_response.answer
 
         await self.update_stats(name, self.answer, self.answer_raw)
 
@@ -1493,7 +1505,7 @@ class RouteMinion(Minion):
 
             # If the check fails, try invoking the minion again
             agent_response = await self.invoke_minion(klass, improve=True)
-            self.answer = self.input.answer = agent_response.response
+            self.answer = self.input.answer = agent_response.answer
             await self.update_stats(name, self.answer, self.answer_raw)
 
         return agent_response
@@ -1616,7 +1628,8 @@ class OptillmMinion(WorkerMinion):
         self.answer = self.input.answer = response
         # Return AgentResponse instead of just the answer
         return AgentResponse(
-            response=self.answer,
+            raw_response=response,
+            answer=self.answer,
             score=1.0,
             terminated=False,
             truncated=False,

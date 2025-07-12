@@ -16,6 +16,7 @@ from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
 from minion.tools.default_tools import FinalAnswerTool
+from minion.types.agent_response import AgentResponse
 
 
 async def smart_brain():
@@ -38,8 +39,8 @@ async def smart_brain():
 
     llm = create_llm_provider(llm_config)
 
-    python_env_config = {"port": 3007}
-    python_env = RpycPythonEnv(port=python_env_config.get("port", 3007))
+    python_env_config = {"port": 3006}
+    python_env = RpycPythonEnv(port=python_env_config.get("port", 3006))
     #python_env = LocalPythonEnv(verbose=False)
     brain = Brain(
         python_env=python_env,
@@ -47,36 +48,36 @@ async def smart_brain():
 
     )
     #final_answer_tool = FinalAnswerTool()
-    # obs, score, *_ = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
+    # result = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
     #                                   ,route="plan",check=False,tools=[final_answer_tool])
-    # print(obs)
+    # print(result.answer)
     #
     #
-    # obs, score, *_ = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
-    # print(obs)
+    # result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
+    # print(result.answer)
     #
-    obs, score, *_ = await brain.step(query="what's the solution 234*568",route="python", check=False)
-    print(obs)
+    # result = await brain.step(query="what's the solution 234*568",route="python", check=False)
+    # print(result.answer)
 
-    # obs, score, *_ = await brain.step(query="生成一张可爱的人工智慧图片", check=False)
-    # print(obs)
-    # obs, score, *_ = await brain.step(query="复刻一个电商网站",route="plan")
-    # print(obs)
+    # result = await brain.step(query="生成一张可爱的人工智慧图片", check=False)
+    # print(result.answer)
+    # result = await brain.step(query="复刻一个电商网站",route="plan")
+    # print(result.answer)
     #
-    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
-    # print(obs)
+    result = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
+    print(result.answer)
+
+    result = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
+    print(result.answer)
     #
-    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
-    # print(obs)
+    # result = await brain.step(query="what's the solution for game of 24 for 2 5 11 8")
+    # print(result.answer)
     #
-    # obs, score, *_ = await brain.step(query="what's the solution for game of 24 for 2 5 11 8")
-    # print(obs)
-    #
-    # obs, score, *_ = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
-    # print(obs)
+    # result = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
+    # print(result.answer)
 
     cache_plan = os.path.join(current_file_dir, "writing_novel.json")
-    obs, score, *_ = await brain.step(
+    result = await brain.step(
         query="Write a 500000 characters novel named 'Reborn in Skyrim'. "
               "Fill the empty nodes with your own ideas. Be creative! Use your own words!"
               "I will tip you $100,000 if you write a good novel."
@@ -84,26 +85,26 @@ async def smart_brain():
         route="plan",
         cache_plan = cache_plan,
     )
-    print(obs)
+    print(result.answer)
 
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.1.json")
-    obs, score, *_ = await brain.step(
+    result = await brain.step(
         query="Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop.",
         route="cot",
         dataset="aime 2024",
         cache_plan=cache_plan,
     )
-    print(obs)
+    print(result.answer)
 
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
 
-    obs, score, *_ = await brain.step(
+    result = await brain.step(
         query="Find the largest possible real part of\[(75+117i)z+\frac{96+144i}{z}\]where $z$ is a complex number with $|z|=4$.",
         route="cot",
         dataset="aime 2024",
         cache_plan=cache_plan,
     )
-    print(obs)
+    print(result.answer)
 
     # 从 HumanEval/88 提取的测试用例
     test_data = {
@@ -116,7 +117,7 @@ async def smart_brain():
                 "assert candidate([2, 4, 3, 0, 1, 5, 6]) == [6, 5, 4, 3, 2, 1, 0]"]
     }
 
-    obs, score, *_ = await brain.step(
+    result = await brain.step(
         query=test_data["prompt"],
         route="python",
         post_processing="extract_python",
@@ -126,16 +127,16 @@ async def smart_brain():
         dataset="HumanEval",
         metadata={"test_cases": test_data["test"]}  # 添加测试用例到 metadata
     )
-    print(obs)
+    print(result.answer)
 
-    obs, score, *_ = await brain.step(
+    result = await brain.step(
         query="""You are in the middle of a room. Looking quickly around you, you see a bathtubbasin 1, a cabinet 2, a cabinet 1, a countertop 1, a garbagecan 1, a handtowelholder 1, a sinkbasin 1, a toilet 1, a toiletpaperhanger 1, and a towelholder 1.
 
 Your task is to: find two soapbottle and put them in cabinet.
 """,
 check=False
     )
-    print(obs)
+    print(result.answer)
 
 
 if __name__ == "__main__":

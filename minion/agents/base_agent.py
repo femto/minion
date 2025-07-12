@@ -329,12 +329,13 @@ class BaseAgent:
         state["step_count"] += 1
         
         # 提取响应内容作为下一步输入
-        if hasattr(result, 'response'):
-            # AgentResponse对象
-            response = result.response
+        if hasattr(result, 'raw_response'):
+            response = result.raw_response
+        elif hasattr(result, 'answer'):
+            response = result.answer
+        # 检查5-tuple格式
         elif isinstance(result, tuple) and len(result) > 0:
-            # 5-tuple格式
-            response = result[0]
+            response = result[0]  # 返回response部分
         else:
             response = result
             
@@ -380,16 +381,16 @@ class BaseAgent:
             最终处理后的结果
         """
         # 检查AgentResponse类型
-        if hasattr(result, 'final_answer') and result.final_answer is not None:
-            return result.final_answer
-        elif hasattr(result, 'response'):
-            return result.response
+        if hasattr(result, 'answer') and result.answer is not None:
+            return result.answer
+        elif hasattr(result, 'raw_response'):
+            return result.raw_response
         
         # 检查5-tuple格式
         if isinstance(result, tuple) and len(result) > 0:
             return result[0]  # 返回response部分
-        elif isinstance(result, dict) and "final_answer" in result:
-            return result["final_answer"]
+        elif isinstance(result, dict):
+            return result.get("answer", result.get("final_answer"))  # 兼容旧格式
             
         return result
     

@@ -14,6 +14,7 @@ from minion import config
 from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
+from minion.types.agent_response import AgentResponse
 
 from alfworld_client import ALFWorldClient
 
@@ -122,10 +123,10 @@ Respond with ONLY the exact command you want to execute.
 """
         
         # Ask the brain for the next action
-        brain_response, score, *_ = await brain.step(query=prompt, check=False)
+        brain_response = await brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
-        cleaned_response = brain_response.strip()
+        cleaned_response = brain_response.raw_response.strip()
         
         # Extract the action from the brain's response
         action = None
@@ -148,7 +149,7 @@ Respond with ONLY the exact command you want to execute.
             print("No valid action found in brain response, taking a random action.")
             action = random.choice(admissible_commands)
         
-        print(f"Brain's reasoning: {brain_response}")
+        print(f"Brain's reasoning: {brain_response.raw_response}")
         print(f"Selected action: {action}")
         
         # Add the action to history
@@ -300,10 +301,10 @@ Respond with ONLY the exact command you want to execute.
 """
         
         # Ask the brain for the next action
-        brain_response, score, *_ = await brain.step(query=prompt, check=False)
+        brain_response = await brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
-        cleaned_response = brain_response.strip()
+        cleaned_response = brain_response.raw_response.strip()
         
         # Extract the action from the brain's response
         action = None
@@ -326,7 +327,7 @@ Respond with ONLY the exact command you want to execute.
             print("No valid action found in brain response, taking a random action.")
             action = random.choice(admissible_commands)
         
-        print(f"Brain's reasoning: {brain_response}")
+        print(f"Brain's reasoning: {brain_response.raw_response}")
         print(f"Selected action: {action}")
         
         # Add the action to history

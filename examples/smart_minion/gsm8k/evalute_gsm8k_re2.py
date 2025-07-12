@@ -13,6 +13,9 @@ from minion.main.brain import Brain
 from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
 from minion.providers.cost import CostManager
+from minion.types.agent_response import AgentResponse
+from minion.utils.answer_extraction import math_equal
+from minion.utils.utils import extract_number_from_string
 
 
 # Load JSONL file
@@ -180,9 +183,9 @@ async def solve_question(question, route=None):
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     ensemble_logic_path = os.path.join(current_dir, "gsm8k_re2.json")
-    obs, score, *_ = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
-    # print(obs)
-    return obs
+    result = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
+    # print(result.answer)
+    return result.answer
 
 
 def generate_random_indices(n, n_samples, test=False):

@@ -11,6 +11,7 @@ from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
 from minion.tools.base_tool import BaseTool
 from minion.tools.default_tools import FinalAnswerTool
+from minion.types.agent_response import AgentResponse
 
 
 class SimpleTool(BaseTool):
@@ -52,13 +53,13 @@ async def demo():
     
     # 方法1: 在step中传入tools参数
     print("\n1. 在step方法中传入tools:")
-    response, *_ = await brain.step(
+    response = await brain.step(
         query="请计算 2 + 3 * 4 的结果",
         tools=[tool,final_answer_tool],  # 在这里传入工具
         route="plan",
         check=False
     )
-    print(f"回答: {response}")
+    print(f"回答: {response.answer}")
     
     # 方法2: 初始化时添加工具
     print("\n2. 初始化时添加工具:")
@@ -68,12 +69,12 @@ async def demo():
         tools=[tool,final_answer_tool]  # 初始化时传入工具
     )
     
-    response, *_ = await brain_with_tools.step(
+    response = await brain_with_tools.step(
         query="请计算 10 * 5 + 20 的结果",
         check=False,
     route = "native",
     )
-    print(f"回答: {response}")
+    print(f"回答: {response.answer}")
     
     # 方法3: 使用add_tool动态添加
     print("\n3. 使用add_tool动态添加:")
@@ -81,12 +82,12 @@ async def demo():
     brain_dynamic.add_tool(tool)  # 动态添加工具
     brain_dynamic.add_tool(final_answer_tool)  # 动态添加工具
 
-    response, *_ = await brain_dynamic.step(
+    response = await brain_dynamic.step(
         query="请计算 100 / 4 的结果",
         check=False,
         route = "raw",
     )
-    print(f"回答: {response}")
+    print(f"回答: {response.answer}")
 
 
 if __name__ == "__main__":

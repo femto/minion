@@ -73,7 +73,7 @@ print(f"并行调用结果: {result}")
             tools=tools,
             route="code"
         )
-        print(f"✅ 测试完成: {result.response}")
+        print(f"✅ 测试完成: {result.answer}")
     except Exception as e:
         print(f"❌ 测试失败: {e}")
         import traceback

@@ -21,6 +21,7 @@ from minion import config
 from minion.main.brain import Brain
 from minion.main.input import Input
 from minion.providers import create_llm_provider
+from minion.types.agent_response import AgentResponse
 
 
 def create_test_images():
@@ -80,8 +81,8 @@ async def demo_basic_text_query(brain: Brain):
     )
     
     try:
-        result, _, _, _, _ = await brain.step(input_data)
-        print(f"✓ LLM Response: {result}")
+        result = await brain.step(input_data)
+        print(f"✓ LLM Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ Basic text query failed: {e}")
@@ -111,8 +112,8 @@ async def demo_pil_image_query(brain: Brain, images: dict):
     )
     
     try:
-        result, _, _, _, _ = await brain.step(input_data)
-        print(f"✓ LLM Vision Response: {result}")
+        result = await brain.step(input_data)
+        print(f"✓ LLM Vision Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ PIL.Image query failed: {e}")
@@ -145,8 +146,8 @@ async def demo_complex_multimodal_query(brain: Brain, images: dict):
     )
     
     try:
-        result, _, _, _, _ = await brain.step(input_data)
-        print(f"✓ Multi-image Response: {result}")
+        result = await brain.step(input_data)
+        print(f"✓ Multi-image Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ Complex multimodal query failed: {e}")
@@ -173,8 +174,8 @@ async def demo_text_image_query(brain: Brain, images: dict):
     )
     
     try:
-        result, _, _, _, _ = await brain.step(input_data)
-        print(f"✓ Text Recognition Response: {result}")
+        result = await brain.step(input_data)
+        print(f"✓ Text Recognition Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ Text recognition query failed: {e}")
@@ -204,8 +205,8 @@ async def demo_image_file_path(brain: Brain):
     )
     
     try:
-        result, _, _, _, _ = await brain.step(input_data)
-        print(f"✓ File Path Response: {result}")
+        result = await brain.step(input_data)
+        print(f"✓ File Path Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ File path query failed: {e}")
@@ -315,12 +316,12 @@ async def main():
     print("="*50)
     
     try:
-        result, _, _, _, _ = await brain.step(
+        result = await brain.step(
             query="what's the solution 234*568",
             route="python",
             check=False
         )
-        print(f"✓ Math Result: {result}")
+        print(f"✓ Math Result: {result.answer}")
     except Exception as e:
         print(f"❌ Math demo failed: {e}")
     
