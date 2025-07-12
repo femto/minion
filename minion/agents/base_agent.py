@@ -2,15 +2,19 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 import uuid
 import asyncio
+import logging
+import inspect
 
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
 from minion.types.agent_response import AgentResponse
 
+logger = logging.getLogger(__name__)
+
 @dataclass
 class BaseAgent:
-    """Agent基类，定义所有Agent的基本接口"""
+    """Agent基类，定义所有Agent的基本接口，支持生命周期管理"""
     
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
@@ -20,11 +24,116 @@ class BaseAgent:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     max_steps: int = 20
     
+    # 生命周期管理
+    _is_setup: bool = field(default=False, init=False)
+    _mcp_toolsets: List[Any] = field(default_factory=list, init=False)  # List of MCPToolset instances
+    
     def __post_init__(self):
         """初始化后的处理"""
         if self.brain is None:
             self.brain = Brain()
+        
+        # Automatically handle MCPToolset objects in tools parameter
+        self._extract_mcp_toolsets_from_tools()
     
+    def _extract_mcp_toolsets_from_tools(self):
+        """
+        Extract MCPToolset objects from tools parameter and move them to _mcp_toolsets.
+        This enables direct passing of MCPToolset objects in the tools parameter.
+        """
+        # Check if any tools are MCPToolset objects
+        mcp_toolsets = []
+        regular_tools = []
+        
+        for tool in self.tools:
+            # Check if it's an MCPToolset object
+            if hasattr(tool, '_ensure_setup') and hasattr(tool, 'connection_params'):
+                mcp_toolsets.append(tool)
+            else:
+                regular_tools.append(tool)
+        
+        # Update the tools list to only contain regular tools
+        self.tools = regular_tools
+        
+        # Add MCPToolset objects to _mcp_toolsets
+        for toolset in mcp_toolsets:
+            self._mcp_toolsets.append(toolset)
+            logger.info(f"Auto-detected MCPToolset {getattr(toolset, 'name', 'unnamed')} from tools parameter")
+    
+    async def setup(self):
+        """Setup agent with tools"""
+        # Setup MCP toolsets
+        for toolset in self._mcp_toolsets:
+            try:
+                await toolset._ensure_setup()
+                if not toolset.is_healthy:
+                    logger.warning(f"MCP toolset {toolset.name} failed to setup: {toolset.setup_error}")
+            except Exception as e:
+                logger.error(f"Failed to setup MCP toolset {toolset.name}: {e}")
+
+        # Get tools from healthy toolsets
+        tools = []
+        for toolset in self._mcp_toolsets:
+            if toolset.is_healthy:
+                tools.extend(toolset.get_tools())
+            else:
+                logger.warning(f"Skipping unhealthy MCP toolset {toolset.name}")
+
+        # Initialize brain with tools
+        self.brain = Brain(tools=tools)
+    
+    async def close(self):
+        """
+        Agent清理关闭，在停止使用agent时调用
+        这里会清理所有的MCPToolset和其他资源
+        """
+        if not self._is_setup:
+            logger.warning(f"Agent {self.name} not setup, skipping cleanup")
+            return
+        
+        logger.info(f"Closing agent {self.name}")
+        
+        # 清理所有MCPToolset
+        for toolset in self._mcp_toolsets:
+            try:
+                await toolset.close()
+                logger.info(f"Closed MCP toolset {getattr(toolset, 'name', 'unnamed')}")
+            except Exception as e:
+                logger.error(f"Error closing MCP toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
+        
+        # 清理MCP相关的工具
+        self.tools = [tool for tool in self.tools if not self._is_mcp_tool(tool)]
+        self._mcp_toolsets.clear()
+        
+        self._is_setup = False
+        logger.info(f"Agent {self.name} cleanup completed")
+    
+    def _is_mcp_tool(self, tool: BaseTool) -> bool:
+        """检查工具是否是MCP工具"""
+        # 检查工具是否是BrainTool类型（MCP工具的包装类）
+        return tool.__class__.__name__ == 'BrainTool'
+    
+    async def __aenter__(self):
+        """支持async context manager"""
+        await self.setup()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """支持async context manager"""
+        await self.close()
+    
+
+    
+    @property
+    def is_setup(self) -> bool:
+        """检查agent是否已设置"""
+        return self._is_setup
+    
+    def _ensure_setup(self):
+        """确保agent已设置"""
+        if not self._is_setup:
+            raise RuntimeError(f"Agent {self.name} not setup. Call setup() first.")
+
     async def run_async(self, task: Union[str, Input], **kwargs) -> Any:
         """
         运行完整任务，自动多步执行直到完成
@@ -40,6 +149,8 @@ class BaseAgent:
         Returns:
             最终任务结果
         """
+        self._ensure_setup()
+        
         # 处理参数
         max_steps = kwargs.pop("max_steps", self.max_steps)
         streaming = kwargs.pop("streaming", False)

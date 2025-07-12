@@ -52,5 +52,8 @@ pysnooper
 azure-identity
 azure-ai-inference
 
+# MCP dependencies
+mcp
+
 #smolagents
 #browser-use
