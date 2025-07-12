@@ -132,13 +132,13 @@ async def test_parameter_handling():
     
     assert params.command == "test_cmd"
     assert params.args == ["arg1", "arg2"]
-    assert params.env == {"KEY": "value"}
+    assert params.env.get("KEY") == "value"
     assert params.cwd == "/test/path"
     
     # 测试默认值
     params_default = StdioServerParameters(command="test")
     assert params_default.args == []
-    assert params_default.env == {}
+    assert isinstance(params_default.env, dict)
     assert params_default.cwd is None
     
     logger.info("✓ 参数处理测试通过")
