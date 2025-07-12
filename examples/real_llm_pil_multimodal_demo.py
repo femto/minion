@@ -82,7 +82,7 @@ async def demo_basic_text_query(brain: Brain):
     
     try:
         result = await brain.step(input_data)
-        print(f"✓ LLM Response: {result.response}")
+        print(f"✓ LLM Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ Basic text query failed: {e}")
@@ -113,7 +113,7 @@ async def demo_pil_image_query(brain: Brain, images: dict):
     
     try:
         result = await brain.step(input_data)
-        print(f"✓ LLM Vision Response: {result.response}")
+        print(f"✓ LLM Vision Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ PIL.Image query failed: {e}")
@@ -147,7 +147,7 @@ async def demo_complex_multimodal_query(brain: Brain, images: dict):
     
     try:
         result = await brain.step(input_data)
-        print(f"✓ Multi-image Response: {result.response}")
+        print(f"✓ Multi-image Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ Complex multimodal query failed: {e}")
@@ -175,7 +175,7 @@ async def demo_text_image_query(brain: Brain, images: dict):
     
     try:
         result = await brain.step(input_data)
-        print(f"✓ Text Recognition Response: {result.response}")
+        print(f"✓ Text Recognition Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ Text recognition query failed: {e}")
@@ -206,7 +206,7 @@ async def demo_image_file_path(brain: Brain):
     
     try:
         result = await brain.step(input_data)
-        print(f"✓ File Path Response: {result.response}")
+        print(f"✓ File Path Response: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ File path query failed: {e}")
@@ -321,7 +321,7 @@ async def main():
             route="python",
             check=False
         )
-        print(f"✓ Math Result: {result.response}")
+        print(f"✓ Math Result: {result.answer}")
     except Exception as e:
         print(f"❌ Math demo failed: {e}")
     

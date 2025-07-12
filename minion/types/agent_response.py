@@ -9,10 +9,27 @@ class AgentResponse:
     
     This class replaces the 5-tuple format (response, score, terminated, truncated, info)
     with a more structured and extensible approach.
+    
+    Fields:
+        raw_response: 每步的原始响应内容
+        answer: 当前最佳答案（可能是最终答案，也可能是中间答案）
+        is_final_answer: 标识answer是否为最终答案
+        score: 执行质量指标
+        confidence: 置信度
+        terminated: 是否终止
+        truncated: 是否被截断
+        info: 扩展信息字典
+        error: 错误信息
+        execution_time: 执行时间
+        tokens_used: 使用的token数量
     """
     
     # 主要响应内容
-    response: Any = None
+    raw_response: Any = None
+    
+    # 答案相关
+    answer: Optional[Any] = None
+    is_final_answer: bool = False
     
     # 执行质量指标
     score: float = 0.0
@@ -27,10 +44,6 @@ class AgentResponse:
     
     # 错误信息
     error: Optional[str] = None
-    
-    # Agent特有信息
-    final_answer: Optional[Any] = None
-    is_final_answer: bool = False
     
     # 执行统计
     execution_time: Optional[float] = None
@@ -53,22 +66,22 @@ class AgentResponse:
         
         if not isinstance(tuple_result, tuple) or len(tuple_result) < 5:
             # 如果不是标准格式，创建一个基本的响应
-            return cls(response=tuple_result)
+            return cls(raw_response=tuple_result)
         
         response, score, terminated, truncated, info = tuple_result
         
         # 从info中提取特殊字段
-        final_answer = info.get('final_answer') if isinstance(info, dict) else None
+        answer = info.get('answer', info.get('final_answer')) if isinstance(info, dict) else None
         is_final_answer = info.get('is_final_answer', False) if isinstance(info, dict) else False
         error = info.get('error') if isinstance(info, dict) else None
         
         return cls(
-            response=response,
+            raw_response=response,
             score=score,
             terminated=terminated,
             truncated=truncated,
             info=info if isinstance(info, dict) else {},
-            final_answer=final_answer,
+            answer=answer,
             is_final_answer=is_final_answer,
             error=error
         )
@@ -82,8 +95,9 @@ class AgentResponse:
         """
         # 将特殊字段合并到info中
         info = self.info.copy()
-        if self.final_answer is not None:
-            info['final_answer'] = self.final_answer
+        if self.answer is not None:
+            info['answer'] = self.answer
+            info['final_answer'] = self.answer  # 为了向后兼容
         if self.is_final_answer:
             info['is_final_answer'] = self.is_final_answer
         if self.error:
@@ -95,21 +109,23 @@ class AgentResponse:
         if self.tokens_used:
             info['tokens_used'] = self.tokens_used
         
-        return (self.response, self.score, self.terminated, self.truncated, info)
+        return (self.raw_response, self.score, self.terminated, self.truncated, info)
     
-    def set_final_answer(self, value: Any) -> 'AgentResponse':
+    def set_answer(self, value: Any, is_final: bool = True) -> 'AgentResponse':
         """
-        设置最终答案并标记为完成
+        设置答案
         
         Args:
-            value: 最终答案值
+            value: 答案值
+            is_final: 是否为最终答案，默认为True
             
         Returns:
             self (for method chaining)
         """
-        self.final_answer = value
-        self.is_final_answer = True
-        self.terminated = True
+        self.answer = value
+        self.is_final_answer = is_final
+        if is_final:
+            self.terminated = True
         return self
     
     def set_error(self, error_msg: str) -> 'AgentResponse':

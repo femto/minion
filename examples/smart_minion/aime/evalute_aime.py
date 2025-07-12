@@ -250,7 +250,7 @@ Knowledge cutoff: {{current_date}}
 """,
         execution_config=load_execution_config(ensemble_logic_path),
     )
-    return result.response
+    return result.answer
 
 #model = "gpt-4o"
 #model = "claude"

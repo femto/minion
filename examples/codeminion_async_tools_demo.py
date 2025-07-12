@@ -175,7 +175,7 @@ async def demo_basic_async_tools():
             tools=async_tools,
             route="code"
         )
-        print(f"✅ 执行结果: {result.response}")
+        print(f"✅ 执行结果: {result.answer}")
     except Exception as e:
         print(f"❌ 执行错误: {e}")
         import traceback
@@ -205,7 +205,7 @@ async def demo_concurrent_execution():
             tools=async_tools,
             route="code"
         )
-        print(f"✅ 执行结果: {result.response}")
+        print(f"✅ 执行结果: {result.answer}")
     except Exception as e:
         print(f"❌ 执行错误: {e}")
 
@@ -236,7 +236,7 @@ async def demo_complex_workflow():
             tools=async_tools,
             route="code"
         )
-        print(f"✅ 执行结果: {result.response}")
+        print(f"✅ 执行结果: {result.answer}")
     except Exception as e:
         print(f"❌ 执行错误: {e}")
 
@@ -266,7 +266,7 @@ async def demo_performance_comparison():
             tools=async_tools,
             route="code"
         )
-        print(f"✅ 执行结果: {result.response}")
+        print(f"✅ 执行结果: {result.answer}")
     except Exception as e:
         print(f"❌ 执行错误: {e}")
 

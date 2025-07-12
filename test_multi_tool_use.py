@@ -85,7 +85,7 @@ for i, result in enumerate(results['results']):
             tools=tools,
             route="code"
         )
-        print(f"✅ 测试结果: {result.response}")
+        print(f"✅ 测试结果: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ 测试失败: {e}")
@@ -116,7 +116,7 @@ async def test_gpt_generated_parallel_code():
             tools=tools,
             route="code"
         )
-        print(f"✅ GPT生成代码执行结果: {result.response}")
+        print(f"✅ GPT生成代码执行结果: {result.answer}")
         return True
     except Exception as e:
         print(f"❌ GPT生成代码测试失败: {e}")

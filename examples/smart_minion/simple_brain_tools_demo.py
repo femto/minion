@@ -59,7 +59,7 @@ async def demo():
         route="plan",
         check=False
     )
-    print(f"回答: {response.response}")
+    print(f"回答: {response.answer}")
     
     # 方法2: 初始化时添加工具
     print("\n2. 初始化时添加工具:")
@@ -74,7 +74,7 @@ async def demo():
         check=False,
     route = "native",
     )
-    print(f"回答: {response.response}")
+    print(f"回答: {response.answer}")
     
     # 方法3: 使用add_tool动态添加
     print("\n3. 使用add_tool动态添加:")
@@ -87,7 +87,7 @@ async def demo():
         check=False,
         route = "raw",
     )
-    print(f"回答: {response.response}")
+    print(f"回答: {response.answer}")
 
 
 if __name__ == "__main__":

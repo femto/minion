@@ -126,7 +126,7 @@ Respond with ONLY the exact command you want to execute.
         brain_response = await brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
-        cleaned_response = brain_response.response.strip()
+        cleaned_response = brain_response.raw_response.strip()
         
         # Extract the action from the brain's response
         action = None
@@ -149,7 +149,7 @@ Respond with ONLY the exact command you want to execute.
             print("No valid action found in brain response, taking a random action.")
             action = random.choice(admissible_commands)
         
-        print(f"Brain's reasoning: {brain_response.response}")
+        print(f"Brain's reasoning: {brain_response.raw_response}")
         print(f"Selected action: {action}")
         
         # Add the action to history
@@ -304,7 +304,7 @@ Respond with ONLY the exact command you want to execute.
         brain_response = await brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
-        cleaned_response = brain_response.response.strip()
+        cleaned_response = brain_response.raw_response.strip()
         
         # Extract the action from the brain's response
         action = None
@@ -327,7 +327,7 @@ Respond with ONLY the exact command you want to execute.
             print("No valid action found in brain response, taking a random action.")
             action = random.choice(admissible_commands)
         
-        print(f"Brain's reasoning: {brain_response.response}")
+        print(f"Brain's reasoning: {brain_response.raw_response}")
         print(f"Selected action: {action}")
         
         # Add the action to history

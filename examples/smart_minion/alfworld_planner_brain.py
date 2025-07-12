@@ -162,7 +162,7 @@ Your plan should be specific to the current task and observation. Return ONLY th
         
         # Extract the plan steps
         plan_steps = []
-        for line in plan_response.response.strip().split("\n"):
+        for line in plan_response.raw_response.strip().split("\n"):
             line = line.strip()
             if line and (line[0].isdigit() or line.startswith("- ")):
                 # Remove the number/bullet and any trailing period
@@ -243,7 +243,7 @@ Respond with ONLY the exact command you want to execute.
         brain_response = await self.brain.step(query=prompt, check=False)
         
         # Clean up the brain's response to extract just the command
-        cleaned_response = brain_response.response.strip()
+        cleaned_response = brain_response.raw_response.strip()
         
         # Extract the action from the brain's response
         action = None
@@ -266,7 +266,7 @@ Respond with ONLY the exact command you want to execute.
             print("No valid action found in brain response, taking a random action.")
             action = random.choice(admissible_commands)
         
-        print(f"Brain's reasoning: {brain_response.response}")
+        print(f"Brain's reasoning: {brain_response.raw_response}")
         print(f"Selected action: {action}")
         
         return action
@@ -330,7 +330,7 @@ Answer with ONLY "NEXT" if we should move to the next step, or "STAY" if we shou
         progress_response = await self.brain.step(query=prompt, check=False)
         
         # Check if we should move to the next step
-        if "NEXT" in progress_response.response.upper():
+        if "NEXT" in progress_response.raw_response.upper():
             self.current_step = min(self.current_step + 1, len(self.plan) - 1)
             print(f"Moving to plan step {self.current_step + 1}: {self.plan[self.current_step]}")
         else:

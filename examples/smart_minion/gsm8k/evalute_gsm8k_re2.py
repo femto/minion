@@ -184,8 +184,8 @@ async def solve_question(question, route=None):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     ensemble_logic_path = os.path.join(current_dir, "gsm8k_re2.json")
     result = await brain.step(query=question, execution_config=load_execution_config(ensemble_logic_path))
-    # print(result.response)
-    return result.response
+    # print(result.answer)
+    return result.answer
 
 
 def generate_random_indices(n, n_samples, test=False):

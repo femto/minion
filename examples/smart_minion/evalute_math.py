@@ -206,8 +206,8 @@ async def solve_single_question(item, route="cot", stats_storer=None, **kwargs):
         # stats={},
         # stats_output="aime/stat_output.json"
     )
-    # print(result.response)
-    user_answer = result.response
+    # print(result.answer)
+    user_answer = result.answer
 
     if math_equal(user_answer, correct_answer):
         return {"result": 1, "item": item}

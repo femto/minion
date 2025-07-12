@@ -39,8 +39,8 @@ async def smart_brain():
 
     llm = create_llm_provider(llm_config)
 
-    python_env_config = {"port": 3007}
-    python_env = RpycPythonEnv(port=python_env_config.get("port", 3007))
+    python_env_config = {"port": 3006}
+    python_env = RpycPythonEnv(port=python_env_config.get("port", 3006))
     #python_env = LocalPythonEnv(verbose=False)
     brain = Brain(
         python_env=python_env,
@@ -50,31 +50,31 @@ async def smart_brain():
     #final_answer_tool = FinalAnswerTool()
     # result = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
     #                                   ,route="plan",check=False,tools=[final_answer_tool])
-    # print(result.response)
+    # print(result.answer)
     #
     #
     # result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
-    # print(result.response)
+    # print(result.answer)
     #
-    result = await brain.step(query="what's the solution 234*568",route="python", check=False)
-    print(result.response)
+    # result = await brain.step(query="what's the solution 234*568",route="python", check=False)
+    # print(result.answer)
 
     # result = await brain.step(query="生成一张可爱的人工智慧图片", check=False)
-    # print(result.response)
+    # print(result.answer)
     # result = await brain.step(query="复刻一个电商网站",route="plan")
-    # print(result.response)
+    # print(result.answer)
     #
-    # result = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
-    # print(result.response)
-    #
-    # result = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
-    # print(result.response)
+    result = await brain.step(query="what's the solution for game of 24 for 2,4,5,8", check=False)
+    print(result.answer)
+
+    result = await brain.step(query="what's the solution for game of 24 for 4 3 9 8")
+    print(result.answer)
     #
     # result = await brain.step(query="what's the solution for game of 24 for 2 5 11 8")
-    # print(result.response)
+    # print(result.answer)
     #
     # result = await brain.step(query="solve x=1/(1-beta^2*x) where beta=0.85")
-    # print(result.response)
+    # print(result.answer)
 
     cache_plan = os.path.join(current_file_dir, "writing_novel.json")
     result = await brain.step(
@@ -85,7 +85,7 @@ async def smart_brain():
         route="plan",
         cache_plan = cache_plan,
     )
-    print(result.response)
+    print(result.answer)
 
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.1.json")
     result = await brain.step(
@@ -94,7 +94,7 @@ async def smart_brain():
         dataset="aime 2024",
         cache_plan=cache_plan,
     )
-    print(result.response)
+    print(result.answer)
 
     cache_plan = os.path.join(current_file_dir, "aime", "plan_gpt4o.7.json")
 
@@ -104,7 +104,7 @@ async def smart_brain():
         dataset="aime 2024",
         cache_plan=cache_plan,
     )
-    print(result.response)
+    print(result.answer)
 
     # 从 HumanEval/88 提取的测试用例
     test_data = {
@@ -127,7 +127,7 @@ async def smart_brain():
         dataset="HumanEval",
         metadata={"test_cases": test_data["test"]}  # 添加测试用例到 metadata
     )
-    print(result.response)
+    print(result.answer)
 
     result = await brain.step(
         query="""You are in the middle of a room. Looking quickly around you, you see a bathtubbasin 1, a cabinet 2, a cabinet 1, a countertop 1, a garbagecan 1, a handtowelholder 1, a sinkbasin 1, a toilet 1, a toiletpaperhanger 1, and a towelholder 1.
@@ -136,7 +136,7 @@ Your task is to: find two soapbottle and put them in cabinet.
 """,
 check=False
     )
-    print(result.response)
+    print(result.answer)
 
 
 if __name__ == "__main__":
