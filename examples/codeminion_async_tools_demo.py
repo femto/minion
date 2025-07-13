@@ -162,6 +162,10 @@ async def demo_basic_async_tools():
     # 创建异步工具
     async_tools = [async_fetch_weather, async_currency_converter, AsyncDataAnalyzer()]
     
+    # 正确注册工具到Brain中
+    for tool in async_tools:
+        brain.add_tool(tool)
+    
     try:
         result = await brain.step(
             query="""
@@ -172,7 +176,6 @@ async def demo_basic_async_tools():
 
 请写代码调用这些异步工具并输出结果。
 """,
-            tools=async_tools,
             route="code"
         )
         print(f"✅ 执行结果: {result.answer}")
@@ -192,6 +195,10 @@ async def demo_concurrent_execution():
     
     async_tools = [async_fetch_weather, async_currency_converter, AsyncDataAnalyzer()]
     
+    # 正确注册工具到Brain中
+    for tool in async_tools:
+        brain.add_tool(tool)
+    
     try:
         result = await brain.step(
             query="""
@@ -202,7 +209,6 @@ async def demo_concurrent_execution():
 
 请写代码展示异步工具的并发优势。
 """,
-            tools=async_tools,
             route="code"
         )
         print(f"✅ 执行结果: {result.answer}")
@@ -220,6 +226,10 @@ async def demo_complex_workflow():
     
     async_tools = [async_fetch_weather, async_currency_converter, AsyncDataAnalyzer()]
     
+    # 正确注册工具到Brain中
+    for tool in async_tools:
+        brain.add_tool(tool)
+    
     try:
         result = await brain.step(
             query="""
@@ -233,7 +243,6 @@ async def demo_complex_workflow():
 
 请设计并执行这个完整的异步工作流。
 """,
-            tools=async_tools,
             route="code"
         )
         print(f"✅ 执行结果: {result.answer}")
@@ -251,6 +260,10 @@ async def demo_performance_comparison():
     
     async_tools = [async_fetch_weather, async_currency_converter]
     
+    # 正确注册工具到Brain中
+    for tool in async_tools:
+        brain.add_tool(tool)
+    
     try:
         result = await brain.step(
             query="""
@@ -263,7 +276,6 @@ async def demo_performance_comparison():
 
 请写代码来演示异步工具带来的性能优势。
 """,
-            tools=async_tools,
             route="code"
         )
         print(f"✅ 执行结果: {result.answer}")
