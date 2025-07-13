@@ -695,18 +695,34 @@ class AsyncPythonExecutor:
             """调用meta工具的函数 - 对LLM透明"""
             if tool_name in meta_tools:
                 import asyncio
+                import concurrent.futures
+                import threading
+                
                 tool = meta_tools[tool_name]
-                # 如果在异步上下文中，直接调用
-                try:
-                    loop = asyncio.get_running_loop()
-                    if loop.is_running():
-                        # 在异步上下文中，使用create_task
-                        task = asyncio.create_task(tool(*args, **kwargs))
-                        return task
-                    else:
-                        return asyncio.run(tool(*args, **kwargs))
-                except RuntimeError:
-                    return asyncio.run(tool(*args, **kwargs))
+                
+                # 简化的异步处理：使用线程池运行异步任务
+                def run_async_tool():
+                    try:
+                        # 在新的事件循环中运行
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            return loop.run_until_complete(tool(*args, **kwargs))
+                        finally:
+                            loop.close()
+                    except Exception as e:
+                        return {"error": f"Meta tool execution failed: {e}"}
+                
+                # 使用线程池执行，避免事件循环冲突
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(run_async_tool)
+                    try:
+                        result = future.result(timeout=30)  # 30秒超时
+                        return result
+                    except concurrent.futures.TimeoutError:
+                        return {"error": "Meta tool execution timeout"}
+                    except Exception as e:
+                        return {"error": f"Meta tool execution error: {e}"}
             else:
                 raise ValueError(f"Meta tool '{tool_name}' not found")
         

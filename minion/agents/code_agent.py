@@ -166,7 +166,7 @@ class CodeAgent(BaseAgent):
         # Send tools to the python executor
         self._update_executor_tools()
 
-    async def execute_step(self, input_data: Input, **kwargs) -> AgentResponse:
+    async def execute_step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
         """
         Execute a step with enhanced code-based reasoning.
         
@@ -175,11 +175,19 @@ class CodeAgent(BaseAgent):
         - Self-reflection triggers
         - Enhanced error handling
         
+        Args:
+            state: State dictionary containing input and other data
+            **kwargs: Additional arguments
+        
         Returns:
             AgentResponse: Structured response instead of 5-tuple
         """
+        # Extract input_data from state
+        input_data = state.get("input")
+        if not input_data:
+            raise ValueError("No input found in state")
+        
         # Check if we should reflect first
-        state = kwargs.get('state', {})
         if self.enable_reflection and self.thinking_engine and self.thinking_engine.should_reflect(state):
             await self._perform_reflection(state)
         
@@ -191,9 +199,10 @@ class CodeAgent(BaseAgent):
             if not self.brain:
                 raise ValueError("Brain is not initialized")
             
-            # 处理tools参数，避免重复传递
-            tools = kwargs.pop('tools', self.tools)
-            result = await self.brain.step(input=enhanced_input, tools=tools,**kwargs)
+            # Call brain.step with proper state format - brain expects state dict with 'input' key
+            brain_state = state.copy()
+            brain_state["input"] = enhanced_input
+            result = await self.brain.step(brain_state, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
@@ -228,7 +237,7 @@ class CodeAgent(BaseAgent):
             logger.error(f"Step execution failed: {e}")
             error_msg = f"Step execution failed: {e}"
             return AgentResponse(
-                response=error_msg,
+                raw_response=error_msg,
                 score=0.0,
                 terminated=False,
                 truncated=False,
