@@ -68,7 +68,8 @@ minion = "minion.cli:app"
 [project.optional-dependencies]
 dev = ["pytest", "black", "ruff", "pytest-asyncio"]
 google = ["google-adk", "litellm"]
-all = ["minionx[dev,google]"]
+browser = ["browser-use>=0.1.0"]
+all = ["minionx[dev,google,browser]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["minion"] 
