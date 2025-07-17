@@ -19,6 +19,7 @@ from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.input import Input
 from minion.main.python_env import PythonEnv
 from minion.main.local_python_env import LocalPythonEnv
+from minion.main.local_python_executor import LocalPythonExecutor
 from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
 from minion.providers import create_llm_provider
@@ -122,8 +123,8 @@ Supporting navigation and spatial memory""",
         # 设置工具集
         self.tools = tools or []
         
-        # 优先使用LocalPythonEnv，避免Docker依赖
-        self.python_env = python_env or LocalPythonEnv(verbose=False, is_agent=True)
+        # 优先使用LocalPythonExecutor，避免Docker依赖
+        self.python_env = python_env or LocalPythonEnv(verbose=False, is_agent=True) #LocalPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv"])
 
         self.stats_storer = stats_storer
 

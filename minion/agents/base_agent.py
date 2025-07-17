@@ -83,7 +83,8 @@ class BaseAgent:
                 logger.warning(f"Skipping unhealthy MCP toolset {toolset.name}")
 
         # Initialize brain with tools
-        self.brain = Brain(tools=tools)
+        if self.brain is None:
+            self.brain = Brain(tools=tools)
         
         # Mark agent as setup
         self._is_setup = True

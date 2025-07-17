@@ -116,11 +116,29 @@ async def run_price_comparison():
     browser = BrowserTool(headless=True)
     
     try:
+        # Initialize the code agent with LocalPythonExecutor for Brain
+        from minion.main.brain import Brain
+        
+        # Create Brain with LocalPythonExecutor
+        brain = Brain(python_env=LocalPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json"]))
+        
+        # Initialize state with history
+        state = {
+            "history": [],
+            "step_count": 0
+        }
+        
         # Initialize the code agent
         agent = StateCodeAgent(
             name="PriceComparisonAgent",
-            python_env=LocalPythonExecutor(additional_authorized_imports=[])
+            brain=brain,
+            use_async_executor=True  # Use LocalPythonExecutor instead of AsyncPythonExecutor
         )
+        
+        # Create pricing data tool
+        pricing_tool = GetPricingDataTool()
+        # Register it directly - this is what was missing before
+        agent.add_tool(pricing_tool)
         
         # Add browser tools to the agent
         agent.add_tool(NavigateTool(browser))
@@ -173,7 +191,7 @@ async def run_price_comparison():
         
         # Run the agent
         print("Running price comparison analysis...")
-        result = await agent.run_async(input_obj, reset=True)
+        result = await agent.run_async(input_obj, state=state, max_steps=5, reset=True)
         
         # Display the result
         print("\n" + "=" * 60)

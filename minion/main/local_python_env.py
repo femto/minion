@@ -81,6 +81,30 @@ class LocalPythonEnv(IntercodeEnv):
         self.reset_local_env()
         
         self.logger.info("LocalPythonEnv Initialized")
+        
+    def send_variables(self, variables=None):
+        """
+        Add compatibility with LocalPythonExecutor by supporting send_variables method.
+        
+        Args:
+            variables (dict, optional): Variables to add to the local environment
+        """
+        if variables is None:
+            variables = {}
+        # Update the local environment with the provided variables
+        self.local_env.update(variables)
+        
+    def send_tools(self, tools=None):
+        """
+        Add compatibility with LocalPythonExecutor by supporting send_tools method.
+        
+        Args:
+            tools (dict, optional): Tools to add to the local environment
+        """
+        if tools is None:
+            tools = {}
+        # Update the local environment with the provided tools
+        self.local_env.update(tools)
 
     def reset_local_env(self) -> None:
         """Reset the local execution environment"""

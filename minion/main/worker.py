@@ -23,6 +23,8 @@ from tenacity import retry, stop_after_attempt, wait_none
 from minion.actions.action_node import ActionNode
 from minion.configs.config import config
 from minion.logs import logger
+from minion.main.async_python_executor import AsyncPythonExecutor
+from minion.main.local_python_executor import LocalPythonExecutor
 from minion.main.pre_processing import PreProcessingMinion
 from minion.main.check import CheckMinion
 from minion.main.check_route import CheckRouterMinion
@@ -815,7 +817,7 @@ class CodeMinion(PythonMinion):
         self.max_iterations = 3
         
         # Initialize LocalPythonExecutor with tools like smolagents
-        if hasattr(self, 'python_env') and self.python_env:
+        if hasattr(self, 'python_env') and isinstance(self.python_env, (LocalPythonExecutor, AsyncPythonExecutor)):
             # Send variables (state) to the python executor
             variables = getattr(self.input, 'symbols', {})
             self.python_env.send_variables(variables=variables)

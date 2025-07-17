@@ -147,17 +147,21 @@ class CodeAgent(BaseAgent):
         
         # Initialize code executor based on use_async_executor flag
         if self.use_async_executor:
-            self.python_executor = AsyncPythonExecutor(
+            self.python_executor = self.brain.python_env = AsyncPythonExecutor(
                 additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv", "asyncio"],
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
         else:
-            self.python_executor = LocalPythonExecutor(
+            self.python_executor = self.brain.python_env = LocalPythonExecutor(
                 additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv"],
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
+        
+        # Set brain.python_env to the executor
+        if self.brain:
+            self.brain.python_env = self.python_executor
         
         # Add the think tool and final answer tool
         self.add_tool(ThinkTool())
@@ -610,7 +614,8 @@ Use Python code to:
                         tool_functions[tool.name] = create_tool_wrapper(tool)
                 
                 # Send tools to the executor
-                self.python_executor.send_tools(tool_functions)
+                if hasattr(self.python_executor, 'send_tools'):
+                    self.python_executor.send_tools(tool_functions)
     
     def add_tool(self, tool: BaseTool):
         """Add a tool and update the executor."""
