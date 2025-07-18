@@ -10,10 +10,11 @@ This agent extends the BaseAgent to provide:
 """
 
 from typing import Dict, Any, List, Optional, Tuple, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 import traceback
 import logging
+import uuid
 from datetime import datetime
 
 from .base_agent import BaseAgent
@@ -129,6 +130,7 @@ class CodeAgent(BaseAgent):
     - ReAct (Reason-Act-Observe) cycles
     - Safe code execution
     - Async tool support
+    - Optional state management and conversation tracking
     """
     
     name: str = "code_agent"
@@ -136,10 +138,17 @@ class CodeAgent(BaseAgent):
     python_executor: Optional[Union[LocalPythonExecutor, AsyncPythonExecutor]] = None
     enable_reflection: bool = True
     max_code_length: int = 2000
-    use_async_executor: bool = True  # New parameter to control async support
+    use_async_executor: bool = True  # Parameter to control async support
+    
+    # State tracking and conversation history (optional)
+    enable_state_tracking: bool = False  # Whether to enable state tracking functionality
+    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    persistent_state: Dict[str, Any] = field(default_factory=dict)
+    auto_save_state: bool = True
+    conversation_context_limit: int = 10  # Limit conversation history for context
     
     def __post_init__(self):
-        """Initialize the CodeMinion with thinking capabilities."""
+        """Initialize the CodeAgent with thinking capabilities and optional state tracking."""
         super().__post_init__()
         
         # Initialize thinking engine
@@ -169,6 +178,22 @@ class CodeAgent(BaseAgent):
         
         # Send tools to the python executor
         self._update_executor_tools()
+        
+        # Initialize state tracking if enabled
+        if self.enable_state_tracking:
+            self._initialize_state()
+    
+    def _initialize_state(self):
+        """Initialize persistent state if state tracking is enabled."""
+        if not self.persistent_state:
+            self.persistent_state = {
+                'initialized_at': str(uuid.uuid4()),
+                'conversation_count': 0,
+                'variables': {},
+                'memory_store': {},
+                'learned_patterns': []
+            }
+        logger.info("State tracking initialized")
 
     async def execute_step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
         """
@@ -359,17 +384,17 @@ Now Begin!
                 continue
                 
             try:
-                # 使用 AsyncPythonExecutor 或 LocalPythonExecutor 执行代码
+                # Use AsyncPythonExecutor or LocalPythonExecutor to execute code
                 if self.use_async_executor:
                     output, logs, is_final_answer = await self.python_executor(code)
                 else:
                     output, logs, is_final_answer = self.python_executor(code)
                 
-                # 构建观察反馈
+                # Build observation feedback
                 observation_parts = [f"\n**Observation:** Code block {i+1} executed successfully."]
                 
                 if logs:
-                    # 清理并格式化日志输出
+                    # Clean and format log output
                     cleaned_logs = logs.strip()
                     if cleaned_logs:
                         observation_parts.append(f"```\n{cleaned_logs}\n```")
@@ -384,7 +409,7 @@ Now Begin!
                 state[f'code_logs_{i}'] = logs
                 state[f'is_final_answer_{i}'] = is_final_answer
                 
-                # 如果是最终答案，设置全局标志并立即返回
+                # If this is the final answer, set global flag and return immediately
                 if is_final_answer:
                     state['is_final_answer'] = True
                     state['final_answer_value'] = output
@@ -394,15 +419,15 @@ Now Begin!
                     return '\n'.join(processed_parts)
                     
             except Exception as e:
-                # 提供详细的错误观察
+                # Provide detailed error observation
                 error_observation = f"\n**Observation:** Code block {i+1} execution failed."
                 error_observation += f"\n**Error:** {str(e)}"
                 
-                # 如果有traceback信息，提供简化版本
+                # If there is traceback information, provide simplified version
                 if hasattr(e, '__traceback__'):
                     try:
                         tb_lines = traceback.format_exception(type(e), e, e.__traceback__)
-                        # 只取最后几行关键信息
+                        # Only take the last few lines of key information
                         key_lines = [line.strip() for line in tb_lines[-3:] if line.strip()]
                         if key_lines:
                             error_observation += f"\n**Traceback:** {' | '.join(key_lines)}"
@@ -414,7 +439,7 @@ Now Begin!
                 # Increment error count
                 state['error_count'] = state.get('error_count', 0) + 1
                 
-                # 提供错误恢复建议
+                # Provide error recovery suggestions
                 if state['error_count'] <= 2:
                     recovery_suggestion = f"\n**Suggestion:** Review the error and try a different approach in the next step."
                     processed_parts.append(recovery_suggestion)
@@ -495,28 +520,30 @@ Now Begin!
             
         return state
     
-    async def solve_problem(self, problem: str, **kwargs) -> str:
+    async def solve_problem(self, problem: str, reset: bool = False, **kwargs) -> str:
         """
         Solve a problem using code-based reasoning.
         
         Args:
             problem: The problem to solve
+            reset: If True, reset the agent state before execution (when state tracking is enabled)
             **kwargs: Additional parameters
             
         Returns:
             The solution as a string
         """
         input_obj = Input(query=problem, route='code')
-        result = await self.run_async(input_obj, **kwargs)
+        result = await self.run_async(input_obj, reset=reset, **kwargs)
         return str(result)
     
-    async def analyze_data(self, data: Any, question: str, **kwargs) -> str:
+    async def analyze_data(self, data: Any, question: str, reset: bool = False, **kwargs) -> str:
         """
         Analyze data using code-based reasoning.
         
         Args:
             data: The data to analyze
             question: The question to answer about the data
+            reset: If True, reset the agent state before execution (when state tracking is enabled)
             **kwargs: Additional parameters
             
         Returns:
@@ -535,27 +562,27 @@ Use Python code to:
 """
         
         input_obj = Input(query=analysis_query, route='python')
-        result = await self.run_async(input_obj, **kwargs)
+        result = await self.run_async(input_obj, reset=reset, **kwargs)
         return str(result)
     
     def is_done(self, result: Any, state: Dict[str, Any]) -> bool:
         """
-        检查任务是否完成，通过检测 is_final_answer 标志来判断
+        Check if the task is completed by detecting the is_final_answer flag.
         """
-        # 先调用父类的is_done方法  
+        # First call the parent's is_done method
         parent_done = super().is_done(result, state)
         if parent_done:
             return True
         
-        # 检查状态中是否有 final_answer 标志
+        # Check if there is a final_answer flag in the state
         if state.get('is_final_answer', False):
             return True
         
-        # 对于AgentResponse，使用其内置的检查方法
+        # For AgentResponse, use its built-in check method
         if hasattr(result, 'is_done'):
             return result.is_done()
         
-        # 检查result中是否有终止标志 (5-tuple格式)
+        # Check if there is a termination flag in the result (5-tuple format)
         if isinstance(result, tuple) and len(result) >= 3:
             terminated = result[2]
             if terminated:
@@ -565,17 +592,17 @@ Use Python code to:
     
     def finalize(self, result: Any, state: Dict[str, Any]) -> Any:
         """
-        整理最终结果，特别处理 final_answer 的情况
+        Organize the final result, specially handling the final_answer case.
         """
-        # 检查是否有最终答案值
+        # Check if there is a final_answer_value in the state
         if 'final_answer_value' in state:
             return state['final_answer_value']
         
-        # 对于AgentResponse，优先使用其final_answer
+        # For AgentResponse, prioritize using its final_answer
         if hasattr(result, 'final_answer') and result.final_answer is not None:
             return result.final_answer
         
-        # 调用父类的 finalize 方法
+        # Call parent's finalize method
         return super().finalize(result, state)
 
     def _update_executor_tools(self):
@@ -613,3 +640,291 @@ Use Python code to:
         # Update executor tools whenever a new tool is added
         if hasattr(self, 'python_executor'):
             self._update_executor_tools()
+            
+    # State management methods from StateCodeAgent
+    
+    async def run_async(self, task: Optional[Union[str, Input]] = None,
+                       state: Optional[Dict[str, Any]] = None, 
+                       max_steps: Optional[int] = None,
+                       reset: bool = False,
+                       **kwargs) -> Any:
+        """
+        Run the agent with enhanced state management and optional reset capability.
+        
+        Args:
+            task: Task description or Input object
+            state: Existing state for execution
+            max_steps: Maximum steps to execute
+            reset: If True, reset the agent state before execution (when state tracking is enabled)
+            **kwargs: Additional parameters
+            
+        Returns:
+            Agent response with conversation context when state tracking is enabled
+        """
+        # Skip state management if state tracking is disabled
+        if not self.enable_state_tracking:
+            return await super().run_async(task, state, max_steps, **kwargs)
+        
+        # Handle reset functionality
+        if reset:
+            self.reset_state()
+            logger.info("Agent state has been reset")
+        
+        # Convert string task to Input if needed
+        input_data = task
+        if isinstance(task, str):
+            input_data = Input(query=task)
+        
+        # Update conversation context in input if we have state tracking enabled
+        if input_data and isinstance(input_data, Input):
+            enhanced_input = self._add_conversation_context(input_data)
+        else:
+            enhanced_input = input_data
+        
+        # Prepare state with persistent information
+        if state is None:
+            state = {}
+        state.update(self.persistent_state)
+        state['conversation_history'] = self.get_recent_history()
+        kwargs['state'] = state
+        
+        # Execute the step with enhanced input and state
+        try:
+            result = await super().run_async(enhanced_input, state, max_steps, **kwargs)
+            
+            # Record this interaction
+            if input_data and isinstance(input_data, Input):
+                await self._record_interaction(input_data, result, reset)
+            
+            # Auto-save state if enabled
+            if self.auto_save_state:
+                self._save_persistent_state(state)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Agent execution failed: {e}")
+            # Still record the failed interaction
+            if input_data and isinstance(input_data, Input):
+                await self._record_interaction(input_data, f"Error: {e}", reset)
+            raise
+    
+    def reset_state(self) -> None:
+        """
+        Reset agent state.
+        
+        This clears:
+        - Conversation history
+        - Working variables
+        - Temporary memory
+        But preserves:
+        - Learned patterns
+        - Core configuration
+        """
+        if not self.enable_state_tracking:
+            logger.warning("State tracking is disabled, reset_state has no effect")
+            return
+            
+        # Clear conversation history
+        self.conversation_history = []
+        
+        # Reset session ID
+        self.session_id = str(uuid.uuid4())
+        
+        # Reset working state but preserve learned patterns
+        learned_patterns = self.persistent_state.get('learned_patterns', [])
+        self.persistent_state = {
+            'initialized_at': str(uuid.uuid4()),
+            'conversation_count': 0,
+            'variables': {},
+            'memory_store': {},
+            'learned_patterns': learned_patterns  # Preserve learned patterns
+        }
+        
+        # Reset code executor state if available
+        if self.python_executor:
+            if hasattr(self.python_executor, 'reset'):
+                self.python_executor.reset()
+        
+        logger.info("Agent state reset completed")
+    
+    def get_state(self) -> Dict[str, Any]:
+        """
+        Get current agent state including conversation and persistent state.
+        
+        Returns:
+            Complete state dictionary or empty dict if state tracking is disabled
+        """
+        if not self.enable_state_tracking:
+            return {}
+            
+        return {
+            'conversation_history': self.conversation_history,
+            'persistent_state': self.persistent_state,
+            'session_id': self.session_id,
+            'conversation_count': len(self.conversation_history) // 2,  # Approximate turns
+        }
+    
+    def load_state(self, state: Dict[str, Any]) -> None:
+        """
+        Load agent state from dictionary.
+        
+        Args:
+            state: State dictionary to load
+        """
+        if not self.enable_state_tracking:
+            logger.warning("State tracking is disabled, load_state has no effect")
+            return
+            
+        if 'conversation_history' in state:
+            self.conversation_history = state['conversation_history']
+        
+        if 'persistent_state' in state:
+            self.persistent_state = state['persistent_state']
+        
+        if 'session_id' in state:
+            self.session_id = state['session_id']
+        
+        logger.info(f"Agent state loaded with {len(self.conversation_history)} conversation entries")
+    
+    def _add_conversation_context(self, input_data: Input) -> Input:
+        """Add conversation context to input for better continuity."""
+        if not self.enable_state_tracking or not self.conversation_history:
+            return input_data
+        
+        # Get recent conversation for context
+        recent_history = self.get_recent_history(limit=self.conversation_context_limit)
+        
+        if not recent_history:
+            return input_data
+        
+        # Format conversation context
+        context_lines = []
+        for entry in recent_history:
+            role = entry['role'].upper()
+            content = str(entry['content'])[:200]  # Limit content length
+            context_lines.append(f"{role}: {content}")
+        
+        conversation_context = "\n".join(context_lines)
+        
+        # Enhanced query with conversation context
+        enhanced_query = f"""**Conversation Context:**
+{conversation_context}
+
+**Current Request:**
+{input_data.query}
+
+**Instructions:**
+- Consider the conversation context when responding
+- Maintain consistency with previous interactions
+- Use any relevant information from the conversation history
+- If variables or results from previous steps are relevant, reference them in your code
+"""
+        
+        return Input(
+            query=enhanced_query,
+            route=getattr(input_data, 'route', None) or 'code',
+            check=getattr(input_data, 'check', False),
+            dataset=getattr(input_data, 'dataset', None),
+            metadata=getattr(input_data, 'metadata', {})
+        )
+    
+    async def _record_interaction(self, input_data: Input, result: Any, was_reset: bool) -> None:
+        """Record the interaction in conversation history."""
+        if not self.enable_state_tracking:
+            return
+            
+        # Record user input
+        self.add_to_history("user", input_data.query)
+        
+        # Record system response
+        if isinstance(result, AgentResponse):
+            response_content = result.raw_response
+        else:
+            response_content = str(result)
+        
+        self.add_to_history("assistant", response_content)
+        
+        # Add reset indicator if state was reset
+        if was_reset:
+            self.add_to_history("system", "State was reset before this interaction")
+        
+        # Update conversation count in persistent state
+        self.persistent_state['conversation_count'] = len(self.conversation_history) // 2
+    
+    def _save_persistent_state(self, current_state: Dict[str, Any]) -> None:
+        """Save relevant information to persistent state."""
+        if not self.enable_state_tracking:
+            return
+            
+        # Extract variables from execution state
+        variables = {}
+        for key, value in current_state.items():
+            if key.startswith('code_result_'):
+                variables[key] = value
+        
+        if variables:
+            self.persistent_state['variables'].update(variables)
+        
+        # Save any learned patterns or insights
+        if 'learned_patterns' in current_state:
+            self.persistent_state['learned_patterns'].extend(current_state['learned_patterns'])
+    
+    def get_recent_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get recent conversation history."""
+        if not self.enable_state_tracking:
+            return []
+            
+        if limit is None:
+            return self.conversation_history
+        return self.conversation_history[-limit:] if self.conversation_history else []
+    
+    def clear_history(self) -> None:
+        """Clear conversation history while preserving persistent state."""
+        if not self.enable_state_tracking:
+            logger.warning("State tracking is disabled, clear_history has no effect")
+            return
+            
+        self.conversation_history = []
+        self.session_id = str(uuid.uuid4())
+        logger.info("Conversation history cleared")
+    
+    def get_conversation_history(self) -> List[Dict[str, Any]]:
+        """Get complete conversation history."""
+        if not self.enable_state_tracking:
+            return []
+            
+        return self.conversation_history
+    
+    def add_to_history(self, role: str, content: Any) -> None:
+        """
+        Add entry to conversation history.
+        
+        Args:
+            role: Role (user, assistant, system)
+            content: Content of the message
+        """
+        if not self.enable_state_tracking:
+            return
+            
+        self.conversation_history.append({
+            "role": role,
+            "content": content,
+            "timestamp": str(uuid.uuid4())[:8]  # Short timestamp
+        })
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get conversation and usage statistics."""
+        if not self.enable_state_tracking:
+            return {
+                'state_tracking': 'disabled'
+            }
+            
+        return {
+            'total_conversations': self.persistent_state.get('conversation_count', 0),
+            'current_session_messages': len(self.conversation_history),
+            'session_id': self.session_id,
+            'variables_stored': len(self.persistent_state.get('variables', {})),
+            'patterns_learned': len(self.persistent_state.get('learned_patterns', [])),
+            'auto_save_enabled': self.auto_save_state
+        }
