@@ -534,9 +534,12 @@ async def evaluate_async_ast(
             value = await evaluate_async_ast(expression.value, *common_params)
         raise ReturnException(value)
     elif isinstance(expression, ast.Await):
-        # Handle await expressions by evaluating the value and awaiting if it's a coroutine
-        awaitable = evaluate_async_ast(expression.value, *common_params)
-        value = await  awaitable
+        # 先评估值，不立即await
+        value = await evaluate_async_ast(expression.value, *common_params)
+        # 只有当它是协程时才await
+        if inspect.isawaitable(value):
+            return await value
+        # 如果不是协程，直接返回值
         return value
     elif isinstance(expression, ast.Pass):
         return None
