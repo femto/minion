@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 import uuid
 import logging
+import warnings
 
 from .code_agent import CodeAgent
 from ..main.input import Input
@@ -19,7 +20,20 @@ class StateCodeAgent(CodeAgent):
     - Persistent state management across sessions
     - Conversation history tracking
     - Reset capability for state management (reset=True/False)
+    
+    DEPRECATION WARNING: This class is deprecated and will be removed in a future version.
+    Use CodeAgent with enable_state_tracking=True instead.
     """
+    
+    def __post_init__(self):
+        warnings.warn(
+            "StateCodeAgent is deprecated. Use CodeAgent with enable_state_tracking=True instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        # Set state tracking to always be enabled
+        self.enable_state_tracking = True
+        super().__post_init__()
     
     conversation_history: List[Dict[str, Any]] = field(default_factory=list)
     persistent_state: Dict[str, Any] = field(default_factory=dict)
