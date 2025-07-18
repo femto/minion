@@ -225,16 +225,6 @@ class CodeAgent(BaseAgent):
                     # Already processed by CodeMinion, use as-is
                     return agent_response
             
-            # Process code blocks if present
-            if isinstance(agent_response.raw_response, str) and self._contains_code_blocks(agent_response.raw_response):
-                processed_response = await self._process_code_response(agent_response.raw_response, state)
-                agent_response.raw_response = processed_response
-                agent_response.answer = processed_response
-                
-                # Update termination status based on state
-                if state.get('is_final_answer', False):
-                    agent_response.set_answer(state.get('final_answer_value'))
-            
             return agent_response
             
         except Exception as e:

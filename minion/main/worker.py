@@ -61,6 +61,7 @@ from minion.main.symbol_table import Symbol
 from minion.main.task_graph import convert_tasks_to_graph
 from minion.utils.utils import most_similar_minion, camel_case_to_snake_case
 from minion.actions.lmp_action_node import LmpActionNode
+from minion.tools.default_tools import FinalAnswerException
 from minion.models.schemas import (
     MetaPlan,
     Identification,
@@ -934,7 +935,23 @@ Let's start! Remember to end your code blocks with <end_code>.
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
             tools = (self.input.tools or []) + (self.brain.tools or [])
-            response = await node.execute(prompt, tools=tools)
+            try:
+                response = await node.execute(prompt, tools=tools)
+            except FinalAnswerException as e:
+                # 收到 final_answer 工具调用，直接返回结果
+                final_answer = e.answer
+                self.answer = self.input.answer = final_answer
+                print(f"Final answer exception detected: {final_answer}")
+                # 返回 AgentResponse并标记为终止
+                return AgentResponse(
+                    raw_response=final_answer,  # raw_response是正确的属性名
+                    answer=final_answer,
+                    is_final_answer=True,
+                    score=1.0,
+                    terminated=True,
+                    truncated=False,
+                    info={'final_answer_exception': True}
+                )
             
             # Extract and execute code
             code_blocks = self.extract_code_blocks(response)
@@ -947,7 +964,7 @@ Let's start! Remember to end your code blocks with <end_code>.
                     raw_response=response,
                     answer=self.answer,
                     score=0.5,
-                    terminated=False,
+                    terminated=True,
                     truncated=False,
                     info={'no_code_found': True}
                 )
@@ -1042,6 +1059,21 @@ Let's start! Remember to end your code blocks with <end_code>.
                     # Continue for more iterations if needed
                     error = ""
                     
+            except FinalAnswerException as e:
+                # 特殊处理 FinalAnswerException
+                final_answer = e.answer
+                self.answer = self.input.answer = final_answer
+                print(f"Final answer exception detected: {final_answer}")
+                # 返回 AgentResponse并标记为终止
+                return AgentResponse(
+                    raw_response=final_answer,  # raw_response是正确的属性名
+                    answer=final_answer,
+                    is_final_answer=True,
+                    score=1.0,
+                    terminated=True,
+                    truncated=False,
+                    info={'final_answer_exception': True}
+                )
             except Exception as e:
                 error = str(e)
                 logger.error(f"Execution error: {error}")

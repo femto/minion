@@ -229,9 +229,8 @@ class BaseAgent:
             
             # 检查是否完成
             if self.is_done(result, state):
-                final_result = self.finalize(result, state)
-                break
-                
+                return result
+
             # 更新状态，继续下一步
             state = self.update_state(state, result)
             step_count += 1

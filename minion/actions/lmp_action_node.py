@@ -372,6 +372,17 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                     tool_name = tool_call.function.name
                     args_str = tool_call.function.arguments
                     
+                    # 如果是final_answer，则直接抛出FinalAnswerException
+                    if tool_name == 'final_answer':
+                        try:
+                            import json
+                            args_dict = json.loads(args_str) if isinstance(args_str, str) else args_str
+                            answer_value = args_dict.get('answer', str(args_dict))
+                            raise FinalAnswerException(answer_value)
+                        except json.JSONDecodeError:
+                            # 如果解析失败，直接使用整个参数字符串
+                            raise FinalAnswerException(args_str)
+                    
                     # 查找对应的工具
                     target_tool = None
                     for tool in tools:
@@ -450,14 +461,17 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                         # BaseTool 实例，从XML中提取参数
                         if parameters_xml.strip():
                             # 从XML中提取参数值
+                            # 如果是final_answer，则直接抛出FinalAnswerException，不调用forward
                             if tool_name == 'final_answer':
                                 # 特殊处理 final_answer 工具
                                 answer_match = re.search(r'<answer>(.*?)</answer>', parameters_xml, re.DOTALL)
                                 if answer_match:
                                     answer_value = answer_match.group(1).strip()
-                                    tool_result = target_tool.forward(answer_value)
+                                    # 直接抛出异常，不调用 forward
+                                    raise FinalAnswerException(answer_value)
                                 else:
-                                    tool_result = target_tool.forward(parameters_xml)
+                                    # 直接抛出异常，不调用 forward
+                                    raise FinalAnswerException(parameters_xml)
                             else:
                                 # 其他工具的参数解析
                                 tool_result = target_tool.forward(parameters_xml)

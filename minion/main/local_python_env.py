@@ -9,6 +9,8 @@ from typing import Dict, Tuple, Any, Optional
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 
+from minion.tools.default_tools import FinalAnswerException
+
 from rich.logging import RichHandler
 
 from .ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
@@ -103,8 +105,23 @@ class LocalPythonEnv(IntercodeEnv):
         """
         if tools is None:
             tools = {}
+            
+        # Create modified tools that raise FinalAnswerException for special tools like final_answer
+        modified_tools = {}
+        for name, tool in tools.items():
+            # Check if it's the final_answer tool
+            if name == "final_answer":
+                # Create a wrapper that raises FinalAnswerException
+                def final_answer_wrapper(*args, **kwargs):
+                    result = tool(*args, **kwargs)
+                    raise FinalAnswerException(result)
+                modified_tools[name] = final_answer_wrapper
+            else:
+                # Use the original tool
+                modified_tools[name] = tool
+                
         # Update the local environment with the provided tools
-        self.local_env.update(tools)
+        self.local_env.update(modified_tools)
 
     def reset_local_env(self) -> None:
         """Reset the local execution environment"""

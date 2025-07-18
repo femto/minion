@@ -199,7 +199,7 @@ class StateCodeAgent(CodeAgent):
         
         # Record system response
         if isinstance(result, AgentResponse):
-            response_content = result.final_answer or result.response
+            response_content = result.answer
         else:
             response_content = str(result)
         

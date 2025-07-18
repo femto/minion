@@ -124,7 +124,7 @@ Supporting navigation and spatial memory""",
         self.tools = tools or []
         
         # 优先使用LocalPythonExecutor，避免Docker依赖
-        self.python_env = python_env or LocalPythonEnv(verbose=False, is_agent=True) #LocalPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv"])
+        self.python_env = python_env or LocalPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
         self.stats_storer = stats_storer
 
