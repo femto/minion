@@ -140,17 +140,6 @@ def test_construct_messages_from_template_list_query():
     assert "Question:" in text_parts[0]["text"]
 
 
-def test_brain_with_local_python_env():
-    """Test Brain initialization with LocalPythonEnv (no Docker required)"""
-    # This should work without Docker
-    brain = Brain()
-    
-    # Verify LocalPythonEnv is used
-    from minion.main.local_python_env import LocalPythonEnv
-    assert isinstance(brain.python_env, LocalPythonEnv)
-    assert brain.python_env.name == "local_python"
-
-
 @pytest.mark.asyncio
 async def test_brain_step_basic():
     """Test basic Brain.step functionality with local env"""

@@ -197,7 +197,7 @@ async def run_price_comparison():
         print("\n" + "=" * 60)
         print("MODEL PRICING COMPARISON RESULTS")
         print("=" * 60)
-        print(result.raw_response)
+        print(result.answer)
         
     except Exception as e:
         print(f"Error running the code agent: {str(e)}")

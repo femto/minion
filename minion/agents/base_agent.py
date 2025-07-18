@@ -217,7 +217,15 @@ class BaseAgent:
             
         # 达到最大步数
         if step_count >= max_steps:
-            raise Exception(f"任务执行达到最大步数 {max_steps} 仍未完成")
+            # Try to get the final answer and return it
+            try:
+                final_answer = await self.provide_final_answer(state)
+                yield final_answer
+                # No break needed here as we're already at the end of the while loop
+            except Exception as e:
+                # If getting the final answer fails, throw the original exception
+                logger.error(f"Failed to provide final answer: {e}")
+                raise Exception(f"Task execution reached max steps {max_steps} and is still incomplete")
             
     async def _run_complete(self, state, max_steps, kwargs):
         """一次性执行所有步骤直到完成，返回最终结果"""
@@ -237,7 +245,13 @@ class BaseAgent:
             
         # 达到最大步数
         if step_count >= max_steps:
-            raise Exception(f"任务执行达到最大步数 {max_steps} 仍未完成")
+            # Try to get the final answer and return it
+            try:
+                return await self.provide_final_answer(state)
+            except Exception as e:
+                # If getting the final answer fails, throw the original exception
+                logger.error(f"Failed to provide final answer: {e}")
+                raise Exception(f"Task execution reached max steps {max_steps} and is still incomplete")
             
         return final_result
     
@@ -318,7 +332,61 @@ class BaseAgent:
             input_data: 输入数据
             result: step的执行结果 (可以是5-tuple或AgentResponse)
         """
+        # 默认实现不执行任何操作
         pass
+        
+    async def provide_final_answer(self, state: Dict[str, Any]) -> Any:
+        """
+        Attempt to provide a final answer when maximum steps are reached
+        
+        Args:
+            state: Current state dictionary
+            
+        Returns:
+            Final answer result
+        """
+        # 获取任务和历史
+        task = state.get('task', '')
+        history = state.get('history', [])
+        input_obj = state.get('input')
+        
+        # 构建提示，要求LLM基于目前进展提供最终答案
+        if isinstance(input_obj, Input):
+            final_answer_prompt = f"""
+You have reached the maximum step limit, but the task is not yet complete.
+
+Original task: {task}
+
+You have executed {len(history)} steps. Based on the current progress, please provide the best possible final answer or conclusion.
+Even if the answer is not perfect, provide the best result you can currently derive.
+
+Please provide the answer directly, without explaining why you couldn't complete the entire task.
+"""
+            # Update the input object's query
+            input_obj.query = final_answer_prompt
+            
+            # Execute one step to get the final answer
+            try:
+                result = await self.step(state)
+                
+                # Mark the result as final answer
+                if hasattr(result, 'terminated') and not result.terminated:
+                    # If using AgentResponse format
+                    result.terminated = True
+                    
+                elif isinstance(result, tuple) and len(result) >= 3:
+                    # If using 5-tuple format, modify the terminated flag
+                    response, score, _, truncated, info = result
+                    result = (response, score, True, truncated, info)
+                    
+                return result
+            except Exception as e:
+                logger.error(f"获取最终答案失败: {e}")
+                # 构造一个基本的回应
+                return f"The task could not be completed within the maximum step limit, but {len(history)} steps have been executed. Consider increasing the maximum step limit or simplifying the task."
+        
+        # If there is no valid input object, return basic information
+        return f"The task execution reached the maximum step limit and could not provide a valid final answer."
     
     def init_state(self, task: Union[str, Input], **kwargs) -> Dict[str, Any]:
         """
