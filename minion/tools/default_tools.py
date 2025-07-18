@@ -134,6 +134,9 @@ class PythonInterpreterTool(BaseTool):
 #this is raised and handled in LmpActionNode's _handle_tool_calls
 #but we don't raise FinalAnswerException in Tool call(normal) agent's FinalAnswerTool
 #or rather, we don't give FinalAnswerTool to Tool call(normal) agent
+
+#tmp,currently raise this FinalAnswerException from LmpActionNode's _handle_tool_calls
+#and catch this in CodeMinion
 class FinalAnswerException(Exception):
     """Exception raised when final_answer tool is called to indicate task completion"""
     def __init__(self, answer: Any):
