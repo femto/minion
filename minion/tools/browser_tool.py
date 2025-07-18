@@ -270,85 +270,85 @@ class BrowserTool:
         """Navigate to a URL."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="navigate", url=url)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def click(self, index: int) -> Dict[str, Any]:
         """Click an element by index."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="click", index=index)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def input_text(self, index: int, text: str) -> Dict[str, Any]:
         """Input text into an element."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="input_text", index=index, text=text)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def screenshot(self) -> Dict[str, Any]:
         """Capture a screenshot."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="screenshot")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def get_html(self) -> Dict[str, Any]:
         """Get page HTML content."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="get_html")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def get_text(self) -> Dict[str, Any]:
         """Get text content of the page."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="get_text")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def read_links(self) -> Dict[str, Any]:
         """Get all links on the page."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="read_links")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def execute_js(self, script: str) -> Dict[str, Any]:
         """Execute JavaScript code."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="execute_js", script=script)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def scroll(self, scroll_amount: int) -> Dict[str, Any]:
         """Scroll the page."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="scroll", scroll_amount=scroll_amount)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def switch_tab(self, tab_id: int) -> Dict[str, Any]:
         """Switch to a specific tab."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="switch_tab", tab_id=tab_id)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def new_tab(self, url: str) -> Dict[str, Any]:
         """Open a new tab."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="new_tab", url=url)
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def close_tab(self) -> Dict[str, Any]:
         """Close the current tab."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="close_tab")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def refresh(self) -> Dict[str, Any]:
         """Refresh the current page."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="refresh")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def get_current_state(self) -> Dict[str, Any]:
         """Get the current state of the browser."""
         browser_process = self._ensure_browser_available()
         result = browser_process.execute(action="get_current_state")
-        return BrowserToolResult(**result).dict()
+        return BrowserToolResult(**result).model_dump()
     
     def cleanup(self):
         """Clean up browser resources."""

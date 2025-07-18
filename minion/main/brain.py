@@ -20,6 +20,7 @@ from minion.main.input import Input
 from minion.main.python_env import PythonEnv
 from minion.main.local_python_env import LocalPythonEnv
 from minion.main.local_python_executor import LocalPythonExecutor
+from minion.main.async_python_executor import AsyncPythonExecutor
 from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
 from minion.providers import create_llm_provider
@@ -123,8 +124,8 @@ Supporting navigation and spatial memory""",
         # 设置工具集
         self.tools = tools or []
         
-        # 优先使用LocalPythonExecutor，避免Docker依赖
-        self.python_env = python_env or LocalPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
+        # 默认使用 AsyncPythonExecutor，提供更好的异步支持
+        self.python_env = python_env or AsyncPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
         self.stats_storer = stats_storer
 
@@ -225,7 +226,7 @@ Supporting navigation and spatial memory""",
             # Legacy python env (LocalPythonEnv, RpycPythonEnv)
             self.python_env.step(f"<id>{input.query_id}</id>RESET_CONTAINER_SPECIAL_KEYWORD")
         else:
-            # LocalPythonExecutor - reset by re-initializing state only
+            # LocalPythonExecutor or AsyncPythonExecutor - reset by re-initializing state only
             if hasattr(self.python_env, 'send_variables'):
                 self.python_env.send_variables(variables={})
             # Don't clear tools - they should persist across executions

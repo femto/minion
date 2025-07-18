@@ -9,26 +9,43 @@ Multi Tool Use Module - 处理GPT生成的并行工具调用
 
 import asyncio
 import inspect
-from typing import List, Dict, Any, Union
+import concurrent.futures
+import threading
+from typing import List, Dict, Any, Union, Optional, Callable, Awaitable, TypeVar, Sequence
 
 
-async def parallel(config: Dict[str, Any]) -> Dict[str, Any]:
+# 定义类型变量
+T = TypeVar('T')  # 工具返回值类型
+ToolUse = Dict[str, Any]  # 单个工具调用配置
+Config = Union[Dict[str, List[ToolUse]], List[ToolUse], None]  # 配置格式类型
+ToolResult = Dict[str, Any]  # 工具结果类型
+Result = Dict[str, Union[List[ToolResult], int, bool]]  # 返回结果类型
+
+
+async def parallel(config: Config) -> Result:
     """
     并行执行多个工具调用
     
     Args:
-        config: 包含 tool_uses 列表的配置字典
+        config: 包含 tool_uses 列表的配置字典或直接的工具调用列表
         
     Returns:
         包含所有工具执行结果的字典
     """
-    tool_uses = config.get("tool_uses", [])
+    # Handle both dict and list formats
+    if isinstance(config, list):
+        tool_uses = config
+    elif isinstance(config, dict):
+        tool_uses = config.get("tool_uses", [])
+    else:
+        return {"results": [], "error": "Invalid config format: must be dict or list"}
+        
     if not tool_uses:
         return {"results": [], "error": "No tool_uses provided"}
     
     # 获取当前执行环境中的工具
     frame = inspect.currentframe()
-    tools_dict = {}
+    tools_dict: Dict[str, Callable] = {}
     
     # 遍历调用栈，查找可用的工具
     while frame:
@@ -89,7 +106,7 @@ async def parallel(config: Dict[str, Any]) -> Dict[str, Any]:
         frame = frame.f_back
     
     # 准备并行执行的任务
-    tasks = []
+    tasks: List[Awaitable[Any]] = []
     
     for tool_use in tool_uses:
         recipient_name = tool_use.get("recipient_name", "")
@@ -114,7 +131,7 @@ async def parallel(config: Dict[str, Any]) -> Dict[str, Any]:
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     # 格式化结果
-    formatted_results = []
+    formatted_results: List[Dict[str, Any]] = []
     for i, result in enumerate(results):
         tool_use = tool_uses[i]
         if isinstance(result, Exception):
@@ -159,7 +176,7 @@ async def _execute_single_tool(tool: Any, parameters: Dict[str, Any], tool_name:
     """
     try:
         # 处理字符串类型的数值参数
-        processed_params = {}
+        processed_params: Dict[str, Any] = {}
         for key, value in parameters.items():
             if isinstance(value, str):
                 # 尝试转换数字字符串，但更保守一些
@@ -214,7 +231,7 @@ async def _create_error_result(tool_name: str, error_message: str) -> Dict[str, 
     }
 
 
-def smart_parallel(config: Union[Dict[str, Any], List[Dict[str, Any]], None] = None, **kwargs) -> Union[Dict[str, Any], Any]:
+def smart_parallel(config: Config = None, **kwargs: Any) -> Result:
     """
     智能的并行工具执行，自动检测异步环境和参数格式
     
@@ -230,9 +247,9 @@ def smart_parallel(config: Union[Dict[str, Any], List[Dict[str, Any]], None] = N
         # parallel(tool_uses=[...]) 调用方式
         config = {"tool_uses": kwargs['tool_uses']}
     elif isinstance(config, list):
-        # parallel([...]) 调用方式
-        config = {"tool_uses": config}
-    elif not isinstance(config, dict) or "tool_uses" not in config:
+        # parallel([...]) 调用方式，保持列表格式
+        config = config
+    elif not isinstance(config, (dict, list)):
         raise ValueError("参数必须是包含 'tool_uses' 键的字典，或者直接传递工具列表，或者使用 tool_uses 关键字参数")
     
     # 尝试同步执行，避免复杂的异步检测
@@ -240,10 +257,8 @@ def smart_parallel(config: Union[Dict[str, Any], List[Dict[str, Any]], None] = N
         # 检查是否已经在事件循环中
         loop = asyncio.get_running_loop()
         # 在异步环境中，创建新的事件循环来执行
-        import threading
-        import concurrent.futures
         
-        def run_in_thread():
+        def run_in_thread() -> Result:
             return asyncio.run(parallel(config))
         
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -256,12 +271,12 @@ def smart_parallel(config: Union[Dict[str, Any], List[Dict[str, Any]], None] = N
 
 
 # 为了兼容性，也提供同步版本
-def parallel_sync(config: Dict[str, Any]) -> Dict[str, Any]:
+def parallel_sync(config: Config) -> Result:
     """
     同步版本的并行工具执行（实际上会在内部使用异步）
     
     Args:
-        config: 包含 tool_uses 列表的配置字典
+        config: 包含 tool_uses 列表的配置字典或直接的工具调用列表
         
     Returns:
         包含所有工具执行结果的字典

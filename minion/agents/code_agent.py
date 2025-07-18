@@ -19,6 +19,7 @@ from datetime import datetime
 
 from .base_agent import BaseAgent
 from minion.types.agent_response import AgentResponse
+from ..tools.agent_state_aware_tool import AgentStateAwareTool
 from ..tools.base_tool import BaseTool
 from ..main.input import Input
 from ..main.local_python_executor import LocalPythonExecutor
@@ -26,29 +27,6 @@ from ..main.async_python_executor import AsyncPythonExecutor
 from ..tools.default_tools import FinalAnswerTool
 
 logger = logging.getLogger(__name__)
-
-
-class ThinkTool(BaseTool):
-    """A tool that allows the agent to pause and reflect on its current situation."""
-    
-    def __init__(self):
-        super().__init__()
-        self.name = "think"
-        self.description = "Use this tool to pause and reflect on the current situation, plan next steps, or reconsider your approach."
-    
-    def forward(self, reflection: str, **kwargs) -> str:
-        """
-        Process a reflection thought.
-        
-        Args:
-            reflection: The agent's reflection or thought process
-            
-        Returns:
-            A formatted response acknowledging the reflection
-        """
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        return f"[{timestamp}] THOUGHT: {reflection}"
-
 
 class ThinkingEngine:
     """Engine for managing different thinking strategies."""
@@ -141,7 +119,7 @@ class CodeAgent(BaseAgent):
     use_async_executor: bool = True  # Parameter to control async support
     
     # State tracking and conversation history (optional)
-    enable_state_tracking: bool = False  # Whether to enable state tracking functionality
+    enable_state_tracking: bool = False  # Whether to enable persistent state tracking functionality
     conversation_history: List[Dict[str, Any]] = field(default_factory=list)
     persistent_state: Dict[str, Any] = field(default_factory=dict)
     auto_save_state: bool = True
@@ -173,7 +151,6 @@ class CodeAgent(BaseAgent):
             self.brain.python_env = self.python_executor
         
         # Add the think tool and final answer tool
-        self.add_tool(ThinkTool())
         self.add_tool(FinalAnswerTool())
         
         # Send tools to the python executor
@@ -517,6 +494,9 @@ Now Begin!
         # Update reflection trigger counters
         if 'error_count' not in state:
             state['error_count'] = 0
+        
+        # 保存当前状态引用，便于外部访问
+        self.state = state
             
         return state
     
@@ -663,7 +643,8 @@ Use Python code to:
         """
         # Skip state management if state tracking is disabled
         if not self.enable_state_tracking:
-            return await super().run_async(task, state, max_steps, **kwargs)
+            # Pass parameters with named arguments to avoid conflicts
+            return await super().run_async(task, state=state, max_steps=max_steps, **kwargs)
         
         # Handle reset functionality
         if reset:
@@ -690,7 +671,11 @@ Use Python code to:
         
         # Execute the step with enhanced input and state
         try:
-            result = await super().run_async(enhanced_input, state, max_steps, **kwargs)
+            # Remove state from kwargs since we're passing it directly to avoid duplicate arg error
+            kwargs_copy = kwargs.copy()
+            if 'state' in kwargs_copy:
+                del kwargs_copy['state']
+            result = await super().run_async(enhanced_input, state=state, max_steps=max_steps, **kwargs_copy)
             
             # Record this interaction
             if input_data and isinstance(input_data, Input):
