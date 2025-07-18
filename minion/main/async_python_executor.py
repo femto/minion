@@ -254,10 +254,10 @@ async def evaluate_async_call(
     else:  # Assume it's a callable object
         # Check if it's an AsyncBaseTool
         if isinstance(func, AsyncBaseTool):
-            return await func(*args, **kwargs)
+            return func(*args, **kwargs) #don't await, let ast.Await handle it
         # Check if it's a coroutine function
         elif asyncio.iscoroutinefunction(func):
-            return await func(*args, **kwargs)
+            return func(*args, **kwargs) #don't await, let ast.Await handle it
         # Regular sync function call
         else:
             if func is None:
@@ -535,7 +535,8 @@ async def evaluate_async_ast(
         raise ReturnException(value)
     elif isinstance(expression, ast.Await):
         # Handle await expressions by evaluating the value and awaiting if it's a coroutine
-        value = await evaluate_async_ast(expression.value, *common_params)
+        awaitable = evaluate_async_ast(expression.value, *common_params)
+        value = await  awaitable
         return value
     elif isinstance(expression, ast.Pass):
         return None
@@ -688,8 +689,8 @@ class AsyncPythonExecutor:
         if max_print_outputs_length is None:
             self.max_print_outputs_length = DEFAULT_MAX_LEN_OUTPUT
         self.additional_authorized_imports = additional_authorized_imports
-        # Add multi_tool_use, inspect and asyncio to authorized imports for GPT parallel tool calls and async support
-        authorized_imports_with_multi_tool = list(set(BASE_BUILTIN_MODULES) | set(self.additional_authorized_imports) | {"multi_tool_use", "inspect", "asyncio"})
+        # Add multi_tool_use, functions, inspect and asyncio to authorized imports for GPT parallel tool calls and async support
+        authorized_imports_with_multi_tool = list(set(BASE_BUILTIN_MODULES) | set(self.additional_authorized_imports) | {"multi_tool_use", "inspect", "asyncio", "functions"})
         self.authorized_imports = authorized_imports_with_multi_tool
         self.static_tools = None
         self.additional_functions = additional_functions or {}
@@ -860,6 +861,15 @@ class AsyncPythonExecutor:
         # Also add multi_tool_use and functions to the state as global objects for direct access
         self.state["multi_tool_use"] = multi_tool_use_module
         self.state["functions"] = functions_namespace
+        
+        # Create a functions module for direct import
+        functions_module = types.ModuleType("functions")
+        for name, tool in converted_tools.items():
+            setattr(functions_module, name, tool)
+        
+        # Register the functions module in sys.modules so it can be imported
+        sys.modules["functions"] = functions_module
+        
         self.state["_meta_call"] = meta_call  # 添加到state以便代码调用
         self.state["asyncio"] = real_asyncio  # Add asyncio to state
         
