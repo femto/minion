@@ -46,9 +46,12 @@ class NavigateTool(AsyncBaseTool):
     
     async def forward(self, url):
         """Navigate to the specified URL."""
-        # BrowserTool的navigate方法是同步的
-        result = self.browser.navigate(url)
-        return f"Navigated to {url}"
+        try:
+            # BrowserTool的navigate方法是同步的
+            result = self.browser.navigate(url)
+            return f"Navigated to {url}"
+        except Exception as e:
+            return f"Error navigating to {url}: {str(e)}"
 
 class GetHtmlTool(AsyncBaseTool):
     """Tool for retrieving page HTML."""
@@ -78,11 +81,14 @@ class GetTextTool(AsyncBaseTool):
     
     async def forward(self, *args, **kwargs):
         """Get the text content of the current page."""
-        # BrowserTool的get_text方法是同步的
-        result = self.browser.get_text()
-        # 从结果中提取text内容
-        text = result.get("data", {}).get("text", "")
-        return text[:15000] if len(text) > 15000 else text  # 截断太长的内容
+        try:
+            # BrowserTool的get_text方法是同步的
+            result = self.browser.get_text()
+            # 从结果中提取text内容
+            text = result.get("data", {}).get("text", "")
+            return text[:15000] if len(text) > 15000 else text  # 截断太长的内容
+        except Exception as e:
+            return f"Error getting text: {str(e)}"
 
 class ReadLinksTool(AsyncBaseTool):
     """Tool for extracting links from a page."""

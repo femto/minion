@@ -402,6 +402,35 @@ async def evaluate_async_for(
     return result
 
 
+async def evaluate_async_if(
+    if_statement: ast.If,
+    state: dict[str, Any],
+    static_tools: dict[str, Union[Callable, AsyncBaseTool]],
+    custom_tools: dict[str, Union[Callable, AsyncBaseTool]],
+    authorized_imports: list[str],
+) -> Any:
+    """Async version of evaluate_if that handles await statements in if blocks"""
+    result = None
+    
+    # Evaluate the condition
+    condition_result = await evaluate_async_ast(if_statement.test, state, static_tools, custom_tools, authorized_imports)
+    
+    if condition_result:
+        # Execute the if body
+        for line in if_statement.body:
+            line_result = await evaluate_async_ast(line, state, static_tools, custom_tools, authorized_imports)
+            if line_result is not None:
+                result = line_result
+    else:
+        # Execute the else body if it exists
+        for line in if_statement.orelse:
+            line_result = await evaluate_async_ast(line, state, static_tools, custom_tools, authorized_imports)
+            if line_result is not None:
+                result = line_result
+    
+    return result
+
+
 async def set_async_value(
     target: ast.AST,
     value: Any,
@@ -486,6 +515,8 @@ async def evaluate_async_ast(
         return await evaluate_async_condition(expression, *common_params)
     elif isinstance(expression, ast.For):
         return await evaluate_async_for(expression, *common_params)
+    elif isinstance(expression, ast.If):
+        return await evaluate_async_if(expression, *common_params)
     elif isinstance(expression, ast.FunctionDef):
         return evaluate_async_function_def(expression, *common_params)
     elif isinstance(expression, ast.AsyncFunctionDef):
@@ -579,7 +610,7 @@ async def evaluate_async_python_code(
     state["_print_outputs"] = PrintContainer()
     state["_operations_count"] = {"counter": 0}
     
-    # Create a custom asyncio module
+    # Create a custom asyncio module to handle asyncio.run() in existing event loop
     import types
     import sys
     import asyncio as real_asyncio
@@ -596,37 +627,51 @@ async def evaluate_async_python_code(
                 except (AttributeError, TypeError):
                     pass
         
-        # Define custom async functions
-        async def custom_run(coro):
-            """Custom asyncio.run() for AsyncPythonExecutor"""
-            if asyncio.iscoroutine(coro):
-                return await coro
-            return coro
+        # Define custom functions that work within existing event loop
+        def custom_run(coro):
+            """
+            Custom asyncio.run() that works within an existing event loop.
+            Since we're already in an async context, we can't create a new event loop.
+            Instead, we return the coroutine to be awaited by the caller.
+            """
+            if real_asyncio.iscoroutine(coro):
+                # Return the coroutine itself - it will be awaited by the AST evaluator
+                return coro
+            elif callable(coro):
+                # If it's a callable that returns a coroutine, call it first
+                result = coro()
+                if real_asyncio.iscoroutine(result):
+                    return result
+                return result
+            else:
+                # If it's not a coroutine, just return it
+                return coro
             
-        async def custom_gather(*args):
-            """Custom asyncio.gather() for AsyncPythonExecutor"""
-            results = []
-            for arg in args:
-                if asyncio.iscoroutine(arg):
-                    results.append(await arg)
-                else:
-                    results.append(arg)
-            return results
+        async def custom_gather(*args, **kwargs):
+            """Custom asyncio.gather() that properly handles coroutines"""
+            # Use the real asyncio.gather but ensure we're handling coroutines properly
+            return await real_asyncio.gather(*args, **kwargs)
             
-        # Override functions
-        custom_asyncio.run = custom_run
-        custom_asyncio.gather = custom_gather
+        def custom_create_task(coro, **kwargs):
+            """Custom create_task that works in existing event loop"""
+            try:
+                loop = real_asyncio.get_running_loop()
+                return loop.create_task(coro, **kwargs)
+            except RuntimeError:
+                # If no running loop, just return the coroutine
+                return coro
         
-        # Save the original module if it exists
-        original_asyncio = sys.modules.get("asyncio")
-        sys.modules["asyncio"] = original_asyncio
-        static_tools["asyncio"] = original_asyncio
-
-        # Temporarily replace asyncio in sys.modules
-        # sys.modules["asyncio"] = custom_asyncio
-        #
-        # # Add to static tools
-        # static_tools["asyncio"] = custom_asyncio
+        # Override the problematic functions
+        custom_asyncio.run = custom_run
+        custom_asyncio.gather = custom_gather  
+        custom_asyncio.create_task = custom_create_task
+        
+        # Add to static tools so it's available in the execution environment
+        static_tools["asyncio"] = custom_asyncio
+        
+        # Also register in sys.modules so import asyncio uses our custom module
+        import sys
+        sys.modules["asyncio"] = custom_asyncio
 
     if "final_answer" in static_tools:
         previous_final_answer = static_tools["final_answer"]
@@ -818,50 +863,63 @@ class AsyncPythonExecutor:
         import asyncio as real_asyncio
         
         # Create a customized asyncio module
-        # asyncio_module = types.ModuleType("asyncio")
-        #
-        # # Copy all attributes from real asyncio module
-        # for attr_name in dir(real_asyncio):
-        #     if not attr_name.startswith("_") or attr_name in ("__name__", "__doc__"):
-        #         try:
-        #             setattr(asyncio_module, attr_name, getattr(real_asyncio, attr_name))
-        #         except (AttributeError, TypeError):
-        #             pass
-        #
-        # # Override the run function to work in our environment
-        # def custom_asyncio_run(coro):
-        #     """
-        #     Custom implementation of asyncio.run() for use in AsyncPythonExecutor
-        #     """
-        #     # In our environment, we're already in an event loop
-        #     # So we need to directly execute the coroutine without creating a new loop
-        #     # This simulates what asyncio.run() would do
-        #     if asyncio.iscoroutine(coro):
-        #         # We're already in an event loop, so just return the coroutine to be awaited
-        #         return coro
-        #     else:
-        #         # If it's not a coroutine, just return it directly
-        #         return coro
-        #
-        # # Define a custom gather function to handle coroutines
-        # async def custom_asyncio_gather(*args):
-        #     """
-        #     Custom implementation of asyncio.gather() for use in AsyncPythonExecutor
-        #     """
-        #     results = []
-        #     for arg in args:
-        #         if asyncio.iscoroutine(arg):
-        #             results.append(await arg)
-        #         else:
-        #             results.append(arg)
-        #     return results
-        #
-        # # Set our custom functions
-        # asyncio_module.run = custom_asyncio_run
-        # asyncio_module.gather = custom_asyncio_gather
+        asyncio_module = types.ModuleType("asyncio")
+        
+        # Copy all attributes from real asyncio module
+        for attr_name in dir(real_asyncio):
+            if not attr_name.startswith("_") or attr_name in ("__name__", "__doc__"):
+                try:
+                    setattr(asyncio_module, attr_name, getattr(real_asyncio, attr_name))
+                except (AttributeError, TypeError):
+                    pass
+        
+        # Override the run function to work in our environment
+        def custom_asyncio_run(coro):
+            """
+            Custom implementation of asyncio.run() for use in AsyncPythonExecutor.
+            Since we're already in an event loop, we can't create a new one.
+            Instead, we return the coroutine to be awaited by the caller.
+            """
+            if real_asyncio.iscoroutine(coro):
+                # Return the coroutine itself - it will be awaited by the AST evaluator
+                return coro
+            elif callable(coro):
+                # If it's a callable that returns a coroutine, call it first
+                result = coro()
+                if real_asyncio.iscoroutine(result):
+                    return result
+                return result
+            else:
+                # If it's not a coroutine, just return it directly
+                return coro
+        
+        # Define a custom gather function to handle coroutines
+        async def custom_asyncio_gather(*args, **kwargs):
+            """
+            Custom implementation of asyncio.gather() for use in AsyncPythonExecutor
+            """
+            return await real_asyncio.gather(*args, **kwargs)
+        
+        def custom_create_task(coro, **kwargs):
+            """Custom create_task that works in existing event loop"""
+            try:
+                loop = real_asyncio.get_running_loop()
+                return loop.create_task(coro, **kwargs)
+            except RuntimeError:
+                # If no running loop, just return the coroutine
+                return coro
+        
+        # Set our custom functions
+        asyncio_module.run = custom_asyncio_run
+        asyncio_module.gather = custom_asyncio_gather
+        asyncio_module.create_task = custom_create_task
         
         # Register the custom asyncio module
-        self.static_tools["asyncio"] = real_asyncio
+        self.static_tools["asyncio"] = asyncio_module
+        
+        # Also register in sys.modules so import asyncio uses our custom module
+        import sys
+        sys.modules["asyncio"] = asyncio_module
         
         # Also add multi_tool_use and functions to the state as global objects for direct access
         self.state["multi_tool_use"] = multi_tool_use_module
@@ -876,7 +934,7 @@ class AsyncPythonExecutor:
         sys.modules["functions"] = functions_module
         
         self.state["_meta_call"] = meta_call  # 添加到state以便代码调用
-        self.state["asyncio"] = real_asyncio  # Add asyncio to state
+        self.state["asyncio"] = asyncio_module  # Add custom asyncio to state
         
         # 记录meta工具信息（用于调试）
         if meta_tools:
