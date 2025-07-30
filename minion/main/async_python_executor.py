@@ -619,12 +619,14 @@ async def evaluate_async_python_code(
         
         # Save the original module if it exists
         original_asyncio = sys.modules.get("asyncio")
-        
+        sys.modules["asyncio"] = original_asyncio
+        static_tools["asyncio"] = original_asyncio
+
         # Temporarily replace asyncio in sys.modules
-        sys.modules["asyncio"] = custom_asyncio
-        
-        # Add to static tools
-        static_tools["asyncio"] = custom_asyncio
+        # sys.modules["asyncio"] = custom_asyncio
+        #
+        # # Add to static tools
+        # static_tools["asyncio"] = custom_asyncio
 
     if "final_answer" in static_tools:
         previous_final_answer = static_tools["final_answer"]
