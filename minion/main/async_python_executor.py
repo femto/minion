@@ -783,7 +783,8 @@ class AsyncPythonExecutor:
                 converted_tools[name] = tool
             elif hasattr(tool, 'forward') and isinstance(tool, BaseTool):  # BaseTool instance
                 # Convert sync tool to async using adapter
-                converted_tools[name] = SyncToAsyncToolAdapter(tool)
+                # no need converted now
+                converted_tools[name] = tool
             else:
                 # Regular function, keep as is
                 converted_tools[name] = tool

@@ -596,23 +596,12 @@ Use Python code to:
                         tool_dict[tool.name] = tool
                 self.python_executor.send_tools(tool_dict)
             else:
-                # For LocalPythonExecutor, convert tools to wrapper functions
-                tool_functions = {}
+                #same logic
+                tool_dict = {}
                 for tool in self.tools:
-                    if hasattr(tool, 'forward') and hasattr(tool, 'name'):
-                        # Create a wrapper function for the tool
-                        def create_tool_wrapper(tool_instance):
-                            def tool_wrapper(*args, **kwargs):
-                                return tool_instance.forward(*args, **kwargs)
-                            tool_wrapper.__name__ = tool_instance.name
-                            tool_wrapper.__doc__ = tool_instance.description
-                            return tool_wrapper
-                        
-                        tool_functions[tool.name] = create_tool_wrapper(tool)
-                
-                # Send tools to the executor
-                if hasattr(self.python_executor, 'send_tools'):
-                    self.python_executor.send_tools(tool_functions)
+                    if hasattr(tool, 'name'):
+                        tool_dict[tool.name] = tool
+                self.python_executor.send_tools(tool_dict)
     
     def add_tool(self, tool: BaseTool):
         """Add a tool and update the executor."""

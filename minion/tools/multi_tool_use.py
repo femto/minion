@@ -201,11 +201,12 @@ async def _execute_single_tool(tool: Any, parameters: Dict[str, Any], tool_name:
         
         # 检查工具类型并调用
         if hasattr(tool, 'forward'):
-            # BaseTool或AsyncBaseTool实例
+            # BaseTool或AsyncBaseTool实例 - 应该调用工具实例本身，不是直接调用forward
+            # 这样可以确保通过__call__方法，包含初始化检查和参数处理逻辑
             if asyncio.iscoroutinefunction(tool.forward):
-                result = await tool.forward(**processed_params)
+                result = await tool(**processed_params)  # 调用__call__方法
             else:
-                result = tool.forward(**processed_params)
+                result = tool(**processed_params)  # 调用__call__方法
         elif callable(tool):
             # 普通函数或异步函数
             if asyncio.iscoroutinefunction(tool):
