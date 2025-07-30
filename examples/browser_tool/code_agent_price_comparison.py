@@ -127,7 +127,7 @@ async def run_price_comparison():
         return
     
     # Initialize the browser tool
-    browser = BrowserTool(headless=True)
+    browser = BrowserTool(headless=False)
     
     try:
         # Initialize the code agent with LocalPythonExecutor for Brain
@@ -152,7 +152,7 @@ async def run_price_comparison():
         # Create pricing data tool
         pricing_tool = GetPricingDataTool()
         # Register it directly - this is what was missing before
-        agent.add_tool(pricing_tool)
+        #agent.add_tool(pricing_tool)
         
         # Add browser tools to the agent
         agent.add_tool(NavigateTool(browser))
@@ -166,41 +166,88 @@ async def run_price_comparison():
         
         # Create the task prompt
         task_prompt = """
-        I need you to create a detailed price comparison between OpenAI's GPT-4o and DeepSeek-Coder models.
+        I need you to create a detailed price comparison between OpenAI's GPT-4o and DeepSeek-Coder models by actively searching for current pricing information online.
         
-        First, get the fallback pricing data using the get_pricing_data tool.
+        Your task is to:
         
-        Then, analyze the pricing data and create a comparison with the following:
+        1. **Use browser tools to search for current pricing:**
+           - Navigate to OpenAI's pricing page (https://openai.com/pricing) to get GPT-4o pricing
+           - Navigate to DeepSeek's website or documentation to find DeepSeek-Coder pricing
+           - Extract the current token prices for both input and output tokens
+           - Look for any recent pricing updates or announcements
         
-        1. Basic price comparison (input and output token prices)
-        2. Calculate costs for these scenarios:
-           - Small: 1K input + 0.5K output tokens
-           - Medium: 5K input + 2K output tokens
-           - Large: 20K input + 5K output tokens
-        3. Calculate savings when using the cheaper model
-        4. Provide recommendations for different use cases
+        2. **If web scraping fails, use fallback data:**
+           - Only use the get_pricing_data tool as a backup if you cannot find current pricing online
+           - Clearly indicate when you're using fallback vs. current data
         
-        Format your response as a detailed comparison with clear sections.
+        3. **Perform detailed analysis:**
+           - Basic price comparison (input and output token prices per 1K tokens)
+           - Calculate costs for these usage scenarios:
+             * Small: 1K input + 0.5K output tokens
+             * Medium: 5K input + 2K output tokens  
+             * Large: 20K input + 5K output tokens
+             * Enterprise: 100K input + 20K output tokens
+           - Calculate percentage savings when using the cheaper model
+           - Monthly cost estimates for different usage levels
+        
+        4. **Provide actionable recommendations:**
+           - Best model for different use cases (coding, general tasks, cost-sensitive projects)
+           - Break-even analysis for switching between models
+           - Considerations beyond just price (quality, features, context window)
+        
+        **Important:** Prioritize using browser tools to get the most current pricing information. Navigate to official pricing pages, extract text content, and parse the pricing details before falling back to static data.
+        
+        Format your response as a comprehensive comparison with clear sections and show your web scraping process.
         """
         
         # Create system prompt
         system_prompt = """
         You are an AI pricing analyst that helps developers compare costs between different 
-        LLM models. You have access to browser tools and pricing data tools to gather and
-        analyze pricing information.
+        LLM models. You have access to browser tools for web scraping and pricing data tools.
         
-        When analyzing pricing:
-        1. Show your calculations clearly
-        2. Compare models fairly and objectively
-        3. Make practical recommendations based on use cases
-        4. Format your output in a readable way with clear sections
+        **Your primary approach should be:**
+        1. **Always try browser tools first** - Navigate to official pricing pages and extract current data
+        2. Use navigate tool to go to pricing pages
+        3. Use get_text or get_html tools to extract pricing information
+        4. Parse the extracted content to find token prices
+        5. Only use fallback pricing data if web scraping completely fails
         
-        Output your analysis as JSON when requested.
+        **When analyzing pricing:**
+        1. Show your web scraping process and what you found
+        2. Display calculations step-by-step with clear math
+        3. Compare models objectively with current market data
+        4. Provide practical recommendations for different developer scenarios
+        5. Format output with clear sections and readable structure
+        6. Indicate data sources and freshness (web-scraped vs fallback)
+        
+        **Web scraping strategy:**
+        - Start with OpenAI pricing page: https://openai.com/pricing
+        - Look for DeepSeek pricing on their official site or documentation
+        - Extract specific token pricing (per 1K tokens for input/output)
+        - Note any special pricing tiers or volume discounts
         """
+        
+        # Create the input with additional context about where to find pricing
+        additional_context = """
+        
+        **Suggested URLs to check for current pricing:**
+        - OpenAI GPT-4o: https://openai.com/pricing
+        - DeepSeek: https://www.deepseek.com/ or https://platform.deepseek.com/pricing
+        - Alternative sources: GitHub repos, documentation sites, or API documentation
+        
+        **What to look for:**
+        - Price per 1K input tokens
+        - Price per 1K output tokens  
+        - Any volume discounts or special pricing tiers
+        - Context window limits
+        - Model capabilities and features
+        """
+        
+        full_prompt = task_prompt + additional_context
         
         # Create the input
         input_obj = Input(
-            query=task_prompt,
+            query=full_prompt,
         )
         
         # Run the agent
