@@ -14,7 +14,7 @@ from typing import Dict, Any, List
 
 from minion.agents.state_code_agent import StateCodeAgent
 from minion.tools import BrowserTool, HAS_BROWSER_TOOL
-from minion.tools.base_tool import BaseTool
+from minion.tools.async_base_tool import AsyncBaseTool
 from minion.main.input import Input
 from minion.main.local_python_executor import LocalPythonExecutor
 
@@ -35,7 +35,7 @@ FALLBACK_PRICES = {
 }
 
 # Create custom tool classes that extend BaseTool
-class NavigateTool(BaseTool):
+class NavigateTool(AsyncBaseTool):
     """Tool for navigating to URLs."""
     
     def __init__(self, browser):
@@ -44,11 +44,13 @@ class NavigateTool(BaseTool):
         self.description = "Navigate to a URL"
         self.browser = browser
     
-    def forward(self, url):
+    async def forward(self, url):
         """Navigate to the specified URL."""
-        return self.browser.navigate(url)
+        # BrowserTool的navigate方法是同步的
+        result = self.browser.navigate(url)
+        return f"Navigated to {url}"
 
-class GetHtmlTool(BaseTool):
+class GetHtmlTool(AsyncBaseTool):
     """Tool for retrieving page HTML."""
     
     def __init__(self, browser):
@@ -57,11 +59,15 @@ class GetHtmlTool(BaseTool):
         self.description = "Get the HTML content of the current page"
         self.browser = browser
     
-    def forward(self):
+    async def forward(self, *args, **kwargs):
         """Get the HTML content of the current page."""
-        return self.browser.get_html()
+        # BrowserTool的get_html方法是同步的
+        result = self.browser.get_html()
+        # 从结果中提取HTML内容
+        html = result.get("data", {}).get("html", "")
+        return html[:20000] if len(html) > 20000 else html  # 截断太长的内容
 
-class GetTextTool(BaseTool):
+class GetTextTool(AsyncBaseTool):
     """Tool for retrieving page text."""
     
     def __init__(self, browser):
@@ -70,11 +76,15 @@ class GetTextTool(BaseTool):
         self.description = "Get the text content of the current page"
         self.browser = browser
     
-    def forward(self):
+    async def forward(self, *args, **kwargs):
         """Get the text content of the current page."""
-        return self.browser.get_text()
+        # BrowserTool的get_text方法是同步的
+        result = self.browser.get_text()
+        # 从结果中提取text内容
+        text = result.get("data", {}).get("text", "")
+        return text[:15000] if len(text) > 15000 else text  # 截断太长的内容
 
-class ReadLinksTool(BaseTool):
+class ReadLinksTool(AsyncBaseTool):
     """Tool for extracting links from a page."""
     
     def __init__(self, browser):
@@ -83,11 +93,15 @@ class ReadLinksTool(BaseTool):
         self.description = "Get all links on the current page"
         self.browser = browser
     
-    def forward(self):
+    async def forward(self, *args, **kwargs):
         """Get all links on the current page."""
-        return self.browser.read_links()
+        # BrowserTool的read_links方法是同步的
+        result = self.browser.read_links()
+        # 从结果中提取links内容
+        links = result.get("data", {}).get("links", [])
+        return links
 
-class GetPricingDataTool(BaseTool):
+class GetPricingDataTool(AsyncBaseTool):
     """Tool that returns the fallback pricing data."""
     
     def __init__(self):
@@ -95,7 +109,7 @@ class GetPricingDataTool(BaseTool):
         self.name = "get_pricing_data"
         self.description = "Get fallback pricing data for GPT-4o and DeepSeek-Coder"
     
-    def forward(self):
+    async def forward(self, *args, **kwargs):
         """Return the fallback pricing data."""
         return {
             "data": FALLBACK_PRICES,
