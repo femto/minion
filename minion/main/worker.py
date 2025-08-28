@@ -119,7 +119,7 @@ class RawMinion(WorkerMinion):
         
         # Return AgentResponse instead of just the answer
         return AgentResponse(
-            response=self.answer,
+            answer=self.answer,
             score=1.0,
             terminated=False,
             truncated=False,
