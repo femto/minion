@@ -219,6 +219,9 @@ class OpenAIProvider(BaseProvider):
             if prepared_tools:
                 kwargs['tools'] = prepared_tools
 
+        # 移除不被OpenAI API支持的参数
+        kwargs.pop('system_prompt', None)  # system_prompt应该已经在messages中处理了
+
         # 强制设置stream=True
         kwargs['stream'] = True
 

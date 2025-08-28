@@ -25,9 +25,10 @@ async def smart_brain():
 
     # 使用从 minion/__init__.py 导入的 config 对象
     #model = "gpt-4o"
-    model = "gpt-4.1"
+    #model = "gpt-4.1"
     #model = "o4-mini"
-    #model = "claude"
+    #model = "claude-3.5"
+    model = "chatgpt-4o-latest"
     #model = "gpt-4o-mini"
     #model = "gemini-2.0-flash-exp"
     # model = "deepseek-r1"
@@ -39,9 +40,9 @@ async def smart_brain():
 
     llm = create_llm_provider(llm_config)
 
-    python_env_config = {"port": 3006}
-    python_env = RpycPythonEnv(port=python_env_config.get("port", 3006))
-    #python_env = LocalPythonEnv(verbose=False)
+    # python_env_config = {"port": 3006}
+    # python_env = RpycPythonEnv(port=python_env_config.get("port", 3006))
+    python_env = LocalPythonEnv(verbose=False)
     brain = Brain(
         python_env=python_env,
         llm=llm,
@@ -53,8 +54,8 @@ async def smart_brain():
     # print(result.answer)
     #
     #
-    # result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[final_answer_tool])
-    # print(result.answer)
+    result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[])
+    print(result.answer)
     #
     # result = await brain.step(query="what's the solution 234*568",route="python", check=False)
     # print(result.answer)
