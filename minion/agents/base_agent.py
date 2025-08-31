@@ -145,6 +145,7 @@ class BaseAgent:
                        task: Optional[Union[str, Input]] = None,
                        state: Optional[Dict[str, Any]] = None, 
                        max_steps: Optional[int] = None,
+                       stream: bool = False,
                        **kwargs) -> Any:
         """
         运行完整任务，自动多步执行直到完成，支持从中断状态恢复
@@ -153,9 +154,9 @@ class BaseAgent:
             task: 任务描述或Input对象 (state为None时必须提供)
             state: 已有状态，用于恢复中断的执行
             max_steps: 最大步数
+            stream: 若为True则使用异步迭代器返回中间结果
             **kwargs: 附加参数，可包含:
                 - tools: 临时工具覆盖
-                - streaming: 若为True则使用异步迭代器返回中间结果
                 - 其他参数会传递给brain.step
                 
         Returns:
@@ -164,7 +165,7 @@ class BaseAgent:
         self._ensure_setup()
         
         # 处理参数
-        streaming = kwargs.pop("streaming", False)
+        streaming = stream
         
         # 处理状态初始化或恢复
         if state is None:
@@ -189,18 +190,18 @@ class BaseAgent:
         # 保存当前状态引用，便于外部访问
         self._current_state = state
         
-        if streaming:
+        if stream:
             # 返回异步迭代器
-            return self._run_streaming(state, max_steps, kwargs)
+            return self._run_stream(state, max_steps, kwargs)
         else:
             # 一次性执行完成返回最终结果
             return await self._run_complete(state, max_steps, kwargs)
             
-    async def _run_streaming(self, state, max_steps, kwargs):
+    async def _run_stream(self, state, max_steps, kwargs):
         """返回一个异步迭代器，逐步执行并返回中间结果"""
         step_count = 0
         while step_count < max_steps:
-            result = await self.step(state, **kwargs)
+            result = await self.step(state, stream=kwargs.get('stream', False), **kwargs)
             
             # 返回本步结果
             yield result
@@ -233,7 +234,7 @@ class BaseAgent:
         final_result = None
         
         while step_count < max_steps:
-            result = await self.step(state, **kwargs)
+            result = await self.step(state, stream=kwargs.get('stream', False), **kwargs)
             
             # 检查是否完成
             if self.is_done(result, state):
@@ -255,7 +256,7 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
+    async def step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
@@ -284,7 +285,7 @@ class BaseAgent:
             tools = self.tools
             
         # 执行主要步骤
-        result = await self.execute_step(state, **kwargs)
+        result = await self.execute_step(state, stream=stream, **kwargs)
         
         # 确保result是AgentResponse格式
         if not isinstance(result, AgentResponse):
@@ -296,7 +297,7 @@ class BaseAgent:
         
         return result
     
-    async def execute_step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
+    async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
         """
         执行实际的步骤操作，默认委托给brain处理。子类可以重写此方法以自定义执行逻辑。
         Args:
@@ -306,7 +307,7 @@ class BaseAgent:
             AgentResponse: 结构化的响应对象
         """
         # 传递状态给brain.step
-        result = await self.brain.step(state, **kwargs)
+        result = await self.brain.step(state, stream=stream, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):
@@ -367,7 +368,7 @@ Please provide the answer directly, without explaining why you couldn't complete
             
             # Execute one step to get the final answer
             try:
-                result = await self.step(state)
+                result = await self.step(state, stream=False)
                 
                 # Mark the result as final answer
                 if hasattr(result, 'terminated') and not result.terminated:

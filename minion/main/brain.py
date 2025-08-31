@@ -161,6 +161,7 @@ Supporting navigation and spatial memory""",
         system_prompt = config_kwargs.get("system_prompt")
         tools = config_kwargs.get("tools")
         messages = config_kwargs.get("messages")
+        stream = config_kwargs.get("stream", False)
         
         # 验证state中必须有input
         if input is None:
@@ -173,6 +174,7 @@ Supporting navigation and spatial memory""",
             input_kwargs.pop('system_prompt', None)
             input_kwargs.pop('tools', None)
             input_kwargs.pop('messages', None)
+            input_kwargs.pop('stream', None)
             
             input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
             state["input"] = input
@@ -203,6 +205,8 @@ Supporting navigation and spatial memory""",
         input.tools = current_tools
         if system_prompt is not None:
             input.system_prompt = system_prompt
+        if stream is not None:
+            input.stream = stream
 
         # 选择心智
         mind_id = input.mind_id or await self.choose_mind(input)

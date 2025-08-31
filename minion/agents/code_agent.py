@@ -172,7 +172,7 @@ class CodeAgent(BaseAgent):
             }
         logger.info("State tracking initialized")
 
-    async def execute_step(self, state: Dict[str, Any], **kwargs) -> AgentResponse:
+    async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
         """
         Execute a step with enhanced code-based reasoning.
         
@@ -208,7 +208,7 @@ class CodeAgent(BaseAgent):
             # Call brain.step with proper state format - brain expects state dict with 'input' key
             brain_state = state.copy()
             brain_state["input"] = enhanced_input
-            result = await self.brain.step(brain_state, **kwargs)
+            result = await self.brain.step(brain_state, stream=stream, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
@@ -616,6 +616,7 @@ Use Python code to:
                        state: Optional[Dict[str, Any]] = None, 
                        max_steps: Optional[int] = None,
                        reset: bool = False,
+                       stream: bool = False,
                        **kwargs) -> Any:
         """
         Run the agent with enhanced state management and optional reset capability.
@@ -633,7 +634,7 @@ Use Python code to:
         # Skip state management if state tracking is disabled
         if not self.enable_state_tracking:
             # Pass parameters with named arguments to avoid conflicts
-            return await super().run_async(task, state=state, max_steps=max_steps, **kwargs)
+            return await super().run_async(task, state=state, max_steps=max_steps, stream=stream, **kwargs)
         
         # Handle reset functionality
         if reset:
@@ -664,7 +665,7 @@ Use Python code to:
             kwargs_copy = kwargs.copy()
             if 'state' in kwargs_copy:
                 del kwargs_copy['state']
-            result = await super().run_async(enhanced_input, state=state, max_steps=max_steps, **kwargs_copy)
+            result = await super().run_async(enhanced_input, state=state, max_steps=max_steps, stream=stream, **kwargs_copy)
             
             # Record this interaction
             if input_data and isinstance(input_data, Input):

@@ -91,7 +91,7 @@ class OpenAIProvider(BaseProvider):
             Raw OpenAI API response object
         """
         prepared_messages = self._prepare_messages(messages)
-        model = self.config.model
+        model = kwargs.pop('model', self.config.model)  # 允许覆盖模型
 
         # 处理tools参数
         if 'tools' in kwargs:
@@ -150,7 +150,7 @@ class OpenAIProvider(BaseProvider):
             Raw OpenAI API response object
         """
         prepared_messages = self._prepare_messages(messages)
-        model = self.config.model
+        model = kwargs.pop('model', self.config.model)  # 允许覆盖模型
 
         # 处理tools参数
         if 'tools' in kwargs:

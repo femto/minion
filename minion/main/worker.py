@@ -95,7 +95,7 @@ class RawMinion(WorkerMinion):
             messages = construct_messages_from_template(
                 template_str, self.input, task=self.task
             )
-            response = await node.execute(messages, tools=tools)
+            response = await node.execute(messages, tools=tools, stream=self.input.stream)
         else:
             query = self.input.query
             # Support both string and multimodal queries
@@ -104,10 +104,10 @@ class RawMinion(WorkerMinion):
                 # Create a temporary object with query and system_prompt
                 temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
                 messages = construct_simple_message(temp_input)
-                response = await node.execute(messages, tools=tools)
+                response = await node.execute(messages, tools=tools, stream=self.input.stream)
             else:
                 # For simple string queries, use traditional approach
-                response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools)
+                response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools, stream=self.input.stream)
 
         # Extract answer using DeepSeek think mode
         think_content, answer_content = extract_think_and_answer(response)

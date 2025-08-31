@@ -26,7 +26,7 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, stream=False, **kwargs) -> Any:
         # 处理 system_prompt 参数
         system_prompt = kwargs.pop('system_prompt', None)
         
@@ -79,6 +79,11 @@ class LmpActionNode(LLMActionNode):
 
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
         api_params.update(kwargs)
+        
+        # 处理流式参数
+        if stream:
+            api_params['stream'] = True
+            
         original_response_format = response_format
 
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
@@ -122,7 +127,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
 
             messages.append({"role": "user", "content": prompt})
 
-        response = await super().execute(messages, **api_params)
+        # 根据是否流式调用不同的方法
+        if stream:
+            response = await super().execute_stream(messages, **api_params)
+        else:
+            response = await super().execute(messages, **api_params)
         
         # 从 ChatCompletion 对象中提取字符串内容
         if hasattr(response, 'choices') and hasattr(response.choices[0], 'message'):
