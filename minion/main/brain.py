@@ -31,12 +31,34 @@ class Mind(BaseModel):
     description: str = ""
     brain: Any = None  # Brain
 
-    async def step(self, input):
+    def step(self, input):
         moderator = ModeratorMinion(input=input, brain=self.brain)
-        agent_response = await moderator.execute()
         
-        # 直接返回ModeratorMinion的AgentResponse，保持所有状态信息
+        # 检查是否需要流式输出
+        if hasattr(input, 'stream') and input.stream:
+            # 流式输出：返回异步生成器
+            return self._stream_step_generator(moderator)
+        else:
+            # 普通执行：返回协程
+            return self._normal_step(moderator)
+    
+    async def _normal_step(self, moderator):
+        """普通执行步骤"""
+        agent_response = await moderator.execute()
         return agent_response
+    
+    async def _stream_step_generator(self, moderator):
+        """真正的流式步骤生成器"""
+        # 检查 moderator 是否支持流式输出
+        if hasattr(moderator, 'execute_stream'):
+            # 使用真正的流式输出
+            async for chunk in moderator.execute_stream():
+                yield chunk
+        else:
+            # 回退到普通执行
+            agent_response = await moderator.execute()
+            content = agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
+            yield content
 
 
 class Brain:
@@ -205,7 +227,8 @@ Supporting navigation and spatial memory""",
         input.tools = current_tools
         if system_prompt is not None:
             input.system_prompt = system_prompt
-        if stream is not None:
+        # 只有当 config_kwargs 中明确传递了 stream 参数时才覆盖
+        if "stream" in config_kwargs:
             input.stream = stream
 
         # 选择心智
@@ -216,14 +239,19 @@ Supporting navigation and spatial memory""",
             self.llm.config.temperature = 1
         mind = self.minds[mind_id]
         
-        # 执行步骤，确保返回AgentResponse
-        result = await mind.step(input)
-        
-        # 确保结果是AgentResponse格式
-        if not isinstance(result, AgentResponse):
-            result = AgentResponse.from_tuple(result)
+        # 检查是否需要流式输出
+        if hasattr(input, 'stream') and input.stream:
+            # 流式输出：直接返回异步生成器
+            return mind.step(input)
+        else:
+            # 普通执行：await 结果并确保返回AgentResponse
+            result = await mind.step(input)
             
-        return result
+            # 确保结果是AgentResponse格式
+            if not isinstance(result, AgentResponse):
+                result = AgentResponse.from_tuple(result)
+                
+            return result
 
     def cleanup_python_env(self, input):
         if hasattr(self.python_env, 'step'):

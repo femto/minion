@@ -129,7 +129,8 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
 
         # 根据是否流式调用不同的方法
         if stream:
-            response = await super().execute_stream(messages, **api_params)
+            # 流式模式：返回异步生成器
+            return self._execute_stream_generator(messages, **api_params)
         else:
             response = await super().execute(messages, **api_params)
         
@@ -175,6 +176,46 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         if self.output_parser:
             response_text = self.output_parser(response_text)
         return response_text
+    
+    async def _execute_stream_generator(self, messages, **api_params):
+        """流式执行生成器"""
+        # 添加 input_parser 处理
+        if self.input_parser:
+            messages = self.input_parser(messages)
+
+        # Convert string/single message to list
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+        elif isinstance(messages, Message):
+            messages = [messages.model_dump()]
+        elif isinstance(messages, dict) and "role" in messages:
+            messages = [messages]
+        elif isinstance(messages, list) and all(isinstance(msg, Message) for msg in messages):
+            messages = [msg.model_dump() for msg in messages]
+
+        # 使用流式生成
+        full_content = ""
+        async for chunk in self.llm.generate_stream(messages, **api_params):
+            full_content += chunk
+            yield chunk  # 实时 yield 每个 chunk
+        
+        # 处理工具调用
+        tools = api_params.get('tools')
+        if tools is not None:
+            full_content = await self._handle_tool_calls_stream(full_content, tools, messages, api_params)
+        
+        # 最终处理
+        if self.output_parser:
+            full_content = self.output_parser(full_content)
+        
+        # 返回最终完整内容作为特殊标记
+        yield f"\n[STREAM_COMPLETE: {full_content}]"
+    
+    async def _handle_tool_calls_stream(self, response, tools, messages, api_params):
+        """处理流式模式下的工具调用"""
+        # 简化版本，直接返回响应
+        # 在流式模式下，工具调用会在完整响应后处理
+        return response
 
     def _dict_to_xml_example(self, data, root_name="root"):
         """Helper method to convert a dictionary to XML example string."""

@@ -8,6 +8,7 @@ import inspect
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
+from ..main.action_step import ActionStep, StreamChunk, StreamingActionManager
 from minion.types.agent_response import AgentResponse
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,9 @@ class BaseAgent:
     # 生命周期管理
     _is_setup: bool = field(default=False, init=False)
     _mcp_toolsets: List[Any] = field(default_factory=list, init=False)  # List of MCPToolset instances
+    
+    # 流式输出管理
+    _streaming_manager: StreamingActionManager = field(default_factory=StreamingActionManager, init=False)
     
     def __post_init__(self):
         """初始化后的处理"""
@@ -200,33 +204,96 @@ class BaseAgent:
     async def _run_stream(self, state, max_steps, kwargs):
         """返回一个异步迭代器，逐步执行并返回中间结果"""
         step_count = 0
+        
         while step_count < max_steps:
-            result = await self.step(state, stream=kwargs.get('stream', False), **kwargs)
+            # 开始新的步骤
+            action_step = self._streaming_manager.start_step(
+                step_type="reasoning",
+                input_query=state.get("input", {}).get("query", "") if isinstance(state.get("input"), dict) else str(state.get("input", ""))
+            )
             
-            # 返回本步结果
-            yield result
+            # yield 步骤开始信息
+            yield StreamChunk(
+                content=f"[STEP {step_count + 1}] Starting reasoning...\n",
+                chunk_type="step_start",
+                metadata={"step_number": step_count + 1, "step_id": action_step.step_id}
+            )
+            
+            # 执行步骤并流式输出
+            async for chunk in self._execute_step_stream(state, **kwargs):
+                action_step.add_chunk(chunk)
+                yield chunk
+            
+            # 完成步骤
+            result = action_step.to_agent_response()
             
             # 检查是否完成
             if self.is_done(result, state):
-                final_result = self.finalize(result, state)
-                yield final_result
+                action_step.is_final_answer = True
+                self._streaming_manager.complete_current_step(is_final_answer=True)
+                
+                yield StreamChunk(
+                    content=f"\n[FINAL] Task completed!\n",
+                    chunk_type="completion",
+                    metadata={"final_answer": True}
+                )
                 break
             
             # 更新状态，继续下一步
+            self._streaming_manager.complete_current_step()
             state = self.update_state(state, result)
             step_count += 1
             
+            yield StreamChunk(
+                content=f"\n[STEP {step_count}] Completed. Moving to next step...\n",
+                chunk_type="step_end",
+                metadata={"step_number": step_count}
+            )
+            
         # 达到最大步数
         if step_count >= max_steps:
-            # Try to get the final answer and return it
+            yield StreamChunk(
+                content=f"\n[WARNING] Reached maximum steps ({max_steps}). Providing best available answer...\n",
+                chunk_type="warning"
+            )
+            
             try:
                 final_answer = await self.provide_final_answer(state)
-                yield final_answer
-                # No break needed here as we're already at the end of the while loop
+                yield StreamChunk(
+                    content=f"Final answer: {final_answer}\n",
+                    chunk_type="final_answer"
+                )
             except Exception as e:
-                # If getting the final answer fails, throw the original exception
                 logger.error(f"Failed to provide final answer: {e}")
-                raise Exception(f"Task execution reached max steps {max_steps} and is still incomplete")
+                yield StreamChunk(
+                    content=f"[ERROR] Could not provide final answer: {e}\n",
+                    chunk_type="error"
+                )
+    
+    async def _execute_step_stream(self, state, **kwargs):
+        """执行单个步骤的流式输出"""
+        try:
+            # 调用 brain.step 并检查是否返回流式生成器
+            result = await self.brain.step(state, stream=True, **kwargs)
+            
+            # 如果 brain.step 返回的是异步生成器，则流式处理
+            if hasattr(result, '__aiter__'):
+                async for chunk in result:
+                    if isinstance(chunk, str):
+                        yield StreamChunk(content=chunk, chunk_type="llm_output")
+                    else:
+                        yield StreamChunk(content=str(chunk), chunk_type="llm_output")
+            else:
+                # 如果不是流式，直接返回结果
+                content = result.answer if hasattr(result, 'answer') else str(result)
+                yield StreamChunk(content=content, chunk_type="llm_output")
+                
+        except Exception as e:
+            logger.error(f"Error in step execution: {e}")
+            yield StreamChunk(
+                content=f"[ERROR] Step execution failed: {e}\n",
+                chunk_type="error"
+            )
             
     async def _run_complete(self, state, max_steps, kwargs):
         """一次性执行所有步骤直到完成，返回最终结果"""

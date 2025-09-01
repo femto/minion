@@ -252,7 +252,7 @@ class OpenAIProvider(BaseProvider):
                 full_content += content
                 # 调用log_llm_stream实时显示流式内容
                 log_llm_stream(content)
-                #yield content
+                yield content  # 真正的流式输出
 
         # 更新token计数
         completion_tokens = len(full_content) // 4  # 粗略估计
@@ -263,7 +263,6 @@ class OpenAIProvider(BaseProvider):
         # 保存token计数
         self.last_input_token_count = prompt_tokens
         self.last_output_token_count = completion_tokens
-        return full_content
 
     async def generate_stream_response(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> Any:
         """
