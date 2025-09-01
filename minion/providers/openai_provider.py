@@ -233,7 +233,7 @@ class OpenAIProvider(BaseProvider):
         ):
             yield chunk
 
-    async def generate_stream(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs) -> AsyncIterator[str]:
+    async def generate_stream(self, messages: List[Message] | List[dict], temperature: Optional[float] = None, **kwargs):
         """
         Generate streaming completion from messages
 
@@ -243,16 +243,89 @@ class OpenAIProvider(BaseProvider):
             **kwargs: Additional parameters to pass to the API
 
         Yields:
-            str: Generated text chunks
+            StreamChunk: Generated text chunks or tool calls with metadata
         """
+        from minion.main.action_step import StreamChunk
+        
         full_content = ""
+        chunk_counter = 0
+        tool_call_map = {}   # index -> tool_call dict (for multi-call)
+        has_tool_calls = False
+        
         async for chunk in self.generate_stream_chunk(messages, temperature, **kwargs):
-            if hasattr(chunk, 'choices') and chunk.choices and hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                full_content += content
-                # 调用log_llm_stream实时显示流式内容
-                log_llm_stream(content)
-                yield content  # 真正的流式输出
+            if hasattr(chunk, 'choices') and chunk.choices:
+                delta = chunk.choices[0].delta
+                
+                # Handle tool_calls (function calls)
+                if hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    has_tool_calls = True
+                    for tc in delta.tool_calls:
+                        # 使用 index 而不是 id 来跟踪工具调用
+                        tc_index = getattr(tc, 'index', None)
+                        if tc_index is None:
+                            continue
+                        
+                        # Initialize or update the tool_call dict
+                        if tc_index not in tool_call_map:
+                            tool_call_map[tc_index] = {
+                                'id': getattr(tc, 'id', f'call_{tc_index}'),
+                                'type': getattr(tc, 'type', 'function'),
+                                'function': {
+                                    'name': '',
+                                    'arguments': ''
+                                }
+                            }
+                        
+                        # Update function name and arguments (may come in pieces)
+                        func = getattr(tc, 'function', None)
+                        if func:
+                            if hasattr(func, 'name') and func.name:
+                                tool_call_map[tc_index]['function']['name'] += func.name
+                            if hasattr(func, 'arguments') and func.arguments:
+                                tool_call_map[tc_index]['function']['arguments'] += func.arguments
+                
+                # Handle normal content
+                if hasattr(delta, 'content') and delta.content:
+                    content = delta.content
+                    full_content += content
+                    chunk_counter += 1
+                    
+                    # 调用log_llm_stream实时显示流式内容
+                    log_llm_stream(content)
+                    
+                    # 创建文本内容的 StreamChunk
+                    stream_chunk = StreamChunk(
+                        content=content,
+                        chunk_type="text",
+                        metadata={
+                            "provider": "openai",
+                            "model": self.config.model,
+                            "chunk_number": chunk_counter,
+                            "total_length": len(full_content),
+                            "chunk_id": getattr(chunk, 'id', None),
+                            "finish_reason": getattr(chunk.choices[0], 'finish_reason', None) if chunk.choices else None,
+                            "api_type": self.config.api_type
+                        }
+                    )
+                    yield stream_chunk
+        
+        # 如果有 tool calls，在流式结束时 yield 完整的 tool calls
+        if has_tool_calls and tool_call_map:
+            tool_calls = list(tool_call_map.values())
+            
+            # 为每个完整的 tool call 创建一个 StreamChunk
+            for tool_call in tool_calls:
+                tool_call_chunk = StreamChunk(
+                    content=f"调用工具: {tool_call['function']['name']}({tool_call['function']['arguments']})",
+                    chunk_type="tool_call",
+                    metadata={
+                        "provider": "openai",
+                        "model": self.config.model,
+                        "tool_call": tool_call,
+                        "api_type": self.config.api_type
+                    }
+                )
+                yield tool_call_chunk
 
         # 更新token计数
         completion_tokens = len(full_content) // 4  # 粗略估计

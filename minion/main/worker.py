@@ -164,18 +164,46 @@ class RawMinion(WorkerMinion):
             yield chunk
     
     async def _process_stream_generator(self, stream_generator):
-        """处理流式生成器，提取并返回文本块"""
+        """处理流式生成器，添加 Minion 层的元数据"""
+        from minion.main.action_step import StreamChunk
+        
         full_response = ""
+        minion_chunk_counter = 0
+        
         async for chunk in stream_generator:
             if hasattr(chunk, 'content'):
+                # 已经是 StreamChunk 对象，添加 Minion 层的元数据
                 content = chunk.content
-            elif isinstance(chunk, str):
-                content = chunk
+                minion_chunk_counter += 1
+                
+                # 对于文本内容，累加到 full_response
+                if chunk.chunk_type == "text":
+                    full_response += content
+                
+                # 更新元数据
+                chunk.metadata.update({
+                    "minion_type": self.__class__.__name__,
+                    "minion_chunk_number": minion_chunk_counter,
+                    "minion_total_length": len(full_response)
+                })
+                yield chunk
             else:
+                # 向后兼容：处理字符串（如果有的话）
                 content = str(chunk)
-            
-            full_response += content
-            yield content
+                full_response += content
+                minion_chunk_counter += 1
+                
+                # 创建 StreamChunk 对象
+                stream_chunk = StreamChunk(
+                    content=content,
+                    chunk_type="text",
+                    metadata={
+                        "minion_type": self.__class__.__name__,
+                        "minion_chunk_number": minion_chunk_counter,
+                        "minion_total_length": len(full_response)
+                    }
+                )
+                yield stream_chunk
         
         # 处理完整响应以提取答案
         think_content, answer_content = extract_think_and_answer(full_response)
@@ -248,13 +276,16 @@ class NativeMinion(WorkerMinion):
         async for chunk in await node.execute(messages, tools=tools, stream=True):
             if hasattr(chunk, 'content'):
                 content = chunk.content
+                full_response += content
+                yield chunk  # 保持 StreamChunk 对象
             elif isinstance(chunk, str):
                 content = chunk
+                full_response += content
+                yield chunk  # 保持字符串
             else:
                 content = str(chunk)
-            
-            full_response += content
-            yield content
+                full_response += content
+                yield content
         
         # 处理完整响应
         think_content, answer_content = extract_think_and_answer(full_response)
@@ -1484,7 +1515,7 @@ class ModeratorMinion(Minion):
 
         if self.input.execution_state.current_minion:
             # Resume from previous state, assume pre_processing already been done
-            if hasattr(self.input, 'execution_config') and self.input.execution_config['type'] == "ensemble":
+            if hasattr(self.input, 'execution_config') and self.input.execution_config.get('type') == "ensemble":
                 agent_response = await self.execute_ensemble()
             else:
                 agent_response = await self.execute_single()
