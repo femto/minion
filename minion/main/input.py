@@ -66,6 +66,7 @@ class Input(BaseModel):
     images: Optional[Any] = None  # 图像
     tools: List[Any] = Field(default_factory=list)  # 工具列表
     user_id: Optional[str] = None  # 用户ID
+    stream: bool = False  # 是否启用流式输出
     
     class Config:
         arbitrary_types_allowed = True

@@ -256,9 +256,9 @@ async def run_price_comparison():
             query=full_prompt,
         )
         
-        # Run the agent
+        # Run the agent with stream support
         print("Running price comparison analysis...")
-        result = await agent.run_async(input_obj, state=state, max_steps=5, reset=True)
+        result = await agent.run_async(input_obj, state=state, max_steps=5, reset=True, stream=True)
         
         # Display the result
         print("\n" + "=" * 60)

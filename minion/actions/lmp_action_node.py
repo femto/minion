@@ -26,7 +26,7 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, stream=False, **kwargs) -> Any:
         # 处理 system_prompt 参数
         system_prompt = kwargs.pop('system_prompt', None)
         
@@ -63,12 +63,14 @@ class LmpActionNode(LLMActionNode):
                     "temperature": self.llm.config.temperature,
                     "model": self.llm.config.model,
                     "tools": tools_formatted,
-                    "tool_choice": "auto"
+                    "tool_choice": "auto",
+                    "original_tools": tools  # 保存原始工具对象
                 }
             else:
                 api_params = {
                     "temperature": self.llm.config.temperature,
                     "model": self.llm.config.model,
+                    "original_tools": tools  # 保存原始工具对象
                 }
         else:
             # 从 llm.config 获取配置
@@ -79,6 +81,11 @@ class LmpActionNode(LLMActionNode):
 
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
         api_params.update(kwargs)
+        
+        # 处理流式参数
+        if stream:
+            api_params['stream'] = True
+            
         original_response_format = response_format
 
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
@@ -122,7 +129,19 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
 
             messages.append({"role": "user", "content": prompt})
 
-        response = await super().execute(messages, **api_params)
+        # 根据是否流式调用不同的方法
+        if stream:
+            # 流式模式：返回异步生成器（工具调用在生成器内部处理）
+            return self._execute_stream_generator(messages, **api_params)
+        
+        # 非流式模式
+        # 提取工具参数（使用原始工具对象）
+        tools = api_params.get('original_tools') or api_params.get('tools')
+        
+        # 创建 LLM API 参数（移除内部参数）
+        llm_api_params = {k: v for k, v in api_params.items() if k != 'original_tools'}
+        
+        response = await super().execute(messages, **llm_api_params)
         
         # 从 ChatCompletion 对象中提取字符串内容
         if hasattr(response, 'choices') and hasattr(response.choices[0], 'message'):
@@ -135,9 +154,9 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             # 如果不是 ChatCompletion 对象，假设是字符串
             response_text = str(response)
         
-        # 处理工具调用
+        # 处理工具调用（仅在非流式模式）
         if tools is not None:
-            response_text = await self._handle_tool_calls(response, tools, messages, api_params)
+            response_text = await self._handle_tool_calls(response, tools, messages, llm_api_params)
 
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             if format == "xml" or format == "xml_simple":
@@ -166,6 +185,232 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         if self.output_parser:
             response_text = self.output_parser(response_text)
         return response_text
+    
+    async def _execute_stream_generator(self, messages, **api_params):
+        """流式执行生成器，支持工具调用"""
+        # 添加 input_parser 处理
+        if self.input_parser:
+            messages = self.input_parser(messages)
+
+        # Convert string/single message to list
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+        elif isinstance(messages, Message):
+            messages = [messages.model_dump()]
+        elif isinstance(messages, dict) and "role" in messages:
+            messages = [messages]
+        elif isinstance(messages, list) and all(isinstance(msg, Message) for msg in messages):
+            messages = [msg.model_dump() for msg in messages]
+
+        # 提取工具参数（使用原始工具对象）
+        tools = api_params.get('original_tools') or api_params.get('tools')
+        
+        # 使用流式生成
+        full_content = ""
+        tool_calls = []
+        
+        # 创建 LLM API 参数（移除内部参数）
+        llm_api_params = {k: v for k, v in api_params.items() if k != 'original_tools'}
+        
+        async for chunk in self.llm.generate_stream(messages, **llm_api_params):
+            # 处理 StreamChunk 对象
+            if hasattr(chunk, 'content'):
+                if chunk.chunk_type == "text":
+                    content = chunk.content
+                    full_content += content
+                    yield chunk  # 直接传递文本 StreamChunk 对象
+                elif chunk.chunk_type == "tool_call":
+                    # 收集工具调用
+                    tool_call = chunk.metadata.get('tool_call')
+                    if tool_call:
+                        tool_calls.append(tool_call)
+                    yield chunk  # 传递工具调用 StreamChunk
+                    
+                    # 立即执行工具并 yield 工具响应
+                    if tool_call:
+                        async for response_chunk in self._execute_and_yield_tool_response(tool_call, tools):
+                            yield response_chunk
+            else:
+                # 向后兼容字符串
+                content = str(chunk)
+                full_content += content
+                yield content
+        
+        # 如果有工具调用，递归获取最终响应
+        if tools and tool_calls:
+            # 构造包含工具调用的消息
+            assistant_message = {
+                "role": "assistant",
+                "content": full_content if full_content else None,
+                "tool_calls": tool_calls
+            }
+            
+            # 执行所有工具调用并获取结果
+            tool_results = []
+            for tool_call in tool_calls:
+                tool_result = await self._execute_single_tool_call(tool_call, tools)
+                tool_results.append(tool_result)
+            
+            # 添加工具调用消息和结果到对话历史
+            updated_messages = messages + [assistant_message] + tool_results
+            
+            # 递归调用获取最终响应
+            async for chunk in self._execute_stream_generator(updated_messages, **api_params):
+                yield chunk
+        else:
+            # 最终处理
+            if self.output_parser:
+                full_content = self.output_parser(full_content)
+            
+            # 返回最终完整内容作为特殊标记
+            yield f"[STREAM_COMPLETE: {full_content}]"
+    
+    async def _execute_and_yield_tool_response(self, tool_call, tools):
+        """执行工具调用并立即 yield 工具响应"""
+        tool_call_id = tool_call.get('id', 'unknown')
+        function_name = tool_call.get('function', {}).get('name')
+        function_args = tool_call.get('function', {}).get('arguments', '{}')
+        
+        # 查找对应的工具
+        tool = self._find_tool(function_name, tools)
+        
+        if tool:
+            try:
+                # 解析参数
+                import json
+                args = json.loads(function_args) if function_args else {}
+                
+                # 执行工具 - 统一的调用方式
+                if hasattr(tool, 'execute'):
+                    # 传统的 execute 方法
+                    result = tool.execute(**args)
+                    import asyncio
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                elif callable(tool):
+                    # 直接调用工具
+                    result = tool(**args)
+                    import asyncio
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                else:
+                    result = f"Error: Tool {function_name} is not callable"
+                
+                # 立即 yield 工具响应
+                from minion.main.action_step import StreamChunk
+                tool_response_chunk = StreamChunk(
+                    content=f"\n📊 工具执行结果: {str(result)}\n",
+                    chunk_type="tool_response",
+                    metadata={
+                        "tool_call_id": tool_call_id,
+                        "tool_name": function_name,
+                        "tool_result": str(result)
+                    }
+                )
+                yield tool_response_chunk
+                
+            except Exception as e:
+                # 工具执行失败，也要 yield 错误响应
+                error_msg = f"Error executing {function_name}: {str(e)}"
+                
+                from minion.main.action_step import StreamChunk
+                error_response_chunk = StreamChunk(
+                    content=f"\n❌ 工具执行错误: {error_msg}\n",
+                    chunk_type="tool_response",
+                    metadata={
+                        "tool_call_id": tool_call_id,
+                        "tool_name": function_name,
+                        "error": str(e)
+                    }
+                )
+                yield error_response_chunk
+        else:
+            # 工具未找到，也要 yield 错误响应
+            error_msg = f"Error: Tool {function_name} not found"
+            
+            from minion.main.action_step import StreamChunk
+            error_response_chunk = StreamChunk(
+                content=f"\n❌ 工具未找到: {function_name}\n",
+                chunk_type="tool_response",
+                metadata={
+                    "tool_call_id": tool_call_id,
+                    "tool_name": function_name,
+                    "error": error_msg
+                }
+            )
+            yield error_response_chunk
+    
+    def _find_tool(self, function_name, tools):
+        """查找指定名称的工具"""
+        for tool in tools:
+            if hasattr(tool, 'name') and tool.name == function_name:
+                return tool
+            elif hasattr(tool, 'get_schema'):
+                schema = tool.get_schema()
+                if schema.get('function', {}).get('name') == function_name:
+                    return tool
+        return None
+    
+    async def _execute_single_tool_call(self, tool_call, tools):
+        """执行单个工具调用并返回结果消息"""
+        tool_call_id = tool_call.get('id', 'unknown')
+        function_name = tool_call.get('function', {}).get('name')
+        function_args = tool_call.get('function', {}).get('arguments', '{}')
+        
+        # 查找对应的工具
+        tool = self._find_tool(function_name, tools)
+        
+        if tool:
+            try:
+                # 解析参数
+                import json
+                args = json.loads(function_args) if function_args else {}
+                
+                # 执行工具 - 统一的调用方式
+                if hasattr(tool, 'execute'):
+                    # 传统的 execute 方法
+                    result = tool.execute(**args)
+                    import asyncio
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                elif callable(tool):
+                    # 直接调用工具
+                    result = tool(**args)
+                    import asyncio
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                else:
+                    result = f"Error: Tool {function_name} is not callable"
+                
+                # 创建工具结果消息
+                return {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": str(result)
+                }
+                
+            except Exception as e:
+                # 工具执行失败
+                error_msg = f"Error executing {function_name}: {str(e)}"
+                return {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": error_msg
+                }
+        else:
+            # 工具未找到
+            error_msg = f"Error: Tool {function_name} not found"
+            return {
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": error_msg
+            }
+    
+    async def _handle_tool_calls_stream(self, response, tools, messages, api_params):
+        """处理流式模式下的工具调用"""
+        # 简化版本，直接返回响应
+        # 在流式模式下，工具调用会在完整响应后处理
+        return response
 
     def _dict_to_xml_example(self, data, root_name="root"):
         """Helper method to convert a dictionary to XML example string."""
@@ -301,6 +546,13 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                     }
                 }
                 formatted_tools.append(tool_def)
+            elif hasattr(tool, 'get_schema'):
+                # 支持有 get_schema 方法的工具
+                schema = tool.get_schema()
+                if isinstance(schema, dict) and "function" in schema:
+                    formatted_tools.append(schema)
+                elif isinstance(schema, dict) and "type" in schema and schema["type"] == "function":
+                    formatted_tools.append(schema)
             elif isinstance(tool, dict) and "function" in tool:
                 # 如果已经是正确格式的工具定义
                 formatted_tools.append(tool)

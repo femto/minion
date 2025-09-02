@@ -31,12 +31,34 @@ class Mind(BaseModel):
     description: str = ""
     brain: Any = None  # Brain
 
-    async def step(self, input):
+    def step(self, input):
         moderator = ModeratorMinion(input=input, brain=self.brain)
-        agent_response = await moderator.execute()
         
-        # 直接返回ModeratorMinion的AgentResponse，保持所有状态信息
+        # 检查是否需要流式输出
+        if hasattr(input, 'stream') and input.stream:
+            # 流式输出：返回异步生成器
+            return self._stream_step_generator(moderator)
+        else:
+            # 普通执行：返回协程
+            return self._normal_step(moderator)
+    
+    async def _normal_step(self, moderator):
+        """普通执行步骤"""
+        agent_response = await moderator.execute()
         return agent_response
+    
+    async def _stream_step_generator(self, moderator):
+        """真正的流式步骤生成器"""
+        # 检查 moderator 是否支持流式输出
+        if hasattr(moderator, 'execute_stream'):
+            # 使用真正的流式输出
+            async for chunk in moderator.execute_stream():
+                yield chunk
+        else:
+            # 回退到普通执行
+            agent_response = await moderator.execute()
+            content = agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
+            yield content
 
 
 class Brain:
@@ -161,6 +183,7 @@ Supporting navigation and spatial memory""",
         system_prompt = config_kwargs.get("system_prompt")
         tools = config_kwargs.get("tools")
         messages = config_kwargs.get("messages")
+        stream = config_kwargs.get("stream", False)
         
         # 验证state中必须有input
         if input is None:
@@ -173,6 +196,7 @@ Supporting navigation and spatial memory""",
             input_kwargs.pop('system_prompt', None)
             input_kwargs.pop('tools', None)
             input_kwargs.pop('messages', None)
+            input_kwargs.pop('stream', None)
             
             input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
             state["input"] = input
@@ -203,6 +227,9 @@ Supporting navigation and spatial memory""",
         input.tools = current_tools
         if system_prompt is not None:
             input.system_prompt = system_prompt
+        # 只有当 config_kwargs 中明确传递了 stream 参数时才覆盖
+        if "stream" in config_kwargs:
+            input.stream = stream
 
         # 选择心智
         mind_id = input.mind_id or await self.choose_mind(input)
@@ -212,14 +239,19 @@ Supporting navigation and spatial memory""",
             self.llm.config.temperature = 1
         mind = self.minds[mind_id]
         
-        # 执行步骤，确保返回AgentResponse
-        result = await mind.step(input)
-        
-        # 确保结果是AgentResponse格式
-        if not isinstance(result, AgentResponse):
-            result = AgentResponse.from_tuple(result)
+        # 检查是否需要流式输出
+        if hasattr(input, 'stream') and input.stream:
+            # 流式输出：直接返回异步生成器
+            return mind.step(input)
+        else:
+            # 普通执行：await 结果并确保返回AgentResponse
+            result = await mind.step(input)
             
-        return result
+            # 确保结果是AgentResponse格式
+            if not isinstance(result, AgentResponse):
+                result = AgentResponse.from_tuple(result)
+                
+            return result
 
     def cleanup_python_env(self, input):
         if hasattr(self.python_env, 'step'):
@@ -264,6 +296,62 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
             return result
         except Exception as e:
             return "left_mind" #EXISTING_ANSWER_PROMPT for llama3.2 which can't return valid json
+
+    def run(self, query: str, **kwargs) -> AgentResponse:
+        """
+        Synchronous interface for running the brain.
+        
+        Args:
+            query: The query string to process
+            **kwargs: Additional parameters
+            
+        Returns:
+            AgentResponse: The response from the brain
+        """
+        import asyncio
+        return asyncio.run(self.run_async(query, **kwargs))
+    
+    async def run_async(self, query: str, **kwargs):
+        """
+        Asynchronous interface for running the brain.
+        
+        Args:
+            query: The query string to process
+            **kwargs: Additional parameters
+            
+        Returns:
+            AgentResponse or AsyncGenerator: Response or stream based on stream parameter
+        """
+        # Create Input object
+        input_obj = Input(query=query)
+        
+        # Set stream parameter
+        stream = kwargs.pop('stream', False)
+        input_obj.stream = stream
+        
+        # Pass through other parameters
+        for key, value in kwargs.items():
+            if hasattr(input_obj, key):
+                setattr(input_obj, key, value)
+        
+        # Call step method with the input
+        state = {"input": input_obj}
+        return await self.step(state, **kwargs)
+    
+    async def run_stream(self, query: str, **kwargs):
+        """
+        Streaming interface for running the brain.
+        
+        Args:
+            query: The query string to process
+            **kwargs: Additional parameters
+            
+        Returns:
+            AsyncGenerator: Stream of responses
+        """
+        # Force stream=True for this method
+        kwargs['stream'] = True
+        return await self.run_async(query, **kwargs)
 
 
 Mind.model_rebuild()
