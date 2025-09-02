@@ -626,10 +626,7 @@ class TextualUI:
         """Run the Textual UI application."""
         try:
             app = self.create_app()
-            # In modern Textual, app.run() handles asyncio internally
-            # But we need to use asyncio.run to properly await the coroutine
-            print(id(asyncio))
-            print(id(asyncio.run))
+            # Now we can use asyncio.run normally since we don't globally replace sys.modules["asyncio"]
             #asyncio.run(app.run_async())
             app.run()
         except KeyboardInterrupt:

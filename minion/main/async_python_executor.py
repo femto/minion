@@ -574,6 +574,27 @@ async def evaluate_async_ast(
         return value
     elif isinstance(expression, ast.Pass):
         return None
+    elif isinstance(expression, ast.Import) or isinstance(expression, ast.ImportFrom):
+        # Custom import handling for asyncio
+        if isinstance(expression, ast.Import):
+            for alias in expression.names:
+                if alias.name == "asyncio" and "asyncio" in static_tools:
+                    # Use our custom asyncio module instead of the original
+                    state[alias.asname or alias.name] = static_tools["asyncio"]
+                    return None
+        elif isinstance(expression, ast.ImportFrom) and expression.module == "asyncio" and "asyncio" in static_tools:
+            # Handle "from asyncio import ..."
+            custom_asyncio = static_tools["asyncio"]
+            for alias in expression.names:
+                if hasattr(custom_asyncio, alias.name):
+                    state[alias.asname or alias.name] = getattr(custom_asyncio, alias.name)
+                else:
+                    raise Exception(f"Module asyncio has no attribute {alias.name}")
+            return None
+        
+        # For all other imports, use the original import handler
+        from .local_python_executor import evaluate_ast
+        return evaluate_ast(expression, state, static_tools, custom_tools, authorized_imports)
     else:
         # For other operations, fall back to sync evaluation
         # Most operations don't need async handling
@@ -669,9 +690,8 @@ async def evaluate_async_python_code(
         # Add to static tools so it's available in the execution environment
         static_tools["asyncio"] = custom_asyncio
         
-        # Also register in sys.modules so import asyncio uses our custom module
-        import sys
-        sys.modules["asyncio"] = custom_asyncio
+        # Store the original asyncio module for restoration later
+        static_tools["_original_asyncio"] = real_asyncio
 
     if "final_answer" in static_tools:
         previous_final_answer = static_tools["final_answer"]
@@ -918,9 +938,11 @@ class AsyncPythonExecutor:
         # Register the custom asyncio module
         self.static_tools["asyncio"] = asyncio_module
         
-        # Also register in sys.modules so import asyncio uses our custom module
-        import sys
-        sys.modules["asyncio"] = asyncio_module
+        # Store original asyncio for restoration if needed
+        self.static_tools["_original_asyncio"] = real_asyncio
+        
+        # NOTE: We no longer globally replace sys.modules["asyncio"] to avoid conflicts
+        # Import handling is done at AST evaluation level in evaluate_async_ast
         
         # Also add multi_tool_use and functions to the state as global objects for direct access
         self.state["multi_tool_use"] = multi_tool_use_module
