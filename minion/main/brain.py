@@ -241,9 +241,13 @@ Supporting navigation and spatial memory""",
         
         # 检查是否需要流式输出
         if hasattr(input, 'stream') and input.stream:
+            # 设置 stream_outputs 属性，供 UI 使用
+            self.stream_outputs = True
             # 流式输出：直接返回异步生成器
             return mind.step(input)
         else:
+            # 清除 stream_outputs 属性
+            self.stream_outputs = False
             # 普通执行：await 结果并确保返回AgentResponse
             result = await mind.step(input)
             

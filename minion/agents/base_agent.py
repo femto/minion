@@ -215,9 +215,13 @@ class BaseAgent:
         self._current_state = state
         
         if stream:
+            # 设置 stream_outputs 属性，供 UI 使用
+            self.stream_outputs = True
             # 返回异步迭代器
             return self._run_stream(state, max_steps, kwargs)
         else:
+            # 清除 stream_outputs 属性
+            self.stream_outputs = False
             # 一次性执行完成返回最终结果
             return await self._run_complete(state, max_steps, kwargs)
 

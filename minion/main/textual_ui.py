@@ -14,7 +14,7 @@ import shutil
 import asyncio
 import threading
 from pathlib import Path
-from typing import Generator, Dict, Any, Optional, Union, List
+from typing import Generator, Dict, Any, Optional, Union, List, AsyncIterator
 from enum import Enum
 from datetime import datetime
 
@@ -73,13 +73,13 @@ def _format_code_content(content: str) -> str:
         content = f"```python\n{content}\n```"
     return content
 
-def stream_to_textual(
+async def stream_to_textual(
     agent: BaseAgent,
     task: str,
     task_images: Optional[list] = None,
     reset_agent_memory: bool = False,
     additional_args: Optional[dict] = None,
-) -> Generator[ChatMessage, None, None]:
+) -> AsyncIterator[ChatMessage]:
     """Runs an agent with the given task and streams the messages as ChatMessage objects."""
     
     # Convert task to Input object if needed
@@ -103,123 +103,59 @@ def stream_to_textual(
         kwargs = additional_args or {}
         kwargs['stream'] = True
         
-        # Use a thread-based approach to avoid event loop conflicts
-        import queue
-        import time
-        
-        result_queue = queue.Queue()
-        exception_queue = queue.Queue()
-        
-        def run_agent_in_thread():
-            """Run the agent in a separate thread with its own event loop."""
-            try:
-                # Create a new event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                async def agent_runner():
-                    try:
-                        async for event in (await agent.run_async(input_obj, **kwargs)):
-                            result_queue.put(('event', event))
-                    except Exception as e:
-                        result_queue.put(('error', e))
-                    finally:
-                        result_queue.put(('done', None))
-                
-                loop.run_until_complete(agent_runner())
-                loop.close()
-                
-            except Exception as e:
-                exception_queue.put(e)
-                result_queue.put(('error', e))
-        
-        # Start the agent in a separate thread
-        agent_thread = threading.Thread(target=run_agent_in_thread, daemon=True)
-        agent_thread.start()
-        
-        # Process results as they come in
+        # Direct async streaming without threads
         streaming_content = []  # Buffer for accumulating streaming content
         
-        while True:
-            try:
-                # Check for exceptions first
-                if not exception_queue.empty():
-                    raise exception_queue.get_nowait()
+        async for event in (await agent.run_async(input_obj, **kwargs)):
+            # Handle StreamChunk differently - accumulate content
+            if isinstance(event, StreamChunk):
+                content = event.content
+                chunk_type = getattr(event, 'chunk_type', 'llm_output')
                 
-                # Get the next result with a timeout
-                try:
-                    result_type, event = result_queue.get(timeout=0.1)
-                except queue.Empty:
-                    # Check if thread is still alive
-                    if not agent_thread.is_alive():
-                        break
-                    continue
-                
-                if result_type == 'done':
-                    # Yield any accumulated streaming content as final message
+                if chunk_type == 'error':
+                    # Flush accumulated content first
                     if streaming_content:
                         yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
                         streaming_content = []
-                    break
-                elif result_type == 'error':
-                    # Yield any accumulated streaming content before error
+                    # Then yield error
+                    yield ChatMessage(MessageRole.ASSISTANT, f"💥 Error: {content}")
+                elif chunk_type == 'final_answer':
+                    # Flush accumulated content first
                     if streaming_content:
                         yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
                         streaming_content = []
-                    yield ChatMessage(MessageRole.ASSISTANT, f"❌ Error: {str(event)}")
-                    break
-                elif result_type == 'event':
-                    # Handle StreamChunk differently - accumulate content
-                    if isinstance(event, StreamChunk):
-                        content = event.content
-                        chunk_type = getattr(event, 'chunk_type', 'llm_output')
-                        
-                        if chunk_type == 'error':
-                            # Flush accumulated content first
-                            if streaming_content:
-                                yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
-                                streaming_content = []
-                            # Then yield error
-                            yield ChatMessage(MessageRole.ASSISTANT, f"💥 Error: {content}")
-                        elif chunk_type == 'final_answer':
-                            # Flush accumulated content first
-                            if streaming_content:
-                                yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
-                                streaming_content = []
-                            # Then yield final answer
-                            yield ChatMessage(MessageRole.ASSISTANT, f"✅ Final answer: {content}")
-                        else:
-                            # Accumulate streaming content
-                            streaming_content.append(content)
-                            # Yield accumulated content so far with streaming status
-                            yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=True)
-                    else:
-                        # For non-StreamChunk events, flush accumulated content first
-                        if streaming_content:
-                            yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
-                            streaming_content = []
-                        
-                        # Process other event types normally
-                        if isinstance(event, (ActionStep, AgentResponse)):
-                            content = _process_agent_event(event)
-                            if content:
-                                yield ChatMessage(MessageRole.ASSISTANT, content)
-                        elif isinstance(event, str):
-                            yield ChatMessage(MessageRole.ASSISTANT, event)
-                        else:
-                            yield ChatMessage(MessageRole.ASSISTANT, str(event))
-                        
-            except queue.Empty:
-                continue
+                    # Then yield final answer
+                    yield ChatMessage(MessageRole.ASSISTANT, f"✅ Final answer: {content}")
+                else:
+                    # Accumulate streaming content
+                    streaming_content.append(content)
+                    # Yield accumulated content so far with streaming status
+                    yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=True)
+            else:
+                # For non-StreamChunk events, flush accumulated content first
+                if streaming_content:
+                    yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
+                    streaming_content = []
+                
+                # Process other event types normally
+                if isinstance(event, (ActionStep, AgentResponse)):
+                    content = _process_agent_event(event, skip_model_outputs=getattr(agent, "stream_outputs", False))
+                    if content:
+                        yield ChatMessage(MessageRole.ASSISTANT, content)
+                elif isinstance(event, str):
+                    yield ChatMessage(MessageRole.ASSISTANT, event)
+                else:
+                    yield ChatMessage(MessageRole.ASSISTANT, str(event))
         
-        # Wait for thread to complete
-        agent_thread.join(timeout=1.0)
+        # Yield any remaining accumulated streaming content as final message
+        if streaming_content:
+            yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
                 
     except Exception as e:
         # Handle any errors in streaming
         yield ChatMessage(MessageRole.ASSISTANT, f"❌ Error in agent execution: {str(e)}")
 
-def _process_agent_event(event) -> str:
+def _process_agent_event(event, skip_model_outputs: bool = False) -> str:
     """Process an agent event and return formatted content."""
     if isinstance(event, StreamChunk):
         content = event.content
@@ -249,18 +185,19 @@ def _process_agent_event(event) -> str:
         step_number = getattr(event, 'step_number', 1)
         parts.append(f"🔄 Step {step_number}")
         
-        # Add model output
-        model_output = ""
-        if hasattr(event, 'model_output') and event.model_output:
-            model_output = event.model_output
-        elif hasattr(event, 'content') and event.content:
-            model_output = event.content
-        elif hasattr(event, 'response') and event.response:
-            model_output = event.response
-        
-        if model_output:
-            model_output = _clean_model_output(str(model_output))
-            parts.append(model_output)
+        # Add model output (skip if skip_model_outputs is True)
+        if not skip_model_outputs:
+            model_output = ""
+            if hasattr(event, 'model_output') and event.model_output:
+                model_output = event.model_output
+            elif hasattr(event, 'content') and event.content:
+                model_output = event.content
+            elif hasattr(event, 'response') and event.response:
+                model_output = event.response
+            
+            if model_output:
+                model_output = _clean_model_output(str(model_output))
+                parts.append(model_output)
         
         # Add tool calls
         tool_calls = getattr(event, "tool_calls", []) or getattr(event, "actions", [])
@@ -626,7 +563,7 @@ class TextualUI:
                             # Clear streaming widget
                             self.streaming_content = ""
                     
-                    for chat_message in self.stream_agent_response(message):
+                    async for chat_message in self.stream_agent_response(message):
                         if chat_message.content.strip():
                             if chat_message.is_streaming:
                                 # This is streaming content, accumulate and update display
@@ -660,10 +597,10 @@ class TextualUI:
                 finally:
                     self.processing = False
 
-            def stream_agent_response(self, message: str):
-                """Stream response from agent synchronously."""
+            async def stream_agent_response(self, message: str):
+                """Stream response from agent asynchronously."""
                 try:
-                    for chat_msg in stream_to_textual(
+                    async for chat_msg in stream_to_textual(
                         self.ui.agent, 
                         message, 
                         reset_agent_memory=self.ui.reset_agent_memory
