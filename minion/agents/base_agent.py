@@ -145,6 +145,26 @@ class BaseAgent:
         if not self._is_setup:
             raise RuntimeError(f"Agent {self.name} not setup. Call setup() first.")
 
+    def run(self, 
+           task: Optional[Union[str, Input]] = None,
+           state: Optional[Dict[str, Any]] = None, 
+           max_steps: Optional[int] = None,
+           **kwargs) -> Any:
+        """
+        Synchronous interface for running the agent.
+        
+        Args:
+            task: Task description or Input object (required if state is None)
+            state: Existing state for resuming interrupted execution
+            max_steps: Maximum number of steps
+            **kwargs: Additional parameters
+            
+        Returns:
+            Final task result
+        """
+        import asyncio
+        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, stream=False, **kwargs))
+
     async def run_async(self, 
                        task: Optional[Union[str, Input]] = None,
                        state: Optional[Dict[str, Any]] = None, 
@@ -200,6 +220,26 @@ class BaseAgent:
         else:
             # 一次性执行完成返回最终结果
             return await self._run_complete(state, max_steps, kwargs)
+
+    async def run_stream(self, 
+                        task: Optional[Union[str, Input]] = None,
+                        state: Optional[Dict[str, Any]] = None, 
+                        max_steps: Optional[int] = None,
+                        **kwargs):
+        """
+        Streaming interface for running the agent.
+        
+        Args:
+            task: Task description or Input object (required if state is None)
+            state: Existing state for resuming interrupted execution
+            max_steps: Maximum number of steps
+            **kwargs: Additional parameters
+            
+        Returns:
+            AsyncGenerator: Stream of responses
+        """
+        # Force stream=True for this method
+        return await self.run_async(task=task, state=state, max_steps=max_steps, stream=True, **kwargs)
             
     async def _run_stream(self, state, max_steps, kwargs):
         """返回一个异步迭代器，逐步执行并返回中间结果"""

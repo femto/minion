@@ -138,6 +138,8 @@ def stream_to_textual(
         agent_thread.start()
         
         # Process results as they come in
+        streaming_content = []  # Buffer for accumulating streaming content
+        
         while True:
             try:
                 # Check for exceptions first
@@ -154,25 +156,58 @@ def stream_to_textual(
                     continue
                 
                 if result_type == 'done':
+                    # Yield any accumulated streaming content as final message
+                    if streaming_content:
+                        yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
+                        streaming_content = []
                     break
                 elif result_type == 'error':
+                    # Yield any accumulated streaming content before error
+                    if streaming_content:
+                        yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
+                        streaming_content = []
                     yield ChatMessage(MessageRole.ASSISTANT, f"❌ Error: {str(event)}")
                     break
                 elif result_type == 'event':
-                    # Process the event and convert to ChatMessage
+                    # Handle StreamChunk differently - accumulate content
                     if isinstance(event, StreamChunk):
-                        content = _process_agent_event(event)
-                        if content:
-                            # Mark StreamChunk content as streaming to enable accumulation
-                            yield ChatMessage(MessageRole.ASSISTANT, content, is_streaming=True)
-                    elif isinstance(event, (ActionStep, AgentResponse)):
-                        content = _process_agent_event(event)
-                        if content:
-                            yield ChatMessage(MessageRole.ASSISTANT, content)
-                    elif isinstance(event, str):
-                        yield ChatMessage(MessageRole.ASSISTANT, event)
+                        content = event.content
+                        chunk_type = getattr(event, 'chunk_type', 'llm_output')
+                        
+                        if chunk_type == 'error':
+                            # Flush accumulated content first
+                            if streaming_content:
+                                yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
+                                streaming_content = []
+                            # Then yield error
+                            yield ChatMessage(MessageRole.ASSISTANT, f"💥 Error: {content}")
+                        elif chunk_type == 'final_answer':
+                            # Flush accumulated content first
+                            if streaming_content:
+                                yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
+                                streaming_content = []
+                            # Then yield final answer
+                            yield ChatMessage(MessageRole.ASSISTANT, f"✅ Final answer: {content}")
+                        else:
+                            # Accumulate streaming content
+                            streaming_content.append(content)
+                            # Yield accumulated content so far with streaming status
+                            yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=True)
                     else:
-                        yield ChatMessage(MessageRole.ASSISTANT, str(event))
+                        # For non-StreamChunk events, flush accumulated content first
+                        if streaming_content:
+                            yield ChatMessage(MessageRole.ASSISTANT, "".join(streaming_content), is_streaming=False)
+                            streaming_content = []
+                        
+                        # Process other event types normally
+                        if isinstance(event, (ActionStep, AgentResponse)):
+                            content = _process_agent_event(event)
+                            if content:
+                                yield ChatMessage(MessageRole.ASSISTANT, content)
+                        elif isinstance(event, str):
+                            yield ChatMessage(MessageRole.ASSISTANT, event)
+                        else:
+                            yield ChatMessage(MessageRole.ASSISTANT, str(event))
                         
             except queue.Empty:
                 continue

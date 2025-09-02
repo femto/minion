@@ -297,5 +297,61 @@ return the id of the mind, please note you *MUST* return exactly case same as I 
         except Exception as e:
             return "left_mind" #EXISTING_ANSWER_PROMPT for llama3.2 which can't return valid json
 
+    def run(self, query: str, **kwargs) -> AgentResponse:
+        """
+        Synchronous interface for running the brain.
+        
+        Args:
+            query: The query string to process
+            **kwargs: Additional parameters
+            
+        Returns:
+            AgentResponse: The response from the brain
+        """
+        import asyncio
+        return asyncio.run(self.run_async(query, **kwargs))
+    
+    async def run_async(self, query: str, **kwargs):
+        """
+        Asynchronous interface for running the brain.
+        
+        Args:
+            query: The query string to process
+            **kwargs: Additional parameters
+            
+        Returns:
+            AgentResponse or AsyncGenerator: Response or stream based on stream parameter
+        """
+        # Create Input object
+        input_obj = Input(query=query)
+        
+        # Set stream parameter
+        stream = kwargs.pop('stream', False)
+        input_obj.stream = stream
+        
+        # Pass through other parameters
+        for key, value in kwargs.items():
+            if hasattr(input_obj, key):
+                setattr(input_obj, key, value)
+        
+        # Call step method with the input
+        state = {"input": input_obj}
+        return await self.step(state, **kwargs)
+    
+    async def run_stream(self, query: str, **kwargs):
+        """
+        Streaming interface for running the brain.
+        
+        Args:
+            query: The query string to process
+            **kwargs: Additional parameters
+            
+        Returns:
+            AsyncGenerator: Stream of responses
+        """
+        # Force stream=True for this method
+        kwargs['stream'] = True
+        return await self.run_async(query, **kwargs)
+
 
 Mind.model_rebuild()
