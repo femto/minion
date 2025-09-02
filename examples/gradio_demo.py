@@ -70,6 +70,9 @@ def run():
     """
     try:
         # Use asyncio.run to properly handle async operations
+        global gradio_ui, agent,demo
+        gradio_ui, agent = setup()
+        demo = gradio_ui
         asyncio.run(main_async())
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
@@ -77,18 +80,19 @@ def run():
         print(f"❌ Startup error: {e}")
         import traceback
         traceback.print_exc()
-
+demo = None
+gradio_ui=None
+agent=None
 async def main_async():
     """Async implementation of the main function to properly handle asyncio operations.
     
     This function ensures that the asyncio event loop is properly set up before launching
     the Gradio interface, which is important for the Uvicorn server's lifespan management.
     """
-    agent = None
     try:
         # Set up the UI and agent
-        gradio_ui, agent = setup()
-        
+
+        global gradio_ui, agent, demo
         # Set up the agent asynchronously
         print("⚙️ Setting up agent...")
         await agent.setup()
@@ -108,11 +112,13 @@ async def main_async():
         # Launch the interface using GradioUI
         # The launch method is blocking, which is what we want in this case
         # It will keep the server running until interrupted
+        demo = gradio_ui
         gradio_ui.launch(
             share=False,        # Set to True to create a public link
             debug=False,        # Set to True for debug mode
             server_port=None    # Let Gradio auto-select an available port
         )
+
     except KeyboardInterrupt:
         print("\n👋 Shutting down gracefully...")
     except Exception as e:

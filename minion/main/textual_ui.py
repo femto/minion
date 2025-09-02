@@ -412,6 +412,10 @@ class TextualUI:
         class MinionApp(App):
             """Main Textual application for Minion Agent UI."""
             
+            # Reactive variables for streaming
+            current_response = reactive("")
+            is_streaming = reactive(False)
+            
             CSS = """
             #sidebar {
                 width: 30%;
@@ -498,6 +502,58 @@ class TextualUI:
 
                 yield Footer()
 
+            def __init__(self, ui):
+                super().__init__()
+                self.ui = ui
+                self.processing = False
+                self.streaming_panel = None  # Will hold the current streaming panel
+
+            def watch_current_response(self, new_response: str) -> None:
+                """Watch for changes in current_response and update display in real-time."""
+                if new_response and hasattr(self, '_last_streaming_length'):
+                    # Only update if the response has actually grown
+                    if len(new_response) > self._last_streaming_length:
+                        self._update_streaming_display(new_response)
+                        self._last_streaming_length = len(new_response)
+                elif new_response:
+                    # First streaming update
+                    self._update_streaming_display(new_response)
+                    self._last_streaming_length = len(new_response)
+
+            def _update_streaming_display(self, response: str) -> None:
+                """Update the streaming display with new content."""
+                chat_log = self.query_one("#chat-log", RichLog)
+                
+                # Create streaming text with cursor
+                agent_text = Text()
+                agent_text.append("🤖 Agent: ", style="bold green")
+                agent_text.append(response)
+                if self.is_streaming:
+                    agent_text.append(" ▋", style="dim")  # Streaming cursor
+                
+                # Create panel
+                panel = Panel(
+                    agent_text,
+                    border_style="green",
+                    title="Streaming..." if self.is_streaming else "Response"
+                )
+                
+                # Write to log - RichLog will handle the display updates
+                chat_log.write(panel)
+
+            def watch_is_streaming(self, is_streaming: bool) -> None:
+                """Watch for changes in streaming status."""
+                if not is_streaming and hasattr(self, '_last_streaming_length'):
+                    # Streaming finished, add final response to chat history
+                    if self.current_response:
+                        self.ui.chat_history.append(ChatMessage(MessageRole.ASSISTANT, self.current_response))
+                    
+                    # Reset streaming state
+                    self.current_response = ""
+                    self._last_streaming_length = 0
+                    if hasattr(self, 'streaming_panel'):
+                        self.streaming_panel = None
+
             def on_mount(self) -> None:
                 """Called when app starts."""
                 chat_log = self.query_one("#chat-log", RichLog)
@@ -570,36 +626,40 @@ class TextualUI:
                     thinking_text = Text("🤔 Agent is thinking...", style="dim yellow")
                     chat_log.write(thinking_text)
                     
-                    # Stream response from agent
-                    response_parts = []
+                    # Initialize streaming
+                    self.is_streaming = True
+                    self.current_response = ""
+                    self._last_streaming_length = 0
+                    self.streaming_panel = True  # Mark that we have a streaming panel
+                    
+                    # Stream response from agent using reactive updates
+                    accumulated_response = ""
                     for chat_message in self.stream_agent_response(message):
                         if chat_message.content.strip():
-                            response_parts.append(chat_message.content)
-                    
-                    # Display the complete response
-                    if response_parts:
-                        full_response = "\n".join(response_parts)
-                        
-                        # Try to render as markdown if it contains code blocks or formatting
-                        if "```" in full_response or "**" in full_response or "*" in full_response:
-                            try:
-                                markdown_content = RichMarkdown(full_response)
-                                chat_log.write(Panel(markdown_content, title="🤖 Agent", border_style="green"))
-                            except:
+                            if chat_message.is_streaming:
+                                # This is streaming content, accumulate and update reactive variable
+                                accumulated_response = chat_message.content
+                                self.current_response = accumulated_response
+                            else:
+                                # This is a complete message (like ActionStep), add it separately
+                                if accumulated_response:
+                                    # Finalize the current streaming response first
+                                    self.is_streaming = False
+                                    # Reset and start new message
+                                    accumulated_response = ""
+                                
+                                # Add the complete message
                                 agent_text = Text()
                                 agent_text.append("🤖 Agent: ", style="bold green")
-                                agent_text.append(full_response)
+                                agent_text.append(chat_message.content)
                                 chat_log.write(Panel(agent_text, border_style="green"))
-                        else:
-                            agent_text = Text()
-                            agent_text.append("🤖 Agent: ", style="bold green")
-                            agent_text.append(full_response)
-                            chat_log.write(Panel(agent_text, border_style="green"))
+                                
+                                # Add to chat history
+                                self.ui.chat_history.append(ChatMessage(MessageRole.ASSISTANT, chat_message.content))
                     
-                    # Add final response to chat history
-                    if response_parts:
-                        final_response = "\n".join(response_parts)
-                        self.ui.chat_history.append(ChatMessage(MessageRole.ASSISTANT, final_response))
+                    # Finalize any remaining streaming content
+                    if accumulated_response:
+                        self.is_streaming = False
                 
                 except Exception as e:
                     error_text = Text(f"❌ Error: {str(e)}", style="bold red")
