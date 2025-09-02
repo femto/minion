@@ -291,7 +291,7 @@ class OpenAIProvider(BaseProvider):
                     chunk_counter += 1
                     
                     # 调用log_llm_stream实时显示流式内容
-                    log_llm_stream(content)
+                    #log_llm_stream(content)
                     
                     # 创建文本内容的 StreamChunk
                     stream_chunk = StreamChunk(
