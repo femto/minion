@@ -61,7 +61,7 @@ from minion.main.symbol_table import Symbol
 from minion.main.task_graph import convert_tasks_to_graph
 from minion.utils.utils import most_similar_minion, camel_case_to_snake_case
 from minion.actions.lmp_action_node import LmpActionNode
-from minion.tools.default_tools import FinalAnswerException
+from minion.exceptions import FinalAnswerException
 from minion.models.schemas import (
     MetaPlan,
     Identification,

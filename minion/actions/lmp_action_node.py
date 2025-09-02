@@ -15,7 +15,7 @@ from minion.actions.action_node import LLMActionNode
 from minion.schema.messages import user
 from minion.providers import create_llm_provider
 from minion.models.schemas import Answer  # Import the Answer model
-from minion.tools.default_tools import FinalAnswerException
+from minion.exceptions import FinalAnswerException
 
 # @ell.complex(model="gpt-4o-mini")
 # def ell_call(ret):
@@ -258,12 +258,13 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             async for chunk in self._execute_stream_generator(updated_messages, **api_params):
                 yield chunk
         else:
+            pass
             # 最终处理
-            if self.output_parser:
-                full_content = self.output_parser(full_content)
-            
-            # 返回最终完整内容作为特殊标记
-            yield f"[STREAM_COMPLETE: {full_content}]"
+            # if self.output_parser:
+            #     full_content = self.output_parser(full_content)
+            #
+            # # 返回最终完整内容作为特殊标记
+            # yield f"[STREAM_COMPLETE: {full_content}]"
     
     async def _execute_and_yield_tool_response(self, tool_call, tools):
         """执行工具调用并立即 yield 工具响应"""
