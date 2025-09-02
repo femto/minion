@@ -336,10 +336,11 @@ def pull_messages_from_step(step_log: Union[ActionStep, PlanningStep, FinalAnswe
                 metadata={"status": "done"}
             )
         else:
+            # For streaming content, use "pending" status to allow accumulation
             yield gr.ChatMessage(
                 role=MessageRole.ASSISTANT, 
                 content=content, 
-                metadata={"status": "done"}
+                metadata={"status": "pending"}
             )
         return
     
@@ -462,6 +463,8 @@ def stream_to_gradio(
         agent_thread.start()
         
         # Process results as they come in
+        streaming_content = []  # Buffer for accumulating streaming content
+        
         while True:
             try:
                 # Check for exceptions first
@@ -478,27 +481,97 @@ def stream_to_gradio(
                     continue
                 
                 if result_type == 'done':
-                    break
-                elif result_type == 'error':
-                    raise event
-                elif result_type == 'event':
-                    # Process the event
-                    if isinstance(event, (ActionStep, PlanningStep, FinalAnswerStep, StreamChunk, AgentResponse)):
-                        for message in pull_messages_from_step(event, skip_model_outputs=getattr(agent, "stream_outputs", False)):
-                            yield message
-                    elif isinstance(event, str):
+                    # Yield any accumulated streaming content as final message
+                    if streaming_content:
                         yield gr.ChatMessage(
                             role=MessageRole.ASSISTANT,
-                            content=event,
-                            metadata={"status": "pending"}
-                        )
-                    else:
-                        content = str(event)
-                        yield gr.ChatMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=content,
+                            content="".join(streaming_content),
                             metadata={"status": "done"}
                         )
+                        streaming_content = []
+                    break
+                elif result_type == 'error':
+                    # Yield any accumulated streaming content before error
+                    if streaming_content:
+                        yield gr.ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content="".join(streaming_content),
+                            metadata={"status": "done"}
+                        )
+                        streaming_content = []
+                    raise event
+                elif result_type == 'event':
+                    # Handle StreamChunk differently - accumulate content
+                    if isinstance(event, StreamChunk):
+                        content = event.content
+                        chunk_type = getattr(event, 'chunk_type', 'llm_output')
+                        
+                        if chunk_type == 'error':
+                            # Flush accumulated content first
+                            if streaming_content:
+                                yield gr.ChatMessage(
+                                    role=MessageRole.ASSISTANT,
+                                    content="".join(streaming_content),
+                                    metadata={"status": "done"}
+                                )
+                                streaming_content = []
+                            # Then yield error
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT, 
+                                content=content, 
+                                metadata={"title": "💥 Error", "status": "done"}
+                            )
+                        elif chunk_type == 'final_answer':
+                            # Flush accumulated content first
+                            if streaming_content:
+                                yield gr.ChatMessage(
+                                    role=MessageRole.ASSISTANT,
+                                    content="".join(streaming_content),
+                                    metadata={"status": "done"}
+                                )
+                                streaming_content = []
+                            # Then yield final answer
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT, 
+                                content=f"**Final answer:** {content}", 
+                                metadata={"status": "done"}
+                            )
+                        else:
+                            # Accumulate streaming content
+                            streaming_content.append(content)
+                            # Yield accumulated content so far with pending status
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content="".join(streaming_content),
+                                metadata={"status": "pending"}
+                            )
+                    else:
+                        # For non-StreamChunk events, flush accumulated content first
+                        if streaming_content:
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content="".join(streaming_content),
+                                metadata={"status": "done"}
+                            )
+                            streaming_content = []
+                        
+                        # Process other event types normally
+                        if isinstance(event, (ActionStep, PlanningStep, FinalAnswerStep, AgentResponse)):
+                            for message in pull_messages_from_step(event, skip_model_outputs=getattr(agent, "stream_outputs", False)):
+                                yield message
+                        elif isinstance(event, str):
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content=event,
+                                metadata={"status": "done"}
+                            )
+                        else:
+                            content = str(event)
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content=content,
+                                metadata={"status": "done"}
+                            )
                         
             except queue.Empty:
                 continue

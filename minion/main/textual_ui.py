@@ -41,10 +41,11 @@ class MessageRole(str, Enum):
 
 class ChatMessage:
     """Simple chat message class for textual UI."""
-    def __init__(self, role: str, content: str, timestamp: Optional[datetime] = None):
+    def __init__(self, role: str, content: str, timestamp: Optional[datetime] = None, is_streaming: bool = False):
         self.role = role
         self.content = content
         self.timestamp = timestamp or datetime.now()
+        self.is_streaming = is_streaming
     
     def __str__(self):
         return f"[{self.role}] {self.content}"
@@ -159,7 +160,12 @@ def stream_to_textual(
                     break
                 elif result_type == 'event':
                     # Process the event and convert to ChatMessage
-                    if isinstance(event, (ActionStep, StreamChunk, AgentResponse)):
+                    if isinstance(event, StreamChunk):
+                        content = _process_agent_event(event)
+                        if content:
+                            # Mark StreamChunk content as streaming to enable accumulation
+                            yield ChatMessage(MessageRole.ASSISTANT, content, is_streaming=True)
+                    elif isinstance(event, (ActionStep, AgentResponse)):
                         content = _process_agent_event(event)
                         if content:
                             yield ChatMessage(MessageRole.ASSISTANT, content)
