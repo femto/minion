@@ -118,7 +118,7 @@ def stream_to_textual(
                 
                 async def agent_runner():
                     try:
-                        async for event in agent.run_async(input_obj, **kwargs):
+                        async for event in (await agent.run_async(input_obj, **kwargs)):
                             result_queue.put(('event', event))
                     except Exception as e:
                         result_queue.put(('error', e))

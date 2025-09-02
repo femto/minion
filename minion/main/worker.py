@@ -1561,7 +1561,7 @@ class ModeratorMinion(Minion):
 
         if self.input.execution_state.current_minion:
             # Resume from previous state, assume pre_processing already been done
-            if hasattr(self.input, 'execution_config') and self.input.execution_config['type'] == "ensemble":
+            if hasattr(self.input, 'execution_config') and self.input.execution_config.get('type',None) == "ensemble":
                 # 集成模式暂不支持流式输出，回退到普通执行
                 agent_response = await self.execute_ensemble()
                 yield agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
