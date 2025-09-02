@@ -1,4 +1,4 @@
-from typing import List, Optional, AsyncIterator
+from typing import List, Optional
 
 from minion.providers.openai_provider import OpenAIProvider
 from minion.providers.llm_provider_registry import llm_registry
@@ -31,11 +31,10 @@ class AzureProvider(OpenAIProvider):
         #kwargs.pop("model", None)
         return await super().generate(messages, temperature, **kwargs)
 
-    async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs):
+    async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         # 移除 model 参数，因为 Azure 使用 deployment_name
         #kwargs.pop("model", None)
-        async for chunk in super().generate_stream(messages, temperature, **kwargs):
-            yield chunk
+        return await super().generate_stream(messages, temperature, **kwargs)
         
     def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
         # 移除 model 参数，因为 Azure 使用 deployment_name

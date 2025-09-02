@@ -108,7 +108,7 @@ class AzureInferenceProvider(OpenAIProvider):
                 chunk_message = chunk.choices[0].delta.content
                 if chunk_message:
                     full_content += chunk_message
-                    # log_llm_stream(chunk_message)
+                    log_llm_stream(chunk_message)
                 #yield chunk_message
         return full_content
         

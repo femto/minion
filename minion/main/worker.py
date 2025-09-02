@@ -89,17 +89,13 @@ class RawMinion(WorkerMinion):
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
-        # 检查是否需要流式输出
-        if hasattr(self.input, 'stream') and self.input.stream:
-            return self._execute_stream(node, tools)
-        
         if self.task:
             # Task mode: use TASK_INPUT template
             template_str = TASK_INPUT
             messages = construct_messages_from_template(
                 template_str, self.input, task=self.task
             )
-            response = await node.execute(messages, tools=tools, stream=False)
+            response = await node.execute(messages, tools=tools)
         else:
             query = self.input.query
             # Support both string and multimodal queries
@@ -108,10 +104,10 @@ class RawMinion(WorkerMinion):
                 # Create a temporary object with query and system_prompt
                 temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
                 messages = construct_simple_message(temp_input)
-                response = await node.execute(messages, tools=tools, stream=False)
+                response = await node.execute(messages, tools=tools)
             else:
                 # For simple string queries, use traditional approach
-                response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools, stream=False)
+                response = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools)
 
         # Extract answer using DeepSeek think mode
         think_content, answer_content = extract_think_and_answer(response)
@@ -129,88 +125,6 @@ class RawMinion(WorkerMinion):
             truncated=False,
             info={'raw_response': response}
         )
-    
-    async def _execute_stream(self, node, tools):
-        """流式执行方法"""
-        if self.task:
-            # Task mode: use TASK_INPUT template
-            template_str = TASK_INPUT
-            messages = construct_messages_from_template(
-                template_str, self.input, task=self.task
-            )
-            stream_generator = await node.execute(messages, tools=tools, stream=True)
-        else:
-            query = self.input.query
-            # Support both string and multimodal queries
-            if isinstance(query, list):
-                # For multimodal queries, construct proper message format
-                temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
-                messages = construct_simple_message(temp_input)
-                stream_generator = await node.execute(messages, tools=tools, stream=True)
-            else:
-                # For simple string queries, use traditional approach
-                stream_generator = await node.execute(query, system_prompt=self.input.system_prompt, tools=tools, stream=True)
-        
-        # 处理流式生成器并yield结果
-        async for chunk in self._process_stream_generator(stream_generator):
-            yield chunk
-    
-    async def execute_stream(self):
-        """公共流式执行接口"""
-        node = LmpActionNode(self.brain.llm)
-        tools = (self.input.tools or []) + (self.brain.tools or [])
-        
-        async for chunk in self._execute_stream(node, tools):
-            yield chunk
-    
-    async def _process_stream_generator(self, stream_generator):
-        """处理流式生成器，添加 Minion 层的元数据"""
-        from minion.main.action_step import StreamChunk
-        
-        full_response = ""
-        minion_chunk_counter = 0
-        
-        async for chunk in stream_generator:
-            if hasattr(chunk, 'content'):
-                # 已经是 StreamChunk 对象，添加 Minion 层的元数据
-                content = chunk.content
-                minion_chunk_counter += 1
-                
-                # 对于文本内容，累加到 full_response
-                if chunk.chunk_type == "text":
-                    full_response += content
-                
-                # 更新元数据
-                chunk.metadata.update({
-                    "minion_type": self.__class__.__name__,
-                    "minion_chunk_number": minion_chunk_counter,
-                    "minion_total_length": len(full_response)
-                })
-                yield chunk
-            else:
-                # 向后兼容：处理字符串（如果有的话）
-                content = str(chunk)
-                full_response += content
-                minion_chunk_counter += 1
-                
-                # 创建 StreamChunk 对象
-                stream_chunk = StreamChunk(
-                    content=content,
-                    chunk_type="text",
-                    metadata={
-                        "minion_type": self.__class__.__name__,
-                        "minion_chunk_number": minion_chunk_counter,
-                        "minion_total_length": len(full_response)
-                    }
-                )
-                yield stream_chunk
-        
-        # 处理完整响应以提取答案
-        think_content, answer_content = extract_think_and_answer(full_response)
-        self.answer = answer_content if answer_content else full_response
-        self.think_content = think_content
-        self.answer_raw = self.input.answer_raw = full_response
-        self.input.answer = self.answer
 
 @register_worker_minion
 class NativeMinion(WorkerMinion):
@@ -254,45 +168,6 @@ class NativeMinion(WorkerMinion):
             truncated=False,
             info={'raw_response': response}
         )
-    
-    async def execute_stream(self):
-        """流式执行方法"""
-        if self.task:
-            # Task mode: use TASK_INPUT template
-            template_str = WORKER_PROMPT + TASK_INPUT
-            messages = construct_messages_from_template(
-                template_str, self.input, task=self.task
-            )
-        else:
-            # Normal mode: use original WORKER_PROMPT
-            messages = construct_messages_from_template(
-                WORKER_PROMPT, self.input
-            )
-        
-        node = LmpActionNode(self.brain.llm)
-        tools = (self.input.tools or []) + (self.brain.tools or [])
-        
-        full_response = ""
-        async for chunk in await node.execute(messages, tools=tools, stream=True):
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-                full_response += content
-                yield chunk  # 保持 StreamChunk 对象
-            elif isinstance(chunk, str):
-                content = chunk
-                full_response += content
-                yield chunk  # 保持字符串
-            else:
-                content = str(chunk)
-                full_response += content
-                yield content
-        
-        # 处理完整响应
-        think_content, answer_content = extract_think_and_answer(full_response)
-        self.answer = answer_content if answer_content else full_response
-        self.think_content = think_content
-        self.raw_answer = self.input.answer_raw = full_response
-        self.input.answer = self.answer
 
 
 @register_worker_minion
@@ -351,54 +226,6 @@ class CotMinion(WorkerMinion):
             truncated=False,
             info={'raw_response': response}
         )
-    
-    async def execute_stream(self):
-        """流式执行方法"""
-        if self.task:
-            # Task mode: use TASK_INPUT template
-            template_str = COT_PROBLEM_INSTRUCTION + WORKER_PROMPT + TASK_INPUT
-            messages = construct_messages_from_template(
-                template_str, self.input, task=self.task
-            )
-        else:
-            # Normal mode: use original prompt
-            messages = construct_messages_from_template(
-                COT_PROBLEM_INSTRUCTION + WORKER_PROMPT, self.input
-            )
-
-        node = LmpActionNode(self.brain.llm)
-        tools = (self.input.tools or []) + (self.brain.tools or [])
-        
-        full_response = ""
-        async for chunk in await node.execute(messages, tools=tools, stream=True):
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-            elif isinstance(chunk, str):
-                content = chunk
-            else:
-                content = str(chunk)
-            
-            full_response += content
-            yield content
-
-        # 处理完整响应
-        post_processing = None
-        if self.worker_config and 'post_processing' in self.worker_config:
-            post_processing = self.worker_config['post_processing']
-        elif self.input.post_processing:
-            post_processing = self.input.post_processing
-
-        if post_processing == "extract_python" or self.input.query_type == "code_solution":
-            self.answer = full_response  # Let route minion handle extraction
-        else:
-            # For DeepSeek think mode, extract the answer part outside <think> tags
-            think_content, answer_content = extract_think_and_answer(full_response)
-            self.answer = answer_content if answer_content else full_response
-            # Store think content for potential debugging/analysis
-            self.think_content = think_content
-
-        self.input.answer = self.answer
-        self.answer_raw = self.input.answer_raw = full_response
 
 # class DotMinion(WorkerMinion):
 #     """Diagram of Thought (DoT) Strategy"""
@@ -465,38 +292,6 @@ class DcotMinion(WorkerMinion):
             truncated=False,
             info={'raw_response': response}
         )
-    
-    async def execute_stream(self):
-        """流式执行方法"""
-        if self.task:
-            # Task mode: use TASK_INPUT template
-            template_str = DCOT_PROMPT + TASK_INPUT
-            messages = construct_messages_from_template(
-                template_str, self.input, task=self.task
-            )
-        else:
-            # Normal mode: use original prompt
-            messages = construct_messages_from_template(
-                DCOT_PROMPT, self.input
-            )
-        
-        node = LmpActionNode(self.brain.llm)
-        
-        full_response = ""
-        async for chunk in await node.execute(messages, tools=None, stream=True):
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-            elif isinstance(chunk, str):
-                content = chunk
-            else:
-                content = str(chunk)
-            
-            full_response += content
-            yield content
-        
-        # 处理完整响应
-        self.answer = self.input.answer = extract_answer(full_response)
-        self.answer_raw = self.input.answer_raw = full_response
 
 
 # @register_worker_minion
@@ -659,11 +454,6 @@ class PlanMinion(WorkerMinion):
         """从上次保存的状态恢复执行"""
         self.load_execution_state()
         await self.execute()
-    
-    async def execute_stream(self):
-        """流式执行方法 - PlanMinion 暂不支持真正的流式输出，回退到普通执行"""
-        result = await self.execute()
-        yield str(result)
 
 
 # @register_worker_minion
@@ -759,11 +549,6 @@ class TaskMinion(WorkerMinion):
 
     async def execute(self):
         return await self.choose_minion_and_run()
-    
-    async def execute_stream(self):
-        """流式执行方法 - TaskMinion 暂不支持真正的流式输出，回退到普通执行"""
-        result = await self.choose_minion_and_run()
-        yield str(result)
 
 
 @register_worker_minion
@@ -1019,14 +804,6 @@ Previous error:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, "w") as f:
                 f.write(content)
-    
-    async def execute_stream(self):
-        """流式执行方法 - PythonMinion 暂不支持真正的流式输出，回退到普通执行"""
-        result = await self.execute()
-        if isinstance(result, AgentResponse):
-            yield result.answer if result.answer else str(result.raw_response)
-        else:
-            yield str(result)
 
 @register_worker_minion
 class CodeMinion(PythonMinion):
@@ -1360,14 +1137,6 @@ Let's start! Remember to end your code blocks with <end_code>.
         # Only rely on explicit final_answer() function calls detected by LocalPythonExecutor
         
         return False
-    
-    async def execute_stream(self):
-        """流式执行方法 - CodeMinion 暂不支持真正的流式输出，回退到普通执行"""
-        result = await self.execute()
-        if isinstance(result, AgentResponse):
-            yield result.answer if result.answer else str(result.raw_response)
-        else:
-            yield str(result)
 
 @register_worker_minion
 class MathMinion(PythonMinion):
@@ -1377,11 +1146,6 @@ class MathMinion(PythonMinion):
         super().__init__(**kwargs)
         self.input.query_type = "calculate"
         self.input.instruction = "This is a math problem, write python code to solve it"
-    
-    async def execute_stream(self):
-        """流式执行方法 - MathMinion 继承 PythonMinion 的流式执行"""
-        async for chunk in super().execute_stream():
-            yield chunk
 
 
 #do we need this minion?
@@ -1515,7 +1279,7 @@ class ModeratorMinion(Minion):
 
         if self.input.execution_state.current_minion:
             # Resume from previous state, assume pre_processing already been done
-            if hasattr(self.input, 'execution_config') and self.input.execution_config.get('type') == "ensemble":
+            if hasattr(self.input, 'execution_config') and self.input.execution_config['type'] == "ensemble":
                 agent_response = await self.execute_ensemble()
             else:
                 agent_response = await self.execute_single()
@@ -1554,53 +1318,6 @@ class ModeratorMinion(Minion):
         """从上次保存的状态恢复执行"""
         self.load_execution_state()
         await self.execute()
-    
-    async def execute_stream(self):
-        """流式执行方法"""
-        self.load_execution_state()
-
-        if self.input.execution_state.current_minion:
-            # Resume from previous state, assume pre_processing already been done
-            if hasattr(self.input, 'execution_config') and self.input.execution_config.get('type',None) == "ensemble":
-                # 集成模式暂不支持流式输出，回退到普通执行
-                agent_response = await self.execute_ensemble()
-                yield agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
-                return
-            else:
-                async for chunk in self._execute_single_stream():
-                    yield chunk
-        else:
-            # Start new execution
-            # Execute pre-processing first
-            await self.execute_pre_processing()
-            
-            async for chunk in self._choose_minion_and_run_stream():
-                yield chunk
-
-        # Clean up python env
-        self.brain.cleanup_python_env(input=self.input)
-    
-    async def _execute_single_stream(self):
-        """单个 worker 的流式执行"""
-        worker = RouteMinion(input=self.input, brain=self.brain)
-        if hasattr(worker, 'execute_stream'):
-            async for chunk in worker.execute_stream():
-                yield chunk
-        else:
-            # 回退到普通执行
-            agent_response = await worker.execute()
-            yield agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
-    
-    async def _choose_minion_and_run_stream(self):
-        """选择并运行 minion 的流式版本"""
-        # Check if we have ensemble configuration
-        if hasattr(self.input, 'execution_config') and self.input.execution_config.get('type') == "ensemble":
-            # 集成模式暂不支持流式输出，回退到普通执行
-            agent_response = await self.execute_ensemble()
-            yield agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
-        else:
-            async for chunk in self._execute_single_stream():
-                yield chunk
 
 
 class IdentifyMinion(Minion):
@@ -1847,42 +1564,6 @@ class RouteMinion(Minion):
         """从上次保存的状态恢复执行"""
         self.load_execution_state()
         await self.execute()
-    
-    async def execute_stream(self):
-        """流式执行方法"""
-        self.load_execution_state()
-        
-        # 获取 minion 类和名称
-        klass, name = await self.get_minion_class_and_name()
-        
-        # 流式执行不支持改进循环，直接执行一次
-        async for chunk in self._invoke_minion_stream(klass):
-            yield chunk
-    
-    async def _invoke_minion_stream(self, klass):
-        """流式调用 minion"""
-        if isinstance(klass, str):
-            klass = MINION_REGISTRY.get(klass, CotMinion)
-
-        self.input.update_execution_state(
-            current_minion=klass.__name__,
-            chosen_minion=klass.__name__
-        )
-
-        self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config)
-        self.add_followers(self.current_minion)
-        
-        # 检查 minion 是否支持流式输出
-        if hasattr(self.current_minion, 'execute_stream'):
-            async for chunk in self.current_minion.execute_stream():
-                yield chunk
-        else:
-            # 回退到普通执行
-            minion_result = await self.current_minion.execute()
-            if isinstance(minion_result, AgentResponse):
-                yield minion_result.answer if minion_result.answer else str(minion_result.raw_response)
-            else:
-                yield str(minion_result)
 
     @staticmethod
     def serialize_function(func: Callable) -> str:
@@ -1988,14 +1669,6 @@ class OptillmMinion(WorkerMinion):
             truncated=False,
             info={'optillm_approach': approaches, 'operation': operation}
         )
-    
-    async def execute_stream(self):
-        """流式执行方法 - OptillmMinion 暂不支持真正的流式输出，回退到普通执行"""
-        result = await self.execute()
-        if isinstance(result, AgentResponse):
-            yield result.answer if result.answer else str(result.raw_response)
-        else:
-            yield str(result)
 
 
 
