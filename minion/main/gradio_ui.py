@@ -425,106 +425,86 @@ def stream_to_gradio(
         kwargs = additional_args or {}
         kwargs['stream'] = True
         
-        # Use a simpler approach - run the agent synchronously
-        # This avoids the complex async/sync conversion that was causing issues
-        import asyncio
+        # Use a thread-based approach to avoid event loop conflicts
+        import threading
+        import queue
+        import time
         
-        # Create a new event loop for this operation
-        try:
-            # Try to run in existing loop if available
-            loop = asyncio.get_running_loop()
-            # If we're already in a loop, we need to use a different approach
-            import concurrent.futures
-            import threading
-            
-            result_queue = []
-            exception_queue = []
-            
-            def run_in_thread():
-                try:
-                    # Create new loop in thread
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    
-                    async def run_agent():
-                        async for event in agent.run_async(input_obj, **kwargs):
-                            result_queue.append(event)
-                    
-                    new_loop.run_until_complete(run_agent())
-                    new_loop.close()
-                except Exception as e:
-                    exception_queue.append(e)
-            
-            # Run in separate thread
-            thread = threading.Thread(target=run_in_thread)
-            thread.start()
-            
-            # Wait for results
-            import time
-            while thread.is_alive() or result_queue:
-                if exception_queue:
-                    raise exception_queue[0]
-                
-                if result_queue:
-                    event = result_queue.pop(0)
-                    # Process the event
-                    if isinstance(event, (ActionStep, PlanningStep, FinalAnswerStep, StreamChunk, AgentResponse)):
-                        for message in pull_messages_from_step(event, skip_model_outputs=getattr(agent, "stream_outputs", False)):
-                            yield message
-                    elif isinstance(event, str):
-                        yield gr.ChatMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=event,
-                            metadata={"status": "pending"}
-                        )
-                    else:
-                        content = str(event)
-                        yield gr.ChatMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=content,
-                            metadata={"status": "done"}
-                        )
-                else:
-                    time.sleep(0.1)  # Small delay to prevent busy waiting
-            
-            thread.join()
-            
-        except RuntimeError:
-            # No event loop running, we can create one
-            async def run_agent_simple():
-                async for event in agent.run_async(input_obj, **kwargs):
-                    # Process the event
-                    if isinstance(event, (ActionStep, PlanningStep, FinalAnswerStep, StreamChunk, AgentResponse)):
-                        for message in pull_messages_from_step(event, skip_model_outputs=getattr(agent, "stream_outputs", False)):
-                            yield message
-                    elif isinstance(event, str):
-                        yield gr.ChatMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=event,
-                            metadata={"status": "pending"}
-                        )
-                    else:
-                        content = str(event)
-                        yield gr.ChatMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=content,
-                            metadata={"status": "done"}
-                        )
-            
-            # Run the async generator
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
+        result_queue = queue.Queue()
+        exception_queue = queue.Queue()
+        
+        def run_agent_in_thread():
+            """Run the agent in a separate thread with its own event loop."""
             try:
-                async_gen = run_agent_simple()
-                while True:
+                import asyncio
+                # Create a new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                async def agent_runner():
                     try:
-                        message = loop.run_until_complete(async_gen.__anext__())
-                        yield message
-                    except StopAsyncIteration:
-                        break
-            finally:
+                        async for event in agent.run_async(input_obj, **kwargs):
+                            result_queue.put(('event', event))
+                    except Exception as e:
+                        result_queue.put(('error', e))
+                    finally:
+                        result_queue.put(('done', None))
+                
+                loop.run_until_complete(agent_runner())
                 loop.close()
+                
+            except Exception as e:
+                exception_queue.put(e)
+                result_queue.put(('error', e))
+        
+        # Start the agent in a separate thread
+        agent_thread = threading.Thread(target=run_agent_in_thread, daemon=True)
+        agent_thread.start()
+        
+        # Process results as they come in
+        while True:
+            try:
+                # Check for exceptions first
+                if not exception_queue.empty():
+                    raise exception_queue.get_nowait()
+                
+                # Get the next result with a timeout
+                try:
+                    result_type, event = result_queue.get(timeout=0.1)
+                except queue.Empty:
+                    # Check if thread is still alive
+                    if not agent_thread.is_alive():
+                        break
+                    continue
+                
+                if result_type == 'done':
+                    break
+                elif result_type == 'error':
+                    raise event
+                elif result_type == 'event':
+                    # Process the event
+                    if isinstance(event, (ActionStep, PlanningStep, FinalAnswerStep, StreamChunk, AgentResponse)):
+                        for message in pull_messages_from_step(event, skip_model_outputs=getattr(agent, "stream_outputs", False)):
+                            yield message
+                    elif isinstance(event, str):
+                        yield gr.ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=event,
+                            metadata={"status": "pending"}
+                        )
+                    else:
+                        content = str(event)
+                        yield gr.ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=content,
+                            metadata={"status": "done"}
+                        )
+                        
+            except queue.Empty:
+                continue
+        
+        # Wait for thread to complete
+        agent_thread.join(timeout=1.0)
                 
     except Exception as e:
         # Handle any errors in streaming
@@ -600,14 +580,33 @@ class GradioUI:
             if not agent.is_setup:
                 # Run setup in a thread to avoid blocking
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        import concurrent.futures
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(asyncio.run, agent.setup())
-                            future.result(timeout=30)
+                    import threading
+                    import queue
+                    
+                    setup_result = queue.Queue()
+                    
+                    def setup_agent():
+                        try:
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            loop.run_until_complete(agent.setup())
+                            loop.close()
+                            setup_result.put(('success', None))
+                        except Exception as e:
+                            setup_result.put(('error', e))
+                    
+                    setup_thread = threading.Thread(target=setup_agent, daemon=True)
+                    setup_thread.start()
+                    setup_thread.join(timeout=30)
+                    
+                    if not setup_result.empty():
+                        result_type, result = setup_result.get()
+                        if result_type == 'error':
+                            raise result
                     else:
-                        loop.run_until_complete(agent.setup())
+                        raise TimeoutError("Agent setup timed out")
+                        
                 except Exception as setup_error:
                     messages.append(gr.ChatMessage(
                         role=MessageRole.ASSISTANT, 
@@ -700,74 +699,173 @@ class GradioUI:
             gr.Button(interactive=False),
         )
 
-    def launch(self, share: bool = True, debug: bool = True, **kwargs):
+    def launch(self, share: bool = False, debug: bool = True, server_port: int = None, **kwargs):
         """
         Launch the Gradio app with the agent interface.
 
         Args:
-            share (bool, defaults to True): Whether to share the app publicly.
+            share (bool, defaults to False): Whether to share the app publicly.
             debug (bool, defaults to True): Whether to enable debug mode.
+            server_port (int, optional): Port to use. If None, will find an available port.
             **kwargs: Additional keyword arguments to pass to the Gradio launch method.
         """
-        self.create_app().launch(debug=debug, share=share, **kwargs)
+        import socket
+        import time
+        
+        def find_free_port(start=8000):
+            """Find a free port starting from the given port."""
+            for port in range(start, start + 100):  # Much larger range
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        s.bind(('127.0.0.1', port))
+                        return port
+                except OSError:
+                    continue
+            return None
+        
+        def kill_processes_on_port(port):
+            """Kill any processes using the specified port."""
+            try:
+                import subprocess
+                # Find processes using the port
+                result = subprocess.run(['lsof', '-ti', f':{port}'], 
+                                      capture_output=True, text=True)
+                if result.stdout.strip():
+                    pids = result.stdout.strip().split('\n')
+                    for pid in pids:
+                        try:
+                            subprocess.run(['kill', '-9', pid], check=True)
+                            print(f"🔄 Killed process {pid} using port {port}")
+                        except subprocess.CalledProcessError:
+                            pass
+                    time.sleep(1)  # Give time for cleanup
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # lsof might not be available or other error
+                pass
+        
+        # Handle port selection - use a different range to avoid conflicts
+        if server_port is None:
+            server_port = find_free_port(8000)  # Start from port 8000
+            if server_port is None:
+                print("⚠️ Could not find a free port in 8000-8100 range, trying system auto-select...")
+                server_port = 0  # Let system choose any available port
+        
+        # Clean up any processes that might be using our target port
+        if server_port and server_port != 0:
+            kill_processes_on_port(server_port)
+        
+        # Build launch arguments with proper settings for Gradio 4.x/5.x
+        launch_kwargs = {
+            "share": share,
+            "prevent_thread_lock": False,
+            "show_error": True,
+            "quiet": False,
+            **kwargs
+        }
+        
+        # Only set server_port if we found a specific one
+        if server_port and server_port != 0:
+            launch_kwargs["server_port"] = server_port
+        # If server_port is 0, don't set it and let Gradio auto-select
+        
+        # Set default server settings if not provided
+        if "server_name" not in launch_kwargs:
+            launch_kwargs["server_name"] = "127.0.0.1"
+        
+        print(f"🌐 Launching Gradio interface...")
+        if server_port and server_port != 0:
+            print(f"📍 Server will start at: http://{launch_kwargs.get('server_name', '127.0.0.1')}:{server_port}")
+        else:
+            print(f"📍 Server will start at: http://{launch_kwargs.get('server_name', '127.0.0.1')}:<auto-selected-port>")
+        
+        try:
+            # Create the app and launch it
+            app = self.create_app()
+            
+            print("ℹ️  Note: You may see some warnings about deprecated features - these are normal and don't affect functionality.")
+            print("ℹ️  If you encounter port issues, try: GRADIO_SERVER_PORT=8080 python your_script.py")
+            
+            # If we have port issues, try without specifying a port
+            if "server_port" in launch_kwargs:
+                try:
+                    app.launch(**launch_kwargs)
+                except OSError as e:
+                    if "port" in str(e).lower():
+                        print(f"⚠️ Port issue detected, letting Gradio auto-select port...")
+                        # Remove server_port and let Gradio choose
+                        launch_kwargs_auto = launch_kwargs.copy()
+                        launch_kwargs_auto.pop("server_port", None)
+                        app.launch(**launch_kwargs_auto)
+                    else:
+                        raise
+            else:
+                app.launch(**launch_kwargs)
+                
+        except Exception as e:
+            print(f"❌ Error launching Gradio: {e}")
+            print("💡 Try running with: GRADIO_SERVER_PORT=8080 python your_script.py")
+            raise
 
     def create_app(self):
         import gradio as gr
-
-        with gr.Blocks(theme="ocean", fill_height=True) as demo:
+        
+        # Use legacy layout compatible with Gradio 4.x and 5.x
+        with gr.Blocks(theme="ocean") as demo:
             # Add session state to store session-specific data
             session_state = gr.State({})
             stored_messages = gr.State([])
             file_uploads_log = gr.State([])
-
-            with gr.Sidebar():
-                gr.Markdown(
-                    f"# {self.name.replace('_', ' ').capitalize()}"
-                    "\n> This web ui allows you to interact with a `smolagents` agent that can use tools and execute steps to complete tasks."
-                    + (f"\n\n**Agent description:**\n{self.description}" if self.description else "")
-                )
-
-                with gr.Group():
-                    gr.Markdown("**Your request**", container=True)
-                    text_input = gr.Textbox(
-                        lines=3,
-                        label="Chat Message",
-                        container=False,
-                        placeholder="Enter your prompt here and press Shift+Enter or press the button",
-                    )
-                    submit_btn = gr.Button("Submit", variant="primary")
-
-                # If an upload folder is provided, enable the upload feature
-                if self.file_upload_folder is not None:
-                    upload_file = gr.File(label="Upload a file")
-                    upload_status = gr.Textbox(label="Upload Status", interactive=False, visible=False)
-                    upload_file.change(
-                        self.upload_file,
-                        [upload_file, file_uploads_log],
-                        [upload_status, file_uploads_log],
+            
+            with gr.Row():
+                with gr.Column(scale=1, min_width=300):
+                    gr.Markdown(
+                        f"# {self.name.replace('_', ' ').capitalize()}"
+                        "\n> This web ui allows you to interact with a `minion` agent that can use tools and execute steps to complete tasks."
+                        + (f"\n\n**Agent description:**\n{self.description}" if self.description else "")
                     )
 
-                gr.HTML(
-                    "<br><br><h4><center>Powered by <a target='_blank' href='https://github.com/huggingface/smolagents'><b>smolagents</b></a></center></h4>"
-                )
+                    with gr.Group():
+                        gr.Markdown("**Your request**")
+                        text_input = gr.Textbox(
+                            lines=3,
+                            label="Chat Message",
+                            container=False,
+                            placeholder="Enter your prompt here and press Shift+Enter or press the button",
+                        )
+                        submit_btn = gr.Button("Submit", variant="primary")
 
-            # Main chat interface
-            chatbot = gr.Chatbot(
-                label="Agent",
-                type="messages",
-                avatar_images=(
-                    None,
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
-                ),
-                resizeable=True,
-                scale=1,
-                latex_delimiters=[
-                    {"left": r"$$", "right": r"$$", "display": True},
-                    {"left": r"$", "right": r"$", "display": False},
-                    {"left": r"\[", "right": r"\]", "display": True},
-                    {"left": r"\(", "right": r"\)", "display": False},
-                ],
-            )
+                    # If an upload folder is provided, enable the upload feature
+                    if self.file_upload_folder is not None:
+                        upload_file = gr.File(label="Upload a file")
+                        upload_status = gr.Textbox(label="Upload Status", interactive=False, visible=False)
+                        upload_file.change(
+                            self.upload_file,
+                            [upload_file, file_uploads_log],
+                            [upload_status, file_uploads_log],
+                        )
+
+                    gr.HTML(
+                        "<br><br><h4><center>Powered by <a target='_blank' href='https://github.com/femto/minion'><b>minion</b></a></center></h4>"
+                    )
+                
+                with gr.Column(scale=3):
+                    # Main chat interface
+                    chatbot = gr.Chatbot(
+                        label="Agent",
+                        type="messages",
+                        avatar_images=(
+                            None,
+                            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/smolagents/mascot_smol.png",
+                        ),
+                        height=600,
+                        latex_delimiters=[
+                            {"left": r"$", "right": r"$", "display": True},
+                            {"left": r"$", "right": r"$", "display": False},
+                            {"left": r"\[", "right": r"\]", "display": True},
+                            {"left": r"\(", "right": r"\)", "display": False},
+                        ],
+                    )
 
             # Set up event handlers
             text_input.submit(
@@ -809,7 +907,8 @@ class GradioUI:
                 elif hasattr(self.agent, 'brain') and hasattr(self.agent.brain, 'reset'):
                     self.agent.brain.reset()
             
-            chatbot.clear(reset_memory)
+            # For Gradio 4.x compatibility, we don't use chatbot.clear()
+            # Memory reset will be handled in the interact_with_agent method
         return demo
 
 

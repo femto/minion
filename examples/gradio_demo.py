@@ -1,167 +1,135 @@
 #!/usr/bin/env python3
 """
-Final, most reliable Gradio launcher
+Gradio UI Demo using the official GradioUI class
+
+This script demonstrates how to use the GradioUI class from minion.main.gradio_ui
+to create a web interface for interacting with CodeAgent.
 """
 
+import asyncio
 import sys
 import os
-import socket
-import threading
-import time
 
-def find_free_port(start=7860):
-    """Find a free port."""
-    for port in range(start, start + 10):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('127.0.0.1', port))
-                return port
-        except OSError:
-            continue
-    return None
+# Add the project root to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-def main():
-    """Main function - completely synchronous approach."""
-    print("🚀 Starting Minion Gradio UI (Final Version)...")
+from minion.agents.code_agent import CodeAgent
+from minion.main.gradio_ui import GradioUI
+from minion.main.brain import Brain
+from minion.tools.default_tools import FinalAnswerTool
+
+def setup():
+    """Set up the Gradio UI and return the UI instance and agent."""
     
-    # Check dependencies
+    print("🚀 Starting Minion Gradio UI Demo...")
+    print("📝 This demo uses the official GradioUI class")
+    
+    # Check if gradio is available
     try:
-        import gradio as gr
-        print(f"✅ Gradio {gr.__version__} available")
+        import gradio
+        print(f"✅ Gradio {gradio.__version__} is available")
     except ImportError:
-        print("❌ Please install gradio: pip install gradio")
-        return
+        print("❌ Gradio is not installed. Please install it with:")
+        print("   pip install gradio")
+        print("   or")
+        print("   pip install 'minion[gradio]'")
+        sys.exit(1)
     
-    # Find port
-    port = find_free_port()
-    if not port:
-        print("❌ No free ports available")
-        return
+    # Create a brain instance
+    brain = Brain()
     
-    print(f"✅ Using port {port}")
+    # Create a CodeAgent with basic tools
+    agent = CodeAgent(
+        name="Minion Code Assistant",
+        brain=brain,
+        tools=[FinalAnswerTool()],
+        max_steps=10,
+        enable_reflection=True,
+        use_async_executor=True
+    )
     
+    # Create the Gradio UI using the official GradioUI class
+    print("🎨 Creating GradioUI...")
+    gradio_ui = GradioUI(
+        agent=agent,
+        file_upload_folder="uploads",  # Enable file uploads
+        reset_agent_memory=True        # Reset memory between conversations
+    )
+    print("✅ GradioUI created successfully!")
+    
+    return gradio_ui, agent
+
+# Main function is now handled by main_async
+
+def run():
+    """Run the application using asyncio.run to properly handle async operations.
+    
+    This function serves as the entry point for the application and ensures that
+    the async main_async function is executed correctly within an asyncio event loop.
+    It also provides error handling for graceful shutdown.
+    """
     try:
-        from minion.agents.code_agent import CodeAgent
-        from minion.main.brain import Brain
-        from minion.tools.default_tools import FinalAnswerTool
-        
-        # Create agent synchronously
-        print("⚙️ Creating agent...")
-        brain = Brain()
-        agent = CodeAgent(
-            name="Minion Assistant",
-            brain=brain,
-            tools=[FinalAnswerTool()],
-            max_steps=10,
-            enable_reflection=False,  # Disable for stability
-            use_async_executor=False  # Use sync executor for stability
-        )
-        
-        # Setup agent in a separate thread to avoid blocking
-        setup_complete = threading.Event()
-        setup_error = []
-        
-        def setup_agent():
-            try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(agent.setup())
-                loop.close()
-                setup_complete.set()
-            except Exception as e:
-                setup_error.append(e)
-                setup_complete.set()
-        
-        setup_thread = threading.Thread(target=setup_agent)
-        setup_thread.start()
-        setup_thread.join(timeout=30)
-        
-        if setup_error:
-            raise setup_error[0]
-        
-        if not setup_complete.is_set():
-            raise TimeoutError("Agent setup timed out")
-        
-        print("✅ Agent ready!")
-        
-        # Create a simple chat interface
-        def chat_with_agent(message, history):
-            """Simple chat function that works with the agent."""
-            try:
-                # Create a simple sync wrapper
-                import asyncio
-                
-                def run_agent_sync():
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        from minion.main.input import Input
-                        input_obj = Input(query=message)
-                        result = loop.run_until_complete(agent.run_async(input_obj, stream=False))
-                        return str(result)
-                    finally:
-                        loop.close()
-                
-                # Run in thread to avoid blocking
-                result_container = []
-                error_container = []
-                
-                def worker():
-                    try:
-                        result = run_agent_sync()
-                        result_container.append(result)
-                    except Exception as e:
-                        error_container.append(str(e))
-                
-                worker_thread = threading.Thread(target=worker)
-                worker_thread.start()
-                worker_thread.join(timeout=60)
-                
-                if error_container:
-                    return f"❌ Error: {error_container[0]}"
-                elif result_container:
-                    return result_container[0]
-                else:
-                    return "⏰ Request timed out"
-                    
-            except Exception as e:
-                return f"❌ Error: {str(e)}"
-        
-        # Create Gradio interface
-        print("🎨 Creating interface...")
-        demo = gr.ChatInterface(
-            fn=chat_with_agent,
-            title="🤖 Minion Code Assistant",
-            description="Ask me to solve problems, write code, or answer questions!",
-            examples=[
-                "Calculate the area of a circle with radius 5",
-                "Write a Python function to sort a list",
-                "What is 15 * 23 + 7?",
-                "Explain how recursion works"
-            ]
-        )
-        
-        print(f"🌐 Starting server at http://127.0.0.1:{port}")
-        print("📝 You can now chat with the Minion agent!")
-        print("🛑 Press Ctrl+C to stop")
-        
-        # Launch
-        demo.launch(
-            server_name="127.0.0.1",
-            server_port=port,
-            share=False,
-            debug=False,
-            show_error=True,
-            quiet=True
-        )
-        
+        # Use asyncio.run to properly handle async operations
+        asyncio.run(main_async())
     except KeyboardInterrupt:
-        print("\n👋 Shutting down...")
+        print("\n👋 Goodbye!")
+    except Exception as e:
+        print(f"❌ Startup error: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def main_async():
+    """Async implementation of the main function to properly handle asyncio operations.
+    
+    This function ensures that the asyncio event loop is properly set up before launching
+    the Gradio interface, which is important for the Uvicorn server's lifespan management.
+    """
+    agent = None
+    try:
+        # Set up the UI and agent
+        gradio_ui, agent = setup()
+        
+        # Set up the agent asynchronously
+        print("⚙️ Setting up agent...")
+        await agent.setup()
+        print("✅ Agent setup complete!")
+        
+        print("🌐 Launching web interface...")
+        print("📝 You can ask the agent to:")
+        print("   - Solve math problems")
+        print("   - Write and execute Python code")
+        print("   - Analyze data")
+        print("   - Answer questions with reasoning")
+        print("   - Upload files for analysis")
+        print("   - And much more!")
+        print()
+        print("🛑 Press Ctrl+C to stop the server")
+        
+        # Launch the interface using GradioUI
+        # The launch method is blocking, which is what we want in this case
+        # It will keep the server running until interrupted
+        gradio_ui.launch(
+            share=False,        # Set to True to create a public link
+            debug=False,        # Set to True for debug mode
+            server_port=None    # Let Gradio auto-select an available port
+        )
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down gracefully...")
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Clean up the agent if it was created
+        if agent is not None:
+            try:
+                print("🧹 Cleaning up agent resources...")
+                await agent.close()
+                print("✅ Agent cleanup completed")
+            except Exception as e:
+                print(f"⚠️ Error during agent cleanup: {e}")
+                import traceback
+                traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    run()

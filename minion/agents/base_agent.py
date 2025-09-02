@@ -277,7 +277,7 @@ class BaseAgent:
             result = await self.brain.step(state, stream=True, **kwargs)
             
             # 如果 brain.step 返回的是异步生成器，则流式处理
-            if hasattr(result, '__aiter__'):
+            if inspect.isasyncgen(result):
                 async for chunk in result:
                     if isinstance(chunk, str):
                         yield StreamChunk(content=chunk, chunk_type="llm_output")
