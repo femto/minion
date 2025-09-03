@@ -273,19 +273,15 @@ class NativeMinion(WorkerMinion):
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         full_response = ""
-        async for chunk in await node.execute(messages, tools=tools, stream=True):
+        async for chunk in self.stream_node_execution(node, messages, tools):
+            # Yield StreamChunk对象，保持原始结构  
+            yield chunk
+            
+            # 累积内容用于后续处理
             if hasattr(chunk, 'content'):
-                content = chunk.content
-                full_response += content
-                yield chunk  # 保持 StreamChunk 对象
+                full_response += chunk.content
             elif isinstance(chunk, str):
-                content = chunk
-                full_response += content
-                yield chunk  # 保持字符串
-            else:
-                content = str(chunk)
-                full_response += content
-                yield content
+                full_response += chunk
         
         # 处理完整响应
         think_content, answer_content = extract_think_and_answer(full_response)
@@ -370,26 +366,15 @@ class CotMinion(WorkerMinion):
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         full_response = ""
-        async for chunk in await node.execute(messages, tools=tools, stream=True):
+        async for chunk in self.stream_node_execution(node, messages, tools):
+            # Yield StreamChunk对象，保持原始结构
+            yield chunk
+            
+            # 累积内容用于后续处理
             if hasattr(chunk, 'content'):
-                content = chunk.content
-                # Check if this is a tool call chunk, especially final_answer
-                if hasattr(chunk, 'chunk_type') and chunk.chunk_type == "tool_call":
-                    if hasattr(chunk, 'metadata') and chunk.metadata:
-                        tool_call = chunk.metadata.get('tool_call')
-                        if tool_call and hasattr(tool_call, 'function') and tool_call.function.name == "final_answer":
-                            # This is a final_answer tool call, yield and return to terminate
-                            yield chunk
-                            return
-                yield chunk
+                full_response += chunk.content
             elif isinstance(chunk, str):
-                content = chunk
-                full_response += content
-                yield content
-            else:
-                content = str(chunk)
-                full_response += content
-                yield content
+                full_response += chunk
 
         # 处理完整响应
         post_processing = None
@@ -493,16 +478,15 @@ class DcotMinion(WorkerMinion):
         node = LmpActionNode(self.brain.llm)
         
         full_response = ""
-        async for chunk in await node.execute(messages, tools=None, stream=True):
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-            elif isinstance(chunk, str):
-                content = chunk
-            else:
-                content = str(chunk)
+        async for chunk in self.stream_node_execution(node, messages, tools=None):
+            # Yield StreamChunk对象，保持原始结构
+            yield chunk
             
-            full_response += content
-            yield content
+            # 累积内容用于后续处理
+            if hasattr(chunk, 'content'):
+                full_response += chunk.content
+            elif isinstance(chunk, str):
+                full_response += chunk
         
         # 处理完整响应
         self.answer = self.input.answer = extract_answer(full_response)

@@ -66,10 +66,11 @@
   - 解决方案：当`is_final_answer=True`时立即返回`terminated=True`的AgentResponse
   - 现在final_answer工具调用会正确终止任务执行
 
-- COT流式处理final_answer检测
-  - 修复了CotMinion流式输出中不检查final_answer工具调用的问题
-  - 现在会检查StreamChunk的chunk_type和metadata，当检测到final_answer工具调用时立即终止流式输出
-  - 避免了在已经给出最终答案后继续生成内容的问题
+- Minion流式处理重构
+  - 在基类Minion中添加了`stream_node_execution`通用方法
+  - 所有子类现在使用统一的流式处理逻辑，直接yield StreamChunk对象
+  - 移除了错误的final_answer检测逻辑，final_answer处理由LmpActionNode负责
+  - 保持StreamChunk对象的原始结构，便于上层UI正确处理不同类型的chunk
 
 - tool_choice参数支持
   - MinionToolCallingAgent和LmpActionNode现在都支持tool_choice参数

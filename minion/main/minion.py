@@ -137,6 +137,22 @@ class Minion(metaclass=SubclassHookMeta):
             return math_equal
         return None
 
+    async def stream_node_execution(self, node, messages, tools=None):
+        """
+        通用的流式节点执行方法，供所有子类使用
+        
+        Args:
+            node: LmpActionNode实例
+            messages: 消息列表
+            tools: 工具列表（可选）
+            
+        Yields:
+            StreamChunk: 流式输出块
+        """
+        async for chunk in await node.execute(messages, tools=tools, stream=True):
+            # 直接yield StreamChunk对象，保持原始结构
+            yield chunk
+
     async def update_stats(self, minion_name, result, answer_raw):
         if self.brain.stats_storer:
             compare_answer_func = self.get_compare_answer_func()
