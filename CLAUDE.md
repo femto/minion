@@ -7,8 +7,13 @@
   - 错误用法: `async for event in agent.run_async(input_obj, **kwargs):`
   - 这是因为run_async是async函数，它delegate到其他函数，本身需要await才能返回真正的async generator
 
+- Agent构造函数设计模式
+  - 所有Agent应继承BaseAgent并使用@dataclass装饰器
+  - 构造函数参数应与BaseAgent对齐，使用dataclass字段而非__init__方法
+  - stream相关参数不应在构造函数中，而是通过run_async(stream=True/False)动态控制
+
 - LLM构造和获取最佳实践
-  - MinionToolCallingAgent构造时llm参数可以为None，会自动从model配置创建
+  - MinionToolCallingAgent构造时会自动从model配置创建LLM
   - 标准LLM获取模式（参考brain.py）：
     ```python
     # 方式1：直接指定model名称，从config.models获取配置
@@ -20,7 +25,15 @@
     llm = create_llm_provider(config.models.get("default"))
     
     # 方式3：在Agent构造时传入model名称，让Agent自动创建
-    agent = MinionToolCallingAgent(model="gpt-4o", llm=None)  # llm=None时会自动创建
+    agent = MinionToolCallingAgent(model="gpt-4o")  # 会自动创建LLM
+    
+    # 使用dataclass风格构造
+    agent = MinionToolCallingAgent(
+        name="my_agent",
+        tools=[tool1, tool2],
+        model="gpt-4o",
+        max_tool_threads=4
+    )
     ```
   - Brain类LLM处理逻辑：支持字符串model名称或直接传入LLM实例
     - 如果llm参数是字符串，会调用`create_llm_provider(config.models.get(llm))`
