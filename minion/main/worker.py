@@ -832,12 +832,11 @@ Previous error:
             self.answer_code = self.input.answer_code = code
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
-            context = {"code": f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"}
             
             # Check if python_env has step or __call__ method
             if hasattr(self.python_env, 'step'):
-                # Legacy python env (LocalPythonEnv, RpycPythonEnv)
-                result = self.python_env.step(context["code"])
+
+                result = self.python_env.step(code)
                 obs = result[0]  # obs
                 
                 if obs["error"]:
@@ -853,10 +852,10 @@ Previous error:
                     # Check if it's an async executor (AsyncPythonExecutor)
                     if hasattr(self.python_env, '__call__') and asyncio.iscoroutinefunction(self.python_env.__call__):
                         # Async executor - await the call
-                        output, logs, is_final_answer = await self.python_env(context["code"])
+                        output, logs, is_final_answer = await self.python_env(code)
                     else:
                         # Sync executor - regular call
-                        output, logs, is_final_answer = self.python_env(context["code"])
+                        output, logs, is_final_answer = self.python_env(code)
                         
                     if isinstance(output, Exception):
                         error = str(output)

@@ -40,6 +40,20 @@
     - 如果llm参数是LLM实例，直接使用
     - 支持llms字典批量处理多个模型配置
 
+- Python执行环境和<id>metadata处理
+  - 只有RpycPythonEnv需要<id>metadata，因为它连接docker/utils/python_server.py
+  - LocalPythonEnv, LocalPythonExecutor, AsyncPythonExecutor都不需要<id>metadata
+  - worker.py和brain.py中会自动检测环境类型，只给RpycPythonEnv添加<id>：
+    ```python
+    # 只有RpycPythonEnv需要<id>标签
+    if self.python_env.__class__.__name__ == 'RpycPythonEnv':
+        code_with_id = f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"
+        result = self.python_env.step(code_with_id)
+    else:
+        # 其他环境不需要<id>标签
+        result = self.python_env.step(code)
+    ```
+
 - tool_choice参数支持
   - MinionToolCallingAgent和LmpActionNode现在都支持tool_choice参数
   - 可选值：

@@ -259,8 +259,8 @@ Supporting navigation and spatial memory""",
 
     def cleanup_python_env(self, input):
         if hasattr(self.python_env, 'step'):
-            # Legacy python env (LocalPythonEnv, RpycPythonEnv)
-            self.python_env.step(f"<id>{input.query_id}</id>RESET_CONTAINER_SPECIAL_KEYWORD")
+
+            self.python_env.step("RESET_CONTAINER_SPECIAL_KEYWORD")
         else:
             # LocalPythonExecutor or AsyncPythonExecutor - reset by re-initializing state only
             if hasattr(self.python_env, 'send_variables'):
