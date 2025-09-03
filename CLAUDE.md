@@ -54,6 +54,12 @@
         result = self.python_env.step(code)
     ```
 
+- functions.final_answer调用修复
+  - 修复了`functions.final_answer()`调用不抛异常的问题
+  - 问题原因：`functions`命名空间中的`final_answer`是原始版本，不会抛出FinalAnswerException
+  - 解决方案：在`evaluate_async_python_code`中创建异常包装器后，同时更新`functions`命名空间
+  - 现在`functions.final_answer()`和直接调用`final_answer()`都会正确抛出异常并设置`is_final_answer=True`
+
 - tool_choice参数支持
   - MinionToolCallingAgent和LmpActionNode现在都支持tool_choice参数
   - 可选值：

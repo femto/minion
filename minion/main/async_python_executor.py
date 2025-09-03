@@ -697,13 +697,19 @@ async def evaluate_async_python_code(
         previous_final_answer = static_tools["final_answer"]
 
         async def final_answer(*args, **kwargs):  # Allow arbitrary arguments to be passed
+            logger.debug(f"final_answer called with args={args}, kwargs={kwargs}")
             if isinstance(previous_final_answer, AsyncBaseTool):
                 result = await previous_final_answer(*args, **kwargs)
             else:
                 result = previous_final_answer(*args, **kwargs)
+            logger.debug(f"final_answer about to raise FinalAnswerException with result={result}")
             raise FinalAnswerException(result)
 
         static_tools["final_answer"] = final_answer
+        
+        # Also update functions namespace if it exists
+        if "functions" in static_tools and hasattr(static_tools["functions"], "final_answer"):
+            setattr(static_tools["functions"], "final_answer", final_answer)
 
     original_asyncio = None
     if "asyncio" in authorized_imports:
@@ -719,6 +725,7 @@ async def evaluate_async_python_code(
         is_final_answer = False
         return result, is_final_answer
     except FinalAnswerException as e:
+        logger.debug(f"Caught FinalAnswerException with value={e.value}")
         state["_print_outputs"].value = truncate_content(
             str(state["_print_outputs"]), max_length=max_print_outputs_length
         )
@@ -875,6 +882,10 @@ class AsyncPythonExecutor:
             setattr(functions_namespace, name, tool)
             if hasattr(tool, '__name__'):
                 setattr(functions_namespace, tool.__name__, tool)
+        
+        # Add final_answer to functions namespace if it exists in BASE_PYTHON_TOOLS
+        if "final_answer" in BASE_PYTHON_TOOLS:
+            setattr(functions_namespace, "final_answer", BASE_PYTHON_TOOLS["final_answer"])
         
         # Add the functions namespace to static_tools
         self.static_tools["functions"] = functions_namespace
