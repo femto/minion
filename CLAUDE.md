@@ -27,6 +27,25 @@
     - 如果llm参数是LLM实例，直接使用
     - 支持llms字典批量处理多个模型配置
 
+- tool_choice参数支持
+  - MinionToolCallingAgent和LmpActionNode现在都支持tool_choice参数
+  - 可选值：
+    - "auto": 让模型自动决定是否调用工具（默认值）
+    - "none": 强制模型不调用任何工具
+    - {"type": "function", "function": {"name": "function_name"}}: 强制调用特定工具
+  - 使用示例：
+    ```python
+    # 在Agent中使用
+    response = await agent.execute_step(state, tool_choice="none")
+    
+    # 在LmpActionNode中使用
+    response = await lmp_node.execute(messages, tools=tools, tool_choice="auto")
+    
+    # 强制调用特定工具
+    response = await lmp_node.execute(messages, tools=tools, 
+                                    tool_choice={"type": "function", "function": {"name": "search"}})
+    ```
+
 - StreamChunk流式处理最佳实践
   - StreamChunk是agent流式输出的基本单元，每个chunk包含一小部分内容（如单个token）
   - UI处理时应该累积StreamChunk内容，而不是为每个chunk创建单独的消息行

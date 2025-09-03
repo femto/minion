@@ -26,7 +26,7 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, stream=False, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, tool_choice="auto", stream=False, **kwargs) -> Any:
         # 处理 system_prompt 参数
         system_prompt = kwargs.pop('system_prompt', None)
         
@@ -63,7 +63,7 @@ class LmpActionNode(LLMActionNode):
                     "temperature": self.llm.config.temperature,
                     "model": self.llm.config.model,
                     "tools": tools_formatted,
-                    "tool_choice": "auto",
+                    "tool_choice": tool_choice,
                     "original_tools": tools  # 保存原始工具对象
                 }
             else:
