@@ -9,7 +9,7 @@ from typing import Dict, Tuple, Any, Optional
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 
-from minion.tools.default_tools import FinalAnswerException
+from minion.exceptions import FinalAnswerException
 
 from rich.logging import RichHandler
 

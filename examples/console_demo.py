@@ -29,7 +29,7 @@ def main():
         agent = CodeAgent(
             name="Minion Code Assistant",
             brain=brain,
-            tools=[FinalAnswerTool()],
+            tools=[],
             max_steps=10,
             enable_reflection=True,
             use_async_executor=True

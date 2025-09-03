@@ -27,6 +27,8 @@ from importlib import import_module
 from types import BuiltinFunctionType, FunctionType, ModuleType
 from typing import Any
 
+from ..exceptions import FinalAnswerException
+
 BASE_BUILTIN_MODULES = [
     "collections",
     "datetime",
@@ -1486,9 +1488,7 @@ def evaluate_ast(
         raise InterpreterError(f"{expression.__class__.__name__} is not supported.")
 
 
-class FinalAnswerException(Exception):
-    def __init__(self, value):
-        self.value = value
+# FinalAnswerException moved to minion.exceptions
 
 
 def evaluate_python_code(

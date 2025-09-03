@@ -130,18 +130,7 @@ class PythonInterpreterTool(BaseTool):
             return f"Error executing code: {str(e)}"
 
 
-#deprecate this, use python executor's FinalAnswerException
-#this is raised and handled in LmpActionNode's _handle_tool_calls
-#but we don't raise FinalAnswerException in Tool call(normal) agent's FinalAnswerTool
-#or rather, we don't give FinalAnswerTool to Tool call(normal) agent
-
-#tmp,currently raise this FinalAnswerException from LmpActionNode's _handle_tool_calls
-#and catch this in CodeMinion
-class FinalAnswerException(Exception):
-    """Exception raised when final_answer tool is called to indicate task completion"""
-    def __init__(self, answer: Any):
-        self.answer = answer
-        super().__init__(f"{answer}")
+from ..exceptions import FinalAnswerException
 
 
 class FinalAnswerTool(BaseTool):
@@ -151,7 +140,7 @@ class FinalAnswerTool(BaseTool):
     output_type = "string"
 
     def forward(self, answer: Any) -> Any:
-        # 抛出 FinalAnswerException 来标识任务完成
+        # 直接返回答案，不抛异常
         return answer
 
 

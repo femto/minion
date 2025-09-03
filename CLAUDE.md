@@ -7,6 +7,26 @@
   - 错误用法: `async for event in agent.run_async(input_obj, **kwargs):`
   - 这是因为run_async是async函数，它delegate到其他函数，本身需要await才能返回真正的async generator
 
+- LLM构造和获取最佳实践
+  - MinionToolCallingAgent构造时llm参数可以为None，会自动从model配置创建
+  - 标准LLM获取模式（参考brain.py）：
+    ```python
+    # 方式1：直接指定model名称，从config.models获取配置
+    model = "gpt-4o"  # 或其他模型: "gemini-2.0-flash-exp", "deepseek-r1", "phi-4", "llama3.2"
+    llm_config = config.models.get(model)
+    llm = create_llm_provider(llm_config)
+    
+    # 方式2：使用默认模型
+    llm = create_llm_provider(config.models.get("default"))
+    
+    # 方式3：在Agent构造时传入model名称，让Agent自动创建
+    agent = MinionToolCallingAgent(model="gpt-4o", llm=None)  # llm=None时会自动创建
+    ```
+  - Brain类LLM处理逻辑：支持字符串model名称或直接传入LLM实例
+    - 如果llm参数是字符串，会调用`create_llm_provider(config.models.get(llm))`
+    - 如果llm参数是LLM实例，直接使用
+    - 支持llms字典批量处理多个模型配置
+
 - StreamChunk流式处理最佳实践
   - StreamChunk是agent流式输出的基本单元，每个chunk包含一小部分内容（如单个token）
   - UI处理时应该累积StreamChunk内容，而不是为每个chunk创建单独的消息行

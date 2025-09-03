@@ -2,6 +2,7 @@
 import base64
 import mimetypes
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union, Any
 
@@ -109,6 +110,19 @@ class ToolResult(BaseModel):
     tool_call_id: str = Field(..., description="对应的工具调用ID")
     content: str = Field(..., description="工具调用结果")
 
+@dataclass
+class ActionOutput:
+    output: Any
+    is_final_answer: bool
+
+
+@dataclass
+class ToolOutput:
+    id: str
+    output: Any
+    is_final_answer: bool
+    observation: str
+    tool_call: ToolCall
 # AnyContent represents any type that can be passed to Message.
 AnyContent = Union[ContentBlock, str, ToolCall, ToolResult, "ImageContent", np.ndarray, PILImage.Image, BaseModel]
 
