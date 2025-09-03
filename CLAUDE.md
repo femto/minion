@@ -60,6 +60,17 @@
   - 解决方案：在`evaluate_async_python_code`中创建异常包装器后，同时更新`functions`命名空间
   - 现在`functions.final_answer()`和直接调用`final_answer()`都会正确抛出异常并设置`is_final_answer=True`
 
+- worker.py终止逻辑修复  
+  - 修复了Python executor返回`is_final_answer=True`但任务不终止的问题
+  - 问题原因：worker.py获取了`is_final_answer`值但没有使用，硬编码`terminated=False`
+  - 解决方案：当`is_final_answer=True`时立即返回`terminated=True`的AgentResponse
+  - 现在final_answer工具调用会正确终止任务执行
+
+- COT流式处理final_answer检测
+  - 修复了CotMinion流式输出中不检查final_answer工具调用的问题
+  - 现在会检查StreamChunk的chunk_type和metadata，当检测到final_answer工具调用时立即终止流式输出
+  - 避免了在已经给出最终答案后继续生成内容的问题
+
 - tool_choice参数支持
   - MinionToolCallingAgent和LmpActionNode现在都支持tool_choice参数
   - 可选值：

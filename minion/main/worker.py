@@ -373,13 +373,23 @@ class CotMinion(WorkerMinion):
         async for chunk in await node.execute(messages, tools=tools, stream=True):
             if hasattr(chunk, 'content'):
                 content = chunk.content
+                # Check if this is a tool call chunk, especially final_answer
+                if hasattr(chunk, 'chunk_type') and chunk.chunk_type == "tool_call":
+                    if hasattr(chunk, 'metadata') and chunk.metadata:
+                        tool_call = chunk.metadata.get('tool_call')
+                        if tool_call and hasattr(tool_call, 'function') and tool_call.function.name == "final_answer":
+                            # This is a final_answer tool call, yield and return to terminate
+                            yield chunk
+                            return
+                yield chunk
             elif isinstance(chunk, str):
                 content = chunk
+                full_response += content
+                yield content
             else:
                 content = str(chunk)
-            
-            full_response += content
-            yield content
+                full_response += content
+                yield content
 
         # 处理完整响应
         post_processing = None
@@ -866,6 +876,18 @@ Previous error:
                         # Use logs as output if available, otherwise use output
                         result_text = logs if logs else str(output)
                         self.answer = self.input.answer = result_text
+                        
+                        # If this is a final answer, break the loop and return with terminated=True
+                        if is_final_answer:
+                            print(f"###final_answer###:{self.answer}")
+                            return AgentResponse(
+                                raw_response=self.answer,
+                                answer=self.answer,
+                                score=1.0,
+                                terminated=True,
+                                truncated=False,
+                                info={'execution_successful': True, 'is_final_answer': True}
+                            )
                 except Exception as e:
                     error = str(e)
                     logger.error(error)
