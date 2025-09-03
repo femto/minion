@@ -18,6 +18,7 @@ from datetime import datetime
 # Import minion components
 from ..agents.base_agent import BaseAgent
 from ..main.input import Input
+from ..main.action_step import StreamChunk
 
 class ConsoleUI:
     """
@@ -109,10 +110,21 @@ class ConsoleUI:
                             # Check if it's actually an async generator
                             if hasattr(stream_generator, '__aiter__'):
                                 async for event in stream_generator:
-                                    # Process different event types
-                                    if hasattr(event, 'content') and event.content:
-                                        print(str(event.content), end='', flush=True)
-                                        response_parts.append(str(event.content))
+                                    # Handle StreamChunk objects properly
+                                    if isinstance(event, StreamChunk):
+                                        if event.chunk_type in ['text', 'llm_output']:
+                                            print(event.content, end='', flush=True)
+                                            response_parts.append(event.content)
+                                        elif event.chunk_type == 'final_answer':
+                                            final_answer = f"Final Answer: {event.content}"
+                                            print(final_answer, end='', flush=True)
+                                            response_parts.append(final_answer)
+                                        elif event.chunk_type == 'error':
+                                            error_msg = f"Error: {event.content}"
+                                            print(error_msg, end='', flush=True)
+                                            response_parts.append(error_msg)
+                                        # Skip other chunk types like tool_call, tool_response etc for console
+                                    # Process other event types (non-StreamChunk)
                                     elif hasattr(event, 'final_answer') and event.final_answer:
                                         final_answer = f"Final Answer: {event.final_answer}"
                                         print(final_answer, end='', flush=True)
@@ -125,12 +137,9 @@ class ConsoleUI:
                                         error_msg = f"Error: {event.error}"
                                         print(error_msg, end='', flush=True)
                                         response_parts.append(error_msg)
-                                    else:
-                                        # Fallback for other event types
-                                        event_str = str(event)
-                                        if event_str and event_str != "None":
-                                            print(event_str, end='', flush=True)
-                                            response_parts.append(event_str)
+                                    elif hasattr(event, 'content') and event.content:
+                                        print(str(event.content), end='', flush=True)
+                                        response_parts.append(str(event.content))
                             else:
                                 # If it's not an async generator, it might be a coroutine
                                 # Try to await it directly
@@ -138,10 +147,21 @@ class ConsoleUI:
                                 if result:
                                     if hasattr(result, '__aiter__'):
                                         async for event in result:
-                                            # Process different event types
-                                            if hasattr(event, 'content') and event.content:
-                                                print(str(event.content), end='', flush=True)
-                                                response_parts.append(str(event.content))
+                                            # Handle StreamChunk objects properly
+                                            if isinstance(event, StreamChunk):
+                                                if event.chunk_type in ['text', 'llm_output']:
+                                                    print(event.content, end='', flush=True)
+                                                    response_parts.append(event.content)
+                                                elif event.chunk_type == 'final_answer':
+                                                    final_answer = f"Final Answer: {event.content}"
+                                                    print(final_answer, end='', flush=True)
+                                                    response_parts.append(final_answer)
+                                                elif event.chunk_type == 'error':
+                                                    error_msg = f"Error: {event.content}"
+                                                    print(error_msg, end='', flush=True)
+                                                    response_parts.append(error_msg)
+                                                # Skip other chunk types like tool_call, tool_response etc for console
+                                            # Process other event types (non-StreamChunk)
                                             elif hasattr(event, 'final_answer') and event.final_answer:
                                                 final_answer = f"Final Answer: {event.final_answer}"
                                                 print(final_answer, end='', flush=True)
@@ -154,12 +174,9 @@ class ConsoleUI:
                                                 error_msg = f"Error: {event.error}"
                                                 print(error_msg, end='', flush=True)
                                                 response_parts.append(error_msg)
-                                            else:
-                                                # Fallback for other event types
-                                                event_str = str(event)
-                                                if event_str and event_str != "None":
-                                                    print(event_str, end='', flush=True)
-                                                    response_parts.append(event_str)
+                                            elif hasattr(event, 'content') and event.content:
+                                                print(str(event.content), end='', flush=True)
+                                                response_parts.append(str(event.content))
                                     else:
                                         result_str = str(result)
                                         print(result_str, end='', flush=True)

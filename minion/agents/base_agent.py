@@ -325,6 +325,8 @@ class BaseAgent:
                 async for chunk in result:
                     if isinstance(chunk, str):
                         yield StreamChunk(content=chunk, chunk_type="llm_output")
+                    elif isinstance(chunk, StreamChunk):
+                        yield chunk
                     else:
                         yield StreamChunk(content=str(chunk), chunk_type="llm_output")
             else:
