@@ -23,6 +23,56 @@ def _is_package_available(package_name: str) -> bool:
     except ImportError:
         return False
 
+def _format_stream_content(content: str, chunk_type: str = "text") -> str:
+    """Format individual stream content based on chunk type."""
+    if chunk_type == "step_start":
+        # Format step start messages
+        if "[STEP" in content:
+            step_num = re.search(r'\[STEP (\d+)\]', content)
+            if step_num:
+                return f"\n### 🔄 Step {step_num.group(1)}: Processing...\n"
+        return content
+    elif chunk_type == "step_end":
+        # Format step end messages  
+        if "Completed" in content:
+            return "\n---\n"
+        return content
+    elif chunk_type == "completion":
+        # Format completion messages
+        if "[FINAL]" in content:
+            return f"\n### ✅ **Task Completed Successfully!**\n"
+        return content
+    elif "Executing code:" in content:
+        # Format code execution blocks
+        return f"\n**🐍 Code Execution:**\n"
+    else:
+        # Regular content, check for special patterns
+        if content.strip().startswith("```") and content.strip().endswith("```"):
+            # It's already formatted code
+            return content
+        elif content.strip().isdigit() and len(content.strip()) < 10:
+            # Looks like a result number
+            return f"**Result:** `{content.strip()}`\n"
+        else:
+            return content
+
+def _format_accumulated_content(streaming_content: list) -> str:
+    """Format the accumulated streaming content for better display."""
+    if not streaming_content:
+        return ""
+    
+    # Join all content
+    full_content = "".join(streaming_content)
+    
+    # Apply overall formatting
+    formatted = full_content
+    
+    # Add some spacing around code blocks
+    formatted = re.sub(r'(\n```[^\n]*\n)', r'\1\n', formatted)
+    formatted = re.sub(r'(\n```\n)', r'\n\1', formatted)
+    
+    return formatted.strip()
+
 # Define message roles for compatibility
 class MessageRole(str, Enum):
     USER = "user"
@@ -311,7 +361,6 @@ def pull_messages_from_step(step_log: Union[ActionStep, PlanningStep, FinalAnswe
         skip_model_outputs: If True, skip the model outputs when creating the gr.ChatMessage objects:
             This is used for instance when streaming model outputs have already been displayed.
     """
-    return
     if not _is_package_available("gradio"):
         raise ModuleNotFoundError(
             "Please install 'gradio' extra to use the GradioUI: `pip install 'minion[gradio]'`"
@@ -319,15 +368,103 @@ def pull_messages_from_step(step_log: Union[ActionStep, PlanningStep, FinalAnswe
     
     import gradio as gr
     
-    # Handle StreamChunk objects
-    if isinstance(step_log, StreamChunk):
+    # Handle AgentResponse objects with smolagents-style formatting
+    if isinstance(step_log, AgentResponse):
+        # Create step header
+        yield gr.ChatMessage(role=MessageRole.ASSISTANT, content="**Step 1**")
+        
+        if not skip_model_outputs and step_log.raw_response:
+            # Show the thought/reasoning
+            model_output = str(step_log.raw_response).strip()
+            yield gr.ChatMessage(role=MessageRole.ASSISTANT, content=model_output)
+        
+        # If this was a code execution, show it as a tool call
+        if step_log.info and (step_log.info.get('execution_successful') or step_log.info.get('code_generated')):
+            parent_id = f"tool_call_{id(step_log)}"
+            
+            # Determine tool type and content
+            if step_log.info.get('execution_successful'):
+                tool_name = "python_interpreter"
+                # Try to extract code from raw_response if available
+                code_content = "# Code execution completed"
+                if hasattr(step_log, 'raw_response') and step_log.raw_response:
+                    # Look for code patterns in raw_response
+                    import re
+                    code_matches = re.findall(r'```(?:python|py)?\s*\n(.*?)\n```', str(step_log.raw_response), re.DOTALL)
+                    if code_matches:
+                        code_content = code_matches[-1].strip()  # Use the last code block
+                    else:
+                        code_content = f"# Executed code\n{str(step_log.raw_response)[:200]}..."
+            else:
+                tool_name = "code_generator"
+                code_content = str(step_log.answer) if step_log.answer else "# Generated code"
+            
+            # Tool call message (collapsible)
+            yield gr.ChatMessage(
+                role=MessageRole.ASSISTANT,
+                content=f"```python\n{code_content}\n```",
+                metadata={
+                    "title": f"🛠️ Used tool {tool_name}",
+                    "id": parent_id,
+                    "status": "done"
+                }
+            )
+            
+            # Execution logs (nested under tool call) - only for successful execution
+            if step_log.info.get('execution_successful') and step_log.answer:
+                yield gr.ChatMessage(
+                    role=MessageRole.ASSISTANT,
+                    content=f"```bash\nOutput:\n{step_log.answer}\n```",
+                    metadata={
+                        "title": "📝 Execution Logs",
+                        "parent_id": parent_id,
+                        "status": "done"
+                    }
+                )
+        
+        # Add step statistics
+        stats_parts = ["Step 1"]
+        if hasattr(step_log, 'tokens_used') and step_log.tokens_used:
+            stats_parts.append(f"Input tokens: {step_log.tokens_used:,}")
+        if hasattr(step_log, 'execution_time') and step_log.execution_time:
+            stats_parts.append(f"Duration: {step_log.execution_time:.2f}s")
+        
+        stats_content = f'<span style="color: #bbbbc2; font-size: 12px;">{" | ".join(stats_parts)}</span>'
+        yield gr.ChatMessage(role=MessageRole.ASSISTANT, content=stats_content)
+        
+        # Handle errors with collapsible section
+        if hasattr(step_log, 'error') and step_log.error:
+            yield gr.ChatMessage(
+                role=MessageRole.ASSISTANT,
+                content=str(step_log.error),
+                metadata={
+                    "title": "💥 Error", 
+                    "status": "done"
+                }
+            )
+        
+        # Final answer
+        if step_log.is_final_answer and step_log.answer:
+            yield gr.ChatMessage(
+                role=MessageRole.ASSISTANT, 
+                content=f"**Final answer:** {step_log.answer}",
+                metadata={
+                    "title": "🎯 Final Answer",
+                    "status": "done"
+                }
+            )
+        
+        yield gr.ChatMessage(role=MessageRole.ASSISTANT, content="-----", metadata={"status": "done"})
+    
+    # Handle other step types  
+    elif isinstance(step_log, StreamChunk):
         content = step_log.content
-        chunk_type = getattr(step_log, 'chunk_type', 'llm_output')
+        chunk_type = getattr(step_log, 'chunk_type', 'text')
         
         if chunk_type == 'error':
             yield gr.ChatMessage(
-                role=MessageRole.ASSISTANT, 
-                content=content, 
+                role=MessageRole.ASSISTANT,
+                content=content,
                 metadata={"title": "💥 Error", "status": "done"}
             )
         elif chunk_type == 'final_answer':
@@ -343,32 +480,9 @@ def pull_messages_from_step(step_log: Union[ActionStep, PlanningStep, FinalAnswe
                 content=content, 
                 metadata={"status": "pending"}
             )
-        return
     
-    # Handle AgentResponse objects
-    if isinstance(step_log, AgentResponse):
-        if step_log.raw_response:
-            yield gr.ChatMessage(
-                role=MessageRole.ASSISTANT, 
-                content=str(step_log.raw_response), 
-                metadata={"status": "done"}
-            )
-        if step_log.final_answer:
-            yield gr.ChatMessage(
-                role=MessageRole.ASSISTANT, 
-                content=f"**Final answer:** {step_log.final_answer}", 
-                metadata={"status": "done"}
-            )
-        if step_log.error:
-            yield gr.ChatMessage(
-                role=MessageRole.ASSISTANT, 
-                content=str(step_log.error), 
-                metadata={"title": "💥 Error", "status": "done"}
-            )
-        return
-    
-    # Handle traditional step types
-    if isinstance(step_log, ActionStep):
+    # Handle traditional step types (fallback for ActionStep, PlanningStep, etc.)
+    elif isinstance(step_log, ActionStep):
         yield from _process_action_step(step_log, skip_model_outputs)
     elif isinstance(step_log, PlanningStep):
         yield from _process_planning_step(step_log, skip_model_outputs)
@@ -484,9 +598,10 @@ def stream_to_gradio(
                 if result_type == 'done':
                     # Yield any accumulated streaming content as final message
                     if streaming_content:
+                        full_content = _format_accumulated_content(streaming_content)
                         yield gr.ChatMessage(
                             role=MessageRole.ASSISTANT,
-                            content="".join(streaming_content),
+                            content=full_content,
                             metadata={"status": "done"}
                         )
                         streaming_content = []
@@ -516,13 +631,13 @@ def stream_to_gradio(
                                     metadata={"status": "done"}
                                 )
                                 streaming_content = []
-                            # Then yield error
+                            # Then yield error with collapsible section
                             yield gr.ChatMessage(
                                 role=MessageRole.ASSISTANT, 
                                 content=content, 
                                 metadata={"title": "💥 Error", "status": "done"}
                             )
-                        elif chunk_type == 'final_answer':
+                        elif chunk_type == 'tool_call':
                             # Flush accumulated content first
                             if streaming_content:
                                 yield gr.ChatMessage(
@@ -531,21 +646,81 @@ def stream_to_gradio(
                                     metadata={"status": "done"}
                                 )
                                 streaming_content = []
-                            # Then yield final answer
+                            
+                            # Extract tool info from metadata
+                            metadata = getattr(event, 'metadata', {})
+                            tool_name = metadata.get('tool_name', 'unknown_tool')
+                            
+                            # Format code content if it's a python tool
+                            if tool_name in ['python_interpreter', 'python', 'code_executor']:
+                                formatted_content = f"```python\n{content}\n```"
+                            else:
+                                formatted_content = content
+                            
+                            # Create collapsible tool call section
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content=formatted_content,
+                                metadata={
+                                    "title": f"🛠️ Used tool {tool_name}",
+                                    "id": f"tool_call_{id(event)}",
+                                    "status": "done"
+                                }
+                            )
+                        elif chunk_type == 'tool_response':
+                            # Create collapsible tool response section
+                            metadata = getattr(event, 'metadata', {})
+                            parent_id = metadata.get('parent_id', f"tool_call_{id(event)}")
+                            
+                            # Format as execution logs
+                            log_content = f"```bash\n{content}\n```"
+                            
+                            yield gr.ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content=log_content,
+                                metadata={
+                                    "title": "📝 Execution Logs",
+                                    "parent_id": parent_id,
+                                    "status": "done"
+                                }
+                            )
+                        elif chunk_type == 'final_answer':
+                            # Flush accumulated content first
+                            if streaming_content:
+                                full_content = _format_accumulated_content(streaming_content)
+                                yield gr.ChatMessage(
+                                    role=MessageRole.ASSISTANT,
+                                    content=full_content,
+                                    metadata={"status": "done"}
+                                )
+                                streaming_content = []
+                            # Then yield final answer with nice formatting
+                            final_answer_content = f"""
+**Final Answer**
+
+{content}
+
+---
+✅ **Task completed successfully!**
+"""
                             yield gr.ChatMessage(
                                 role=MessageRole.ASSISTANT, 
-                                content=f"**Final answer:** {content}", 
-                                metadata={"status": "done"}
+                                content=final_answer_content, 
+                                metadata={"title": "🎯 Final Answer", "status": "done"}
                             )
                         else:
-                            # Accumulate streaming content
-                            streaming_content.append(content)
+                            # Format and accumulate streaming content for regular text/llm_output
+                            formatted_content = _format_stream_content(content, chunk_type)
+                            streaming_content.append(formatted_content)
+                            
                             # Only yield for meaningful chunks to avoid duplicate display
                             # Check if this chunk adds substantial content (not just formatting)
                             if content.strip() and not (content.startswith('[') and content.endswith(']')):
+                                # Join content and apply final formatting
+                                full_content = _format_accumulated_content(streaming_content)
                                 yield gr.ChatMessage(
                                     role=MessageRole.ASSISTANT,
-                                    content="".join(streaming_content),
+                                    content=full_content,
                                     metadata={"status": "pending"}
                                 )
                     else:
@@ -563,8 +738,9 @@ def stream_to_gradio(
                             # When streaming is enabled, skip model outputs to avoid duplication
                             # since they are already displayed through StreamChunk events
                             skip_outputs = getattr(agent, "stream_outputs", False)
-                            for message in pull_messages_from_step(event, skip_model_outputs=skip_outputs):
-                                yield message
+                            #not use Step
+                            # for message in pull_messages_from_step(event, skip_model_outputs=skip_outputs):
+                            #     yield message
                         elif isinstance(event, str):
                             yield gr.ChatMessage(
                                 role=MessageRole.ASSISTANT,

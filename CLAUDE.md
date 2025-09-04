@@ -148,6 +148,17 @@
   - 问题原因3：原smolagents从step extract messages，但minion直接yield StreamChunk->gr.ChatMessage，导致pending消息被错误地标记为done
   - 现在Gradio UI会正确累积内容、管理消息状态，并避免重复显示
 
+- Gradio UI显示优化
+  - 添加了流式内容的格式化函数_format_stream_content和_format_accumulated_content
+  - 改进了不同chunk类型的显示格式：
+    - step_start: 🔄 Step X: Processing...
+    - completion: ✅ Task Completed Successfully!
+    - final_answer: 🎯 Final Answer with blockquote formatting
+    - code execution: 🐍 Code Execution blocks
+    - results: **Result:** with code formatting
+  - 使用Markdown格式和emoji增强用户体验
+  - 支持Gradio的metadata.title功能显示结构化信息
+
 ### **开发流程记忆**
 - 如果是一定功能的修改的话,尽可能添加test,先跑通test
 - 如果非常简单的修改可以不用test
