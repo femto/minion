@@ -1,9 +1,10 @@
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
+from ..main.action_step import StreamChunk
 
 
 @dataclass
-class AgentResponse:
+class AgentResponse(StreamChunk):
     """
     Agent执行步骤的响应结果，替换原有的5-tuple格式
     
@@ -48,6 +49,34 @@ class AgentResponse:
     # 执行统计
     execution_time: Optional[float] = None
     tokens_used: Optional[int] = None
+    
+    def __post_init__(self):
+        """Initialize StreamChunk fields based on AgentResponse content"""
+        # Set content from raw_response if not already set
+        if not hasattr(self, 'content') or not self.content:
+            self.content = str(self.raw_response) if self.raw_response is not None else ""
+        
+        # Set appropriate chunk_type
+        if not hasattr(self, 'chunk_type') or not self.chunk_type:
+            if self.error:
+                self.chunk_type = "error"
+            elif self.is_final_answer:
+                self.chunk_type = "final_answer"  
+            elif self.terminated:
+                self.chunk_type = "completion"
+            else:
+                self.chunk_type = "agent_response"
+        
+        # Ensure metadata includes AgentResponse info
+        if not hasattr(self, 'metadata'):
+            self.metadata = {}
+        self.metadata.update({
+            'score': self.score,
+            'confidence': self.confidence,
+            'terminated': self.terminated,
+            'truncated': self.truncated,
+            'is_final_answer': self.is_final_answer
+        })
     
     @classmethod
     def from_tuple(cls, tuple_result) -> 'AgentResponse':

@@ -1369,10 +1369,7 @@ Let's start! Remember to end your code blocks with <end_code>.
     async def execute_stream(self):
         """流式执行方法 - CodeMinion 暂不支持真正的流式输出，回退到普通执行"""
         result = await self.execute()
-        if isinstance(result, AgentResponse):
-            yield result.answer if result.answer else str(result.raw_response)
-        else:
-            yield str(result)
+        yield result
 
 @register_worker_minion
 class MathMinion(PythonMinion):
