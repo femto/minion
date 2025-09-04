@@ -40,20 +40,6 @@
     - 如果llm参数是LLM实例，直接使用
     - 支持llms字典批量处理多个模型配置
 
-- Python执行环境和<id>metadata处理
-  - 只有RpycPythonEnv需要<id>metadata，因为它连接docker/utils/python_server.py
-  - LocalPythonEnv, LocalPythonExecutor, AsyncPythonExecutor都不需要<id>metadata
-  - worker.py和brain.py中会自动检测环境类型，只给RpycPythonEnv添加<id>：
-    ```python
-    # 只有RpycPythonEnv需要<id>标签
-    if self.python_env.__class__.__name__ == 'RpycPythonEnv':
-        code_with_id = f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"
-        result = self.python_env.step(code_with_id)
-    else:
-        # 其他环境不需要<id>标签
-        result = self.python_env.step(code)
-    ```
-
 - functions.final_answer调用修复
   - 修复了`functions.final_answer()`调用不抛异常的问题
   - 问题原因：`functions`命名空间中的`final_answer`是原始版本，不会抛出FinalAnswerException
@@ -117,6 +103,28 @@
             # 其他类型单独处理（如error, final_answer等）
             handle_special_chunk(event)
     ```
+
+- CodeAgent继承和重写BaseAgent最佳实践
+  - CodeAgent与BaseAgent的主要区别在于偏好使用CodeMinion（route='code'）
+  - CodeAgent重写run_async方法，但仍然调用super().run_async()来复用BaseAgent的执行逻辑
+  - 关键重写点：
+    ```python
+    def _prepare_input(self, task):
+        # 确保使用code route，这是CodeAgent的核心区别
+        if isinstance(task, str):
+            input_data = Input(query=task, route='code')  # 偏好code route
+        elif isinstance(task, Input):
+            input_data = task
+            if not input_data.route:
+                input_data.route = 'code'  # 默认使用code route
+        
+        # 增强input with code-thinking instructions
+        enhanced_input = self._enhance_input_for_code_thinking(input_data)
+        return enhanced_input
+    ```
+  - route='code'会传递给Brain.step()，最终路由到CodeMinion进行code-based reasoning
+  - CodeAgent通过input enhancement而非完全重写执行逻辑来实现差异化
+  - 保持与BaseAgent的兼容性，可选择启用state tracking等高级功能
 
 ### **开发流程记忆**
 - 如果是一定功能的修改的话,尽可能添加test,先跑通test
