@@ -137,6 +137,17 @@
   - metadata自动包含AgentResponse的关键信息（score, confidence, terminated等）
   - 简化了UI层的处理逻辑，统一使用StreamChunk接口
 
+- Gradio UI重复显示修复
+  - 修复了gradio_demo中StreamChunk重复显示的问题
+  - 问题原因1：每个StreamChunk都会yield一个包含所有累积内容的消息，导致UI重复显示相同内容
+  - 问题原因2：CodeMinion.execute_stream()直接yield AgentResponse，导致pull_messages_from_step重复处理已通过StreamChunk显示的内容
+  - 解决方案1：只对有意义的chunk内容进行yield，过滤掉纯格式化的chunk（如[STEP]标记）
+  - 解决方案2：修复CodeMinion.execute_stream()确保yield的是StreamChunk兼容对象，利用AgentResponse继承StreamChunk的特性
+  - 解决方案3：改进gradio_ui中skip_model_outputs的逻辑，避免重复处理
+  - 解决方案4：修复interact_with_agent中的消息状态管理逻辑，区分pending消息更新和done消息添加
+  - 问题原因3：原smolagents从step extract messages，但minion直接yield StreamChunk->gr.ChatMessage，导致pending消息被错误地标记为done
+  - 现在Gradio UI会正确累积内容、管理消息状态，并避免重复显示
+
 ### **开发流程记忆**
 - 如果是一定功能的修改的话,尽可能添加test,先跑通test
 - 如果非常简单的修改可以不用test

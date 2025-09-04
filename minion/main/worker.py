@@ -1369,7 +1369,17 @@ Let's start! Remember to end your code blocks with <end_code>.
     async def execute_stream(self):
         """流式执行方法 - CodeMinion 暂不支持真正的流式输出，回退到普通执行"""
         result = await self.execute()
-        yield result
+        # Convert AgentResponse to StreamChunk for consistent streaming interface
+        if isinstance(result, AgentResponse):
+            # AgentResponse now inherits from StreamChunk, so it can be yielded directly
+            yield result
+        else:
+            # Convert other results to StreamChunk
+            from minion.main.action_step import StreamChunk
+            yield StreamChunk(
+                content=str(result),
+                chunk_type="agent_response" if hasattr(result, 'answer') else "text"
+            )
 
 @register_worker_minion
 class MathMinion(PythonMinion):

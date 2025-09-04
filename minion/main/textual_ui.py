@@ -522,7 +522,7 @@ class TextualUI:
                 
                 # Handle commands
                 if message.startswith("/"):
-                    await self.handle_command(message)
+                    self.handle_command(message)
                     return
                 
                 # Add user message to chat
