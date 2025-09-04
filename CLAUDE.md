@@ -126,6 +126,17 @@
   - CodeAgent通过input enhancement而非完全重写执行逻辑来实现差异化
   - 保持与BaseAgent的兼容性，可选择启用state tracking等高级功能
 
+- AgentResponse统一流式处理架构
+  - AgentResponse现在继承自StreamChunk，统一了流式处理接口
+  - 所有Agent响应都可以作为StreamChunk在streaming中使用
+  - AgentResponse会自动设置适当的chunk_type：
+    - error: 当有错误时
+    - final_answer: 当is_final_answer=True时
+    - completion: 当terminated=True时
+    - agent_response: 默认类型
+  - metadata自动包含AgentResponse的关键信息（score, confidence, terminated等）
+  - 简化了UI层的处理逻辑，统一使用StreamChunk接口
+
 ### **开发流程记忆**
 - 如果是一定功能的修改的话,尽可能添加test,先跑通test
 - 如果非常简单的修改可以不用test

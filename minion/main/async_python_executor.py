@@ -696,13 +696,11 @@ async def evaluate_async_python_code(
     if "final_answer" in static_tools:
         previous_final_answer = static_tools["final_answer"]
 
-        async def final_answer(*args, **kwargs):  # Allow arbitrary arguments to be passed
-            logger.debug(f"final_answer called with args={args}, kwargs={kwargs}")
-            if isinstance(previous_final_answer, AsyncBaseTool):
-                result = await previous_final_answer(*args, **kwargs)
-            else:
-                result = previous_final_answer(*args, **kwargs)
-            logger.debug(f"final_answer about to raise FinalAnswerException with result={result}")
+        def final_answer(*args, **kwargs):  # Allow arbitrary arguments to be passed
+            #logger.debug(f"final_answer called with args={args}, kwargs={kwargs}")
+
+            result = previous_final_answer(*args, **kwargs)
+            #logger.debug(f"final_answer about to raise FinalAnswerException with result={result}")
             raise FinalAnswerException(result)
 
         static_tools["final_answer"] = final_answer
