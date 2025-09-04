@@ -51,6 +51,14 @@ class ActionStep:
         self.output_chunks.append(chunk)
         self.output_content += chunk.content
         
+        # If chunk is AgentResponse, extract important flags
+        if hasattr(chunk, 'is_final_answer') and chunk.is_final_answer:
+            self.is_final_answer = True
+        if hasattr(chunk, 'terminated') and chunk.terminated:
+            self.is_complete = True
+        if hasattr(chunk, 'error') and chunk.error:
+            self.error = chunk.error
+        
     def mark_complete(self):
         """标记步骤完成"""
         self.is_complete = True

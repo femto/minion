@@ -57,8 +57,7 @@ class Mind(BaseModel):
         else:
             # 回退到普通执行
             agent_response = await moderator.execute()
-            content = agent_response.answer if hasattr(agent_response, 'answer') else str(agent_response)
-            yield content
+            yield agent_response
 
 
 class Brain:

@@ -267,6 +267,8 @@ class BaseAgent:
             async for chunk in self._execute_step_stream(state, **kwargs):
                 action_step.add_chunk(chunk)
                 yield chunk
+                if hasattr(chunk,'is_final_answer') and chunk.is_final_answer:
+                    action_step.is_final_answer = True
             
             # 完成步骤
             result = action_step.to_agent_response()
