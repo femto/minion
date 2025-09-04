@@ -279,8 +279,8 @@ class BaseAgent:
                 self._streaming_manager.complete_current_step(is_final_answer=True)
                 
                 yield StreamChunk(
-                    content=f"\n[FINAL] Task completed!\n",
-                    chunk_type="completion",
+                    content=f"[FINAL] Task completed!\n",
+                    chunk_type="completion", #interesting, yield completion type
                     metadata={"final_answer": True}
                 )
                 break
