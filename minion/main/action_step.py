@@ -9,16 +9,7 @@ from typing import Any, Dict, List, Optional, AsyncIterator
 import time
 import uuid
 
-# AgentResponse import moved to avoid circular import
-
-
-@dataclass
-class StreamChunk:
-    """单个流式输出块"""
-    content: str
-    chunk_type: str = "text"  # text, tool_call, observation, error, agent_response, final_answer, completion
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: float = field(default_factory=time.time)
+from minion.types.agent_response import AgentResponse, StreamChunk
 
 
 @dataclass

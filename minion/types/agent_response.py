@@ -1,8 +1,13 @@
+import time
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
-from ..main.action_step import StreamChunk
-
-
+@dataclass
+class StreamChunk:
+    """单个流式输出块"""
+    content: str
+    chunk_type: str = "text"  # text, tool_call, observation, error, agent_response, final_answer, completion
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
 @dataclass
 class AgentResponse(StreamChunk):
     """
@@ -24,6 +29,9 @@ class AgentResponse(StreamChunk):
         execution_time: 执行时间
         tokens_used: 使用的token数量
     """
+    
+    # Override StreamChunk fields with defaults
+    content: str = ""  # Will be set from raw_response in __post_init__
     
     # 主要响应内容
     raw_response: Any = None
