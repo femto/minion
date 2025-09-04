@@ -9,16 +9,7 @@ from typing import Any, Dict, List, Optional, AsyncIterator
 import time
 import uuid
 
-from minion.types.agent_response import AgentResponse
-
-
-@dataclass
-class StreamChunk:
-    """单个流式输出块"""
-    content: str
-    chunk_type: str = "text"  # text, tool_call, observation, error
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: float = field(default_factory=time.time)
+from minion.types.agent_response import AgentResponse, StreamChunk
 
 
 @dataclass
@@ -59,6 +50,14 @@ class ActionStep:
         """添加流式输出块"""
         self.output_chunks.append(chunk)
         self.output_content += chunk.content
+        
+        # If chunk is AgentResponse, extract important flags
+        if hasattr(chunk, 'is_final_answer') and chunk.is_final_answer:
+            self.is_final_answer = True
+        if hasattr(chunk, 'terminated') and chunk.terminated:
+            self.is_complete = True
+        if hasattr(chunk, 'error') and chunk.error:
+            self.error = chunk.error
         
     def mark_complete(self):
         """标记步骤完成"""

@@ -103,3 +103,4 @@ run_*.json
 
 #LLMDebug trace files
 tracing_log
+uploads

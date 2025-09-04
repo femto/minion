@@ -273,19 +273,15 @@ class NativeMinion(WorkerMinion):
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         full_response = ""
-        async for chunk in await node.execute(messages, tools=tools, stream=True):
+        async for chunk in self.stream_node_execution(node, messages, tools):
+            # Yield StreamChunk对象，保持原始结构  
+            yield chunk
+            
+            # 累积内容用于后续处理
             if hasattr(chunk, 'content'):
-                content = chunk.content
-                full_response += content
-                yield chunk  # 保持 StreamChunk 对象
+                full_response += chunk.content
             elif isinstance(chunk, str):
-                content = chunk
-                full_response += content
-                yield chunk  # 保持字符串
-            else:
-                content = str(chunk)
-                full_response += content
-                yield content
+                full_response += chunk
         
         # 处理完整响应
         think_content, answer_content = extract_think_and_answer(full_response)
@@ -370,16 +366,15 @@ class CotMinion(WorkerMinion):
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         full_response = ""
-        async for chunk in await node.execute(messages, tools=tools, stream=True):
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-            elif isinstance(chunk, str):
-                content = chunk
-            else:
-                content = str(chunk)
+        async for chunk in self.stream_node_execution(node, messages, tools):
+            # Yield StreamChunk对象，保持原始结构
+            yield chunk
             
-            full_response += content
-            yield content
+            # 累积内容用于后续处理
+            if hasattr(chunk, 'content'):
+                full_response += chunk.content
+            elif isinstance(chunk, str):
+                full_response += chunk
 
         # 处理完整响应
         post_processing = None
@@ -483,16 +478,15 @@ class DcotMinion(WorkerMinion):
         node = LmpActionNode(self.brain.llm)
         
         full_response = ""
-        async for chunk in await node.execute(messages, tools=None, stream=True):
-            if hasattr(chunk, 'content'):
-                content = chunk.content
-            elif isinstance(chunk, str):
-                content = chunk
-            else:
-                content = str(chunk)
+        async for chunk in self.stream_node_execution(node, messages, tools=None):
+            # Yield StreamChunk对象，保持原始结构
+            yield chunk
             
-            full_response += content
-            yield content
+            # 累积内容用于后续处理
+            if hasattr(chunk, 'content'):
+                full_response += chunk.content
+            elif isinstance(chunk, str):
+                full_response += chunk
         
         # 处理完整响应
         self.answer = self.input.answer = extract_answer(full_response)
@@ -832,12 +826,11 @@ Previous error:
             self.answer_code = self.input.answer_code = code
 
             self.input.run_id = self.input.run_id or uuid.uuid4()
-            context = {"code": f"<id>{self.input.query_id}/{self.input.run_id}</id>{code}"}
             
             # Check if python_env has step or __call__ method
             if hasattr(self.python_env, 'step'):
-                # Legacy python env (LocalPythonEnv, RpycPythonEnv)
-                result = self.python_env.step(context["code"])
+
+                result = self.python_env.step(code)
                 obs = result[0]  # obs
                 
                 if obs["error"]:
@@ -853,10 +846,10 @@ Previous error:
                     # Check if it's an async executor (AsyncPythonExecutor)
                     if hasattr(self.python_env, '__call__') and asyncio.iscoroutinefunction(self.python_env.__call__):
                         # Async executor - await the call
-                        output, logs, is_final_answer = await self.python_env(context["code"])
+                        output, logs, is_final_answer = await self.python_env(code)
                     else:
                         # Sync executor - regular call
-                        output, logs, is_final_answer = self.python_env(context["code"])
+                        output, logs, is_final_answer = self.python_env(code)
                         
                     if isinstance(output, Exception):
                         error = str(output)
@@ -867,6 +860,18 @@ Previous error:
                         # Use logs as output if available, otherwise use output
                         result_text = logs if logs else str(output)
                         self.answer = self.input.answer = result_text
+                        
+                        # If this is a final answer, break the loop and return with terminated=True
+                        if is_final_answer:
+                            print(f"###final_answer###:{self.answer}")
+                            return AgentResponse(
+                                raw_response=self.answer,
+                                answer=self.answer,
+                                score=1.0,
+                                terminated=True,
+                                truncated=False,
+                                info={'execution_successful': True, 'is_final_answer': True}
+                            )
                 except Exception as e:
                     error = str(e)
                     logger.error(error)
@@ -1364,10 +1369,17 @@ Let's start! Remember to end your code blocks with <end_code>.
     async def execute_stream(self):
         """流式执行方法 - CodeMinion 暂不支持真正的流式输出，回退到普通执行"""
         result = await self.execute()
+        # Convert AgentResponse to StreamChunk for consistent streaming interface
         if isinstance(result, AgentResponse):
-            yield result.answer if result.answer else str(result.raw_response)
+            # AgentResponse now inherits from StreamChunk, so it can be yielded directly
+            yield result
         else:
-            yield str(result)
+            # Convert other results to StreamChunk
+            from minion.main.action_step import StreamChunk
+            yield StreamChunk(
+                content=str(result),
+                chunk_type="agent_response" if hasattr(result, 'answer') else "text"
+            )
 
 @register_worker_minion
 class MathMinion(PythonMinion):

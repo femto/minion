@@ -98,6 +98,9 @@ class OpenAIProvider(BaseProvider):
             prepared_tools = self._prepare_tools(kwargs.pop('tools'))
             if prepared_tools:
                 kwargs['tools'] = prepared_tools
+                # 如果有工具但没有指定tool_choice，默认为"auto"
+                if 'tool_choice' not in kwargs:
+                    kwargs['tool_choice'] = "auto"
 
         response = self.client_sync.chat.completions.create(
             model=model,
@@ -157,6 +160,9 @@ class OpenAIProvider(BaseProvider):
             prepared_tools = self._prepare_tools(kwargs.pop('tools'))
             if prepared_tools:
                 kwargs['tools'] = prepared_tools
+                # 如果有工具但没有指定tool_choice，默认为"auto"
+                if 'tool_choice' not in kwargs:
+                    kwargs['tool_choice'] = "auto"
 
         response = await self.client.chat.completions.create(
             model=model,
@@ -218,6 +224,9 @@ class OpenAIProvider(BaseProvider):
             prepared_tools = self._prepare_tools(kwargs.pop('tools'))
             if prepared_tools:
                 kwargs['tools'] = prepared_tools
+                # 如果有工具但没有指定tool_choice，默认为"auto"
+                if 'tool_choice' not in kwargs:
+                    kwargs['tool_choice'] = "auto"
 
         # 移除不被OpenAI API支持的参数
         kwargs.pop('system_prompt', None)  # system_prompt应该已经在messages中处理了

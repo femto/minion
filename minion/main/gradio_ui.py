@@ -311,6 +311,7 @@ def pull_messages_from_step(step_log: Union[ActionStep, PlanningStep, FinalAnswe
         skip_model_outputs: If True, skip the model outputs when creating the gr.ChatMessage objects:
             This is used for instance when streaming model outputs have already been displayed.
     """
+    return
     if not _is_package_available("gradio"):
         raise ModuleNotFoundError(
             "Please install 'gradio' extra to use the GradioUI: `pip install 'minion[gradio]'`"
@@ -539,12 +540,14 @@ def stream_to_gradio(
                         else:
                             # Accumulate streaming content
                             streaming_content.append(content)
-                            # Yield accumulated content so far with pending status
-                            yield gr.ChatMessage(
-                                role=MessageRole.ASSISTANT,
-                                content="".join(streaming_content),
-                                metadata={"status": "pending"}
-                            )
+                            # Only yield for meaningful chunks to avoid duplicate display
+                            # Check if this chunk adds substantial content (not just formatting)
+                            if content.strip() and not (content.startswith('[') and content.endswith(']')):
+                                yield gr.ChatMessage(
+                                    role=MessageRole.ASSISTANT,
+                                    content="".join(streaming_content),
+                                    metadata={"status": "pending"}
+                                )
                     else:
                         # For non-StreamChunk events, flush accumulated content first
                         if streaming_content:
@@ -557,7 +560,10 @@ def stream_to_gradio(
                         
                         # Process other event types normally
                         if isinstance(event, (ActionStep, PlanningStep, FinalAnswerStep, AgentResponse)):
-                            for message in pull_messages_from_step(event, skip_model_outputs=getattr(agent, "stream_outputs", False)):
+                            # When streaming is enabled, skip model outputs to avoid duplication
+                            # since they are already displayed through StreamChunk events
+                            skip_outputs = getattr(agent, "stream_outputs", False)
+                            for message in pull_messages_from_step(event, skip_model_outputs=skip_outputs):
                                 yield message
                         elif isinstance(event, str):
                             yield gr.ChatMessage(
@@ -694,10 +700,25 @@ class GradioUI:
                 agent, task=prompt, reset_agent_memory=self.reset_agent_memory
             ):
                 if isinstance(msg, gr.ChatMessage):
-                    # Mark previous message as done if it was pending
-                    if messages and messages[-1].metadata.get("status") == "pending":
-                        messages[-1].metadata["status"] = "done"
-                    messages.append(msg)
+                    msg_status = msg.metadata.get("status", "done")
+                    
+                    if msg_status == "pending":
+                        # For pending messages, update existing pending message or create new one
+                        if messages and messages[-1].metadata.get("status") == "pending":
+                            # Update existing pending message content
+                            messages[-1].content = msg.content
+                            messages[-1].metadata.update(msg.metadata)
+                        else:
+                            # Add new pending message
+                            messages.append(msg)
+                    else:
+                        # For done messages, mark previous pending as done and add new message
+                        if messages and messages[-1].metadata.get("status") == "pending":
+                            messages[-1].content = msg.content
+                            messages[-1].metadata["status"] = "done"
+                        else:
+                            # Add new done message
+                            messages.append(msg)
                 elif isinstance(msg, str):  # Then it's only a completion delta
                     msg = msg.replace("<", r"\<").replace(">", r"\>")  # HTML tags seem to break Gradio Chatbot
                     if messages and messages[-1].metadata.get("status") == "pending":

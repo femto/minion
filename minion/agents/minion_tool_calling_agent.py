@@ -4,6 +4,7 @@ import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import inspect
+from dataclasses import dataclass, field
 
 from .base_agent import BaseAgent
 from ..main.input import Input
@@ -18,6 +19,7 @@ from minion.types.agent_response import AgentResponse
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class MinionToolCallingAgent(BaseAgent):
     """
     Minion project adaptation of smolagents ToolCallingAgent.
@@ -27,42 +29,23 @@ class MinionToolCallingAgent(BaseAgent):
     rather than relying on FinalAnswerException.
     """
     
-    def __init__(self, 
-                 name: str = "minion_tool_calling_agent",
-                 tools: List[BaseTool] = None,
-                 llm=None,
-                 model: str = "default",
-                 max_tool_threads: Optional[int] = None,
-                 stream_outputs: bool = False,
-                 **kwargs):
-        """
-        Initialize the MinionToolCallingAgent
-        
-        Args:
-            tools: List of tools available to the agent
-            llm: LLM instance (if None, will create from model config)
-            model: Model name from config.yaml models section (default: "default")
-            max_tool_threads: Maximum number of threads for parallel tool calls
-            stream_outputs: Whether to stream outputs during execution
-            **kwargs: Additional arguments passed to BaseAgent
-        """
-        super().__init__(name=name, tools=tools or [], **kwargs)
+    # Agent-specific parameters
+    model: str = "default"
+    max_tool_threads: Optional[int] = None
+    llm: Optional[Any] = field(default=None, init=False)  # Will be set in __post_init__
+    
+    def __post_init__(self):
+        """Initialize after dataclass creation"""
+        # Call parent __post_init__
+        super().__post_init__()
         
         # LLM setup - follow Brain pattern
-        if llm is not None:
-            self.llm = llm
-        else:
+        if self.llm is None:
             # Get model config and create LLM provider
-            model_config = config.models.get(model)
+            model_config = config.models.get(self.model)
             if model_config is None:
-                raise ValueError(f"Model '{model}' not found in config. Available models: {list(config.models.keys())}")
+                raise ValueError(f"Model '{self.model}' not found in config. Available models: {list(config.models.keys())}")
             self.llm = create_llm_provider(model_config)
-        
-        self.model = model
-        
-        # Tool calling setup
-        self.max_tool_threads = max_tool_threads
-        self.stream_outputs = stream_outputs
         
     async def setup(self):
         """Setup agent with tools"""
@@ -430,10 +413,10 @@ class MinionToolCallingAgent(BaseAgent):
 
 # Helper function to create a properly configured tool calling agent
 def create_tool_calling_agent(
-    tools: List[BaseTool],
+    tools: List[BaseTool] = None,
     name: str = "tool_calling_agent",
     model: str = "default",
-    llm=None,
+    max_tool_threads: Optional[int] = None,
     **kwargs
 ) -> MinionToolCallingAgent:
     """
@@ -443,17 +426,17 @@ def create_tool_calling_agent(
         tools: List of tools to provide to the agent
         name: Agent name
         model: Model name from config.yaml models section (default: "default")
-        llm: LLM instance (if None, will create from model config)
-        **kwargs: Additional arguments
+        max_tool_threads: Maximum number of threads for parallel tool calls
+        **kwargs: Additional arguments passed to BaseAgent
         
     Returns:
         Configured MinionToolCallingAgent
     """
     agent = MinionToolCallingAgent(
         name=name,
-        tools=tools,
+        tools=tools or [],
         model=model,
-        llm=llm,
+        max_tool_threads=max_tool_threads,
         **kwargs
     )
     

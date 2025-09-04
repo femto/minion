@@ -267,6 +267,8 @@ class BaseAgent:
             async for chunk in self._execute_step_stream(state, **kwargs):
                 action_step.add_chunk(chunk)
                 yield chunk
+                if hasattr(chunk,'is_final_answer') and chunk.is_final_answer:
+                    action_step.is_final_answer = True
             
             # 完成步骤
             result = action_step.to_agent_response()
@@ -277,8 +279,8 @@ class BaseAgent:
                 self._streaming_manager.complete_current_step(is_final_answer=True)
                 
                 yield StreamChunk(
-                    content=f"\n[FINAL] Task completed!\n",
-                    chunk_type="completion",
+                    content=f"[FINAL] Task completed!\n",
+                    chunk_type="completion", #interesting, yield completion type
                     metadata={"final_answer": True}
                 )
                 break
@@ -325,6 +327,8 @@ class BaseAgent:
                 async for chunk in result:
                     if isinstance(chunk, str):
                         yield StreamChunk(content=chunk, chunk_type="llm_output")
+                    elif isinstance(chunk, StreamChunk):
+                        yield chunk
                     else:
                         yield StreamChunk(content=str(chunk), chunk_type="llm_output")
             else:

@@ -619,70 +619,114 @@ Use Python code to:
                        stream: bool = False,
                        **kwargs) -> Any:
         """
-        Run the agent with enhanced state management and optional reset capability.
+        Run the CodeAgent with code-thinking capabilities.
         
         Args:
             task: Task description or Input object
             state: Existing state for execution
             max_steps: Maximum steps to execute
             reset: If True, reset the agent state before execution (when state tracking is enabled)
+            stream: If True, return streaming generator
             **kwargs: Additional parameters
             
         Returns:
-            Agent response with conversation context when state tracking is enabled
+            Agent response or async generator for streaming
         """
-        # Skip state management if state tracking is disabled
-        if not self.enable_state_tracking:
-            # Pass parameters with named arguments to avoid conflicts
-            return await super().run_async(task, state=state, max_steps=max_steps, stream=stream, **kwargs)
+        # Prepare input and state (main difference from BaseAgent)
+        enhanced_input = self._prepare_input(task)
+        prepared_state = self._prepare_state(state, reset)
         
-        # Handle reset functionality
-        if reset:
-            self.reset_state()
-            logger.info("Agent state has been reset")
+        # Record input in state for interaction tracking
+        prepared_state['input'] = enhanced_input
         
-        # Convert string task to Input if needed
-        input_data = task
-        if isinstance(task, str):
-            input_data = Input(query=task)
-        
-        # Update conversation context in input if we have state tracking enabled
-        if input_data and isinstance(input_data, Input):
-            enhanced_input = self._add_conversation_context(input_data)
-        else:
-            enhanced_input = input_data
-        
-        # Prepare state with persistent information
-        if state is None:
-            state = {}
-        state.update(self.persistent_state)
-        state['conversation_history'] = self.get_recent_history()
-        kwargs['state'] = state
-        
-        # Execute the step with enhanced input and state
         try:
-            # Remove state from kwargs since we're passing it directly to avoid duplicate arg error
-            kwargs_copy = kwargs.copy()
-            if 'state' in kwargs_copy:
-                del kwargs_copy['state']
-            result = await super().run_async(enhanced_input, state=state, max_steps=max_steps, stream=stream, **kwargs_copy)
+            # Use BaseAgent's logic but with our enhanced input
+            result = await super().run_async(
+                task=enhanced_input, 
+                state=prepared_state, 
+                max_steps=max_steps, 
+                stream=stream, 
+                **kwargs
+            )
             
-            # Record this interaction
-            if input_data and isinstance(input_data, Input):
-                await self._record_interaction(input_data, result, reset)
-            
-            # Auto-save state if enabled
-            if self.auto_save_state:
-                self._save_persistent_state(state)
+            # Record interaction if state tracking is enabled
+            if self.enable_state_tracking:
+                await self._record_interaction(enhanced_input, result, reset)
+                if self.auto_save_state:
+                    self._save_persistent_state(prepared_state)
             
             return result
             
         except Exception as e:
-            logger.error(f"Agent execution failed: {e}")
-            # Still record the failed interaction
-            if input_data and isinstance(input_data, Input):
-                await self._record_interaction(input_data, f"Error: {e}", reset)
+            # Record failed interaction if state tracking is enabled
+            if self.enable_state_tracking:
+                await self._record_interaction(enhanced_input, f"Error: {e}", reset)
             raise
+    
+    def _prepare_input(self, task: Optional[Union[str, Input]]) -> Input:
+        """
+        Prepare input data for execution.
+        
+        Args:
+            task: Task description or Input object
+            
+        Returns:
+            Input: Prepared Input object with enhanced query
+        """
+        # Convert string task to Input if needed
+        if isinstance(task, str):
+            input_data = Input(query=task, route='code')  # Key difference: prefer code route
+        elif isinstance(task, Input):
+            input_data = task
+            # Ensure we use code route if not explicitly set
+            if not input_data.route:
+                input_data.route = 'code'
+        else:
+            raise ValueError(f"Task must be string or Input object, got {type(task)}")
+        
+        # Enhance input with code-thinking instructions
+        enhanced_input = self._enhance_input_for_code_thinking(input_data)
+        
+        # Add conversation context if state tracking is enabled
+        if self.enable_state_tracking:
+            enhanced_input = self._add_conversation_context(enhanced_input)
+        
+        return enhanced_input
+    
+    def _prepare_state(self, state: Optional[Dict[str, Any]], reset: bool) -> Dict[str, Any]:
+        """
+        Prepare state for execution.
+        
+        Args:
+            state: Existing state or None
+            reset: Whether to reset state before execution
+            
+        Returns:
+            Dict: Prepared state dictionary
+        """
+        # Handle reset functionality (only if state tracking is enabled)
+        if reset and self.enable_state_tracking:
+            self.reset_state()
+            logger.info("Agent state has been reset")
+        
+        # Initialize state if None
+        if state is None:
+            state = {}
+        
+        # Add persistent information if state tracking is enabled
+        if self.enable_state_tracking:
+            state.update(self.persistent_state)
+            state['conversation_history'] = self.get_recent_history()
+        
+        # Ensure required keys exist
+        if 'step_count' not in state:
+            state['step_count'] = 0
+        if 'error_count' not in state:
+            state['error_count'] = 0
+        if 'history' not in state:
+            state['history'] = []
+        
+        return state
     
     def reset_state(self) -> None:
         """
