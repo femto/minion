@@ -121,8 +121,7 @@ class BaseAgent:
     
     def _is_mcp_tool(self, tool: BaseTool) -> bool:
         """检查工具是否是MCP工具"""
-        # 检查工具是否是BrainTool类型（MCP工具的包装类）
-        return tool.__class__.__name__ == 'BrainTool'
+        return tool.__class__.__name__ == 'AsyncMcpTool'
     
     async def __aenter__(self):
         """支持async context manager"""
