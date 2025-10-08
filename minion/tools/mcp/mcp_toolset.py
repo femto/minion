@@ -6,7 +6,9 @@ import os
 import asyncio
 from datetime import timedelta
 
-from minion.tools import BaseTool
+from minion.tools import AsyncBaseTool
+from minion.tools.base_tool import Toolset
+from minion.tools.base_tool import Toolset
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -24,7 +26,7 @@ def format_mcp_result(result) -> str:
         return str(result)
 
 
-class BrainTool(BaseTool):
+class AsyncMcpTool(AsyncBaseTool):
     """
     Adapter class to convert MCP tools to brain.step compatible format
     """
@@ -75,7 +77,7 @@ class SSEServerParameters:
         self.sse_read_timeout = sse_read_timeout
 
 
-class MCPToolset:
+class MCPToolset(Toolset):
     """
     Simplified MCP toolset that follows Google ADK pattern.
     Can be passed directly in the tools parameter when creating an agent.
@@ -99,11 +101,13 @@ class MCPToolset:
             session_timeout: Timeout in seconds for all session operations (tool calls, etc)
             ignore_setup_errors: If True, setup errors will be logged but not raised
         """
+        # Initialize with empty tools list first
+        super().__init__([])
+        
         self.connection_params = connection_params
         self.name = name or f"mcp_toolset_{id(self)}"
         self._exit_stack: Optional[AsyncExitStack] = None
         self._is_setup = False
-        self._tools: List[BrainTool] = []
         self._setup_timeout = setup_timeout
         self._session_timeout = timedelta(seconds=session_timeout)  # Convert to timedelta
         self._ignore_setup_errors = ignore_setup_errors
@@ -187,17 +191,17 @@ class MCPToolset:
         logger.info(f"Connected to MCP server with {len(response.tools)} tools")
         
         # Convert to BrainTool objects - no need to pass timeout since it's handled by session
-        self._tools = []
+        self.tools = []
         for tool in response.tools:
-            brain_tool = BrainTool(
+            brain_tool = AsyncMcpTool(
                 name=tool.name,
                 description=tool.description,
                 parameters=tool.inputSchema,
                 session=session
             )
-            self._tools.append(brain_tool)
+            self.tools.append(brain_tool)
         
-        logger.info(f"MCPToolset '{self.name}' setup completed with {len(self._tools)} tools")
+        logger.info(f"MCPToolset '{self.name}' setup completed with {len(self.tools)} tools")
 
     async def _ensure_setup(self) -> None:
         """Ensure toolset is setup, with timeout handling"""
@@ -215,14 +219,14 @@ class MCPToolset:
             if not self._ignore_setup_errors:
                 raise
 
-    def get_tools(self) -> List[BrainTool]:
+    def get_tools(self) -> List[AsyncBaseTool]:
         """
         Get list of tools, returns empty list if setup failed and errors are ignored
         """
         if not self.is_healthy:
             logger.warning(f"MCPToolset {self.name} is not healthy, returning empty tool list")
             return []
-        return self._tools
+        return self.tools
 
     async def close(self):
         """Close the toolset and clean up resources"""
@@ -230,7 +234,7 @@ class MCPToolset:
             await self._exit_stack.aclose()
             self._exit_stack = None
             self._is_setup = False
-        self._tools.clear()
+        self.tools.clear()
         logger.info(f"MCPToolset '{self.name}' closed")
 
     def __repr__(self):
