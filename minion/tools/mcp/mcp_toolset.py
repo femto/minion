@@ -190,16 +190,16 @@ class MCPToolset(Toolset):
         response = await session.list_tools()
         logger.info(f"Connected to MCP server with {len(response.tools)} tools")
         
-        # Convert to BrainTool objects - no need to pass timeout since it's handled by session
+        # Convert to AsyncMcpTool objects - no need to pass timeout since it's handled by session
         self.tools = []
         for tool in response.tools:
-            brain_tool = AsyncMcpTool(
+            mcp_tool = AsyncMcpTool(
                 name=tool.name,
                 description=tool.description,
                 parameters=tool.inputSchema,
                 session=session
             )
-            self.tools.append(brain_tool)
+            self.tools.append(mcp_tool)
         
         logger.info(f"MCPToolset '{self.name}' setup completed with {len(self.tools)} tools")
 
