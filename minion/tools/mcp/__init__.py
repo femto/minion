@@ -6,7 +6,7 @@ Simplified API for connecting to MCP servers and using their tools.
 
 from .mcp_toolset import (
     # Core classes
-    BrainTool,
+    AsyncMcpTool,
     format_mcp_result,
     
     # Google ADK-style simplified API
@@ -21,7 +21,7 @@ from .mcp_toolset import (
 
 __all__ = [
     # Core classes
-    "BrainTool", 
+    "AsyncMcpTool",
     "format_mcp_result",
     
     # Google ADK-style simplified API

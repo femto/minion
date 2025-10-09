@@ -552,13 +552,13 @@ class TextualUI:
                         """Move streaming content to chat log and clear streaming widget."""
                         if content:
                             # Add to chat log
-                            agent_text = Text()
-                            agent_text.append("🤖 Agent: ", style="bold green")
-                            agent_text.append(content)
-                            chat_log.write(Panel(agent_text, border_style="green"))
+                            # agent_text = Text()
+                            # agent_text.append("🤖 Agent1: ", style="bold green")
+                            # agent_text.append(content)
+                            # chat_log.write(Panel(agent_text, border_style="green"))
                             
                             # Add to chat history
-                            self.ui.chat_history.append(ChatMessage(MessageRole.ASSISTANT, content))
+                            #self.ui.chat_history.append(ChatMessage(MessageRole.ASSISTANT, content))
                             
                             # Clear streaming widget
                             self.streaming_content = ""

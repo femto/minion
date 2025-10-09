@@ -3,7 +3,7 @@
 """
 工具模块
 """
-from minion.tools.base_tool import BaseTool, tool, ToolCollection
+from minion.tools.base_tool import BaseTool, tool, ToolCollection, Toolset
 from minion.tools.async_base_tool import AsyncBaseTool, async_tool, SyncToAsyncToolAdapter, AsyncToolCollection
 
 # Optional imports with fallbacks
@@ -42,7 +42,8 @@ except ImportError:
 __all__ = [
     "BaseTool", 
     "tool", 
-    "ToolCollection", 
+    "ToolCollection",
+    "Toolset",
     "AsyncBaseTool", 
     "async_tool", 
     "SyncToAsyncToolAdapter", 
