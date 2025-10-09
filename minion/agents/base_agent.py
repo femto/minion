@@ -5,6 +5,7 @@ import asyncio
 import logging
 import inspect
 
+from ..providers import BaseProvider
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
@@ -20,6 +21,7 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
+    llm: Optional[BaseProvider] = None  # LLM provider to pass to Brain
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -34,11 +36,25 @@ class BaseAgent:
     
     def __post_init__(self):
         """初始化后的处理"""
-        if self.brain is None:
-            self.brain = Brain()
-        
         # Automatically handle MCPToolset objects in tools parameter
         self._extract_mcp_toolsets_from_tools()
+        
+        # Initialize brain and setup agent synchronously
+        # This ensures brain is available in __post_init__ for all subclasses
+        import asyncio
+        try:
+            # Try to get existing event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, schedule setup for later
+                # This is a fallback - ideally agents should be created in async context
+                asyncio.create_task(self.setup())
+            else:
+                # Run setup synchronously if no loop is running
+                loop.run_until_complete(self.setup())
+        except RuntimeError:
+            # No event loop exists, create one and run setup
+            asyncio.run(self.setup())
     
     def _extract_mcp_toolsets_from_tools(self):
         """
@@ -69,6 +85,10 @@ class BaseAgent:
     
     async def setup(self):
         """Setup agent with tools"""
+        # Prevent duplicate setup
+        if self._is_setup:
+            return
+            
         # Setup MCP toolsets
         for toolset in self._mcp_toolsets:
             try:
@@ -88,7 +108,10 @@ class BaseAgent:
 
         # Initialize brain with tools
         if self.brain is None:
-            self.brain = Brain(tools=tools)
+            brain_kwargs = {'tools': tools}
+            if self.llm is not None:
+                brain_kwargs['llm'] = self.llm
+            self.brain = Brain(**brain_kwargs)
         
         # Mark agent as setup
         self._is_setup = True
