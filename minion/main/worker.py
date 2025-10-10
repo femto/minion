@@ -1118,6 +1118,12 @@ To do so, you have been given access to a list of tools. Each tool is actually a
 You are provided with the following tools:
 {tools_description}
 
+**Important Notes for Asynchronous Operations:**
+- You are already in an async context - DON'T use `asyncio.run()`
+- Use `await` directly at the top level in your code: `result = await async_function()`
+- When calling async tools or functions, always use `await` to get the actual result
+- No need to wrap your code in async functions - just use `await` directly
+
 You will be given a task to solve as best you can. To solve the task, you must plan and execute Python code step by step until you have solved the task.
 
 Here is the format you should follow:

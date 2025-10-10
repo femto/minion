@@ -145,21 +145,7 @@ class CodeAgent(BaseAgent):
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
-        
-        # Set brain.python_env to the executor
-        if self.brain:
-            self.brain.python_env = self.python_executor
-        
-        # Add the think tool and final answer tool
-        self.add_tool(FinalAnswerTool())
-        
-        # Send tools to the python executor
-        self._update_executor_tools()
-        
-        # Initialize state tracking if enabled
-        if self.enable_state_tracking:
-            self._initialize_state()
-    
+
     def _initialize_state(self):
         """Initialize persistent state if state tracking is enabled."""
         if not self.persistent_state:
@@ -177,11 +163,19 @@ class CodeAgent(BaseAgent):
             return
         await super().setup()
         self._is_setup = False #since super setting this to True, we immediately set it to False
-        # Add the think tool and final answer tool
-        #self.add_tool(FinalAnswerTool())
+        
+        # Set brain.python_env to the executor after brain is initialized
+        if self.brain and self.python_executor:
+            self.brain.python_env = self.python_executor
+
+        self.add_tool(FinalAnswerTool())
 
         # Send tools to the python executor
-        #self._update_executor_tools()
+        self._update_executor_tools()
+
+        # Initialize state tracking if enabled
+        if self.enable_state_tracking:
+            self._initialize_state()
         self._is_setup = True
 
 

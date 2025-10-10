@@ -38,6 +38,8 @@ class BaseAgent:
         """初始化后的处理"""
         # Automatically handle MCPToolset objects in tools parameter
         # not quite useful
+        # current just for setting self._mcp_toolsets
+        # and ensure await self._mcp_toolsets.ensure_setup() in setup()
         self._extract_mcp_toolsets_from_tools()
 
     @classmethod
@@ -77,7 +79,7 @@ class BaseAgent:
                 regular_tools.append(tool)
         
         # Update the tools list to only contain regular tools
-        # self.tools = regular_tools
+        self.tools = regular_tools #will add mcp_toolsets later if mcp_toolsets is healthy
         
         # Add MCPToolset objects to _mcp_toolsets
         for toolset in mcp_toolsets:
