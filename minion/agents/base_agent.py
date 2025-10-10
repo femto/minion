@@ -37,25 +37,26 @@ class BaseAgent:
     def __post_init__(self):
         """初始化后的处理"""
         # Automatically handle MCPToolset objects in tools parameter
+        # not quite useful
         self._extract_mcp_toolsets_from_tools()
+
+    @classmethod
+    async def create(cls, *args, **kwargs) :
+        """
+        异步创建并设置实例
         
-        # Initialize brain and setup agent synchronously
-        # This ensures brain is available in __post_init__ for all subclasses
-        import asyncio
-        try:
-            # Try to get existing event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an async context, schedule setup for later
-                # This is a fallback - ideally agents should be created in async context
-                asyncio.create_task(self.setup())
-            else:
-                # Run setup synchronously if no loop is running
-                loop.run_until_complete(self.setup())
-        except RuntimeError:
-            # No event loop exists, create one and run setup
-            asyncio.run(self.setup())
-    
+        Args:
+            *args: 传递给构造函数的位置参数
+            **kwargs: 传递给构造函数的关键字参数
+            
+        Returns:
+            instance: 已设置完成的实例
+        """
+        instance = cls(*args, **kwargs)
+        await instance.setup()
+        return instance
+
+    #what does this method do, not quite useful?
     def _extract_mcp_toolsets_from_tools(self):
         """
         Extract MCPToolset objects from tools parameter and move them to _mcp_toolsets.
@@ -76,7 +77,7 @@ class BaseAgent:
                 regular_tools.append(tool)
         
         # Update the tools list to only contain regular tools
-        self.tools = regular_tools
+        # self.tools = regular_tools
         
         # Add MCPToolset objects to _mcp_toolsets
         for toolset in mcp_toolsets:

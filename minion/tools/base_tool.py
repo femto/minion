@@ -318,6 +318,22 @@ class Toolset:
         self.tools = tools
 
     @classmethod
+    async def create(cls, *args, **kwargs):
+        """
+        异步创建并设置实例
+
+        Args:
+            *args: 传递给构造函数的位置参数
+            **kwargs: 传递给构造函数的关键字参数
+
+        Returns:
+            instance: 已设置完成的实例
+        """
+        instance = cls(*args, **kwargs)
+        await instance.setup()
+        return instance
+
+    @classmethod
     def from_hub(
         cls,
         collection_slug: str,
