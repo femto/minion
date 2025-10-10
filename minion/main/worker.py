@@ -1079,7 +1079,38 @@ class CodeMinion(PythonMinion):
         if self.brain.tools:
             for tool in self.brain.tools:
                 if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                    available_tools.append(f"- {tool.name}: {tool.description}")
+                    tool_desc = f"- {tool.name}: {tool.description}"
+                    
+                    # Add parameter information and usage example for MCP tools
+                    if hasattr(tool, 'parameters') and tool.parameters:
+                        if 'properties' in tool.parameters:
+                            params = tool.parameters['properties']
+                            param_list = []
+                            for param_name, param_info in params.items():
+                                param_type = param_info.get('type', 'any')
+                                param_desc = param_info.get('description', '')
+                                param_list.append(f"{param_name} ({param_type}): {param_desc}")
+                            
+                            if param_list:
+                                tool_desc += f"\n  Parameters: {', '.join(param_list)}"
+                                
+                                # Add usage example with keyword arguments
+                                example_params = []
+                                for param_name, param_info in params.items():
+                                    param_type = param_info.get('type', 'str')
+                                    if param_type == 'string':
+                                        example_params.append(f'{param_name}="example_value"')
+                                    elif param_type == 'integer':
+                                        example_params.append(f'{param_name}=123')
+                                    elif param_type == 'boolean':
+                                        example_params.append(f'{param_name}=True')
+                                    else:
+                                        example_params.append(f'{param_name}="value"')
+                                
+                                if example_params:
+                                    tool_desc += f"\n  Usage: await {tool.name}({', '.join(example_params)})"
+                    
+                    available_tools.append(tool_desc)
         
         tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
         
@@ -1123,6 +1154,12 @@ You are provided with the following tools:
 - Use `await` directly at the top level in your code: `result = await async_function()`
 - When calling async tools or functions, always use `await` to get the actual result
 - No need to wrap your code in async functions - just use `await` directly
+
+**Important Notes for Tool Usage:**
+- ALWAYS use keyword arguments when calling tools, never use positional arguments
+- Example: `await tool_name(param1="value1", param2="value2")` ✓
+- Never: `await tool_name("value1", "value2")` ✗
+- All tool parameters must be explicitly named
 
 You will be given a task to solve as best you can. To solve the task, you must plan and execute Python code step by step until you have solved the task.
 

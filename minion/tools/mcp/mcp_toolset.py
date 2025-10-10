@@ -16,14 +16,83 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def convert_mcp_to_python_types(obj):
+    """Convert MCP types to common Python types for code execution"""
+    # Handle None
+    if obj is None:
+        return None
+    
+    # Handle basic Python types
+    if isinstance(obj, (str, int, float, bool)):
+        return obj
+    
+    # Handle lists
+    if isinstance(obj, list):
+        return [convert_mcp_to_python_types(item) for item in obj]
+    
+    # Handle dictionaries
+    if isinstance(obj, dict):
+        return {key: convert_mcp_to_python_types(value) for key, value in obj.items()}
+    
+    # Handle MCP TextContent objects
+    if hasattr(obj, 'text'):
+        return obj.text
+    
+    # Handle MCP objects with content attribute
+    if hasattr(obj, 'content'):
+        return convert_mcp_to_python_types(obj.content)
+    
+    # Handle objects that can be converted to dict (like pydantic models)
+    if hasattr(obj, 'model_dump'):
+        try:
+            return convert_mcp_to_python_types(obj.model_dump())
+        except:
+            pass
+    
+    if hasattr(obj, 'dict'):
+        try:
+            return convert_mcp_to_python_types(obj.dict())
+        except:
+            pass
+    
+    # Handle objects with __dict__
+    if hasattr(obj, '__dict__'):
+        try:
+            return convert_mcp_to_python_types(obj.__dict__)
+        except:
+            pass
+    
+    # Fallback to string representation
+    return str(obj)
+
+
 def format_mcp_result(result) -> str:
-    """Format MCP tool result for display"""
-    if hasattr(result, 'content'):
-        return result.content
-    elif isinstance(result, list):
-        return '\n'.join(str(item) for item in result)
-    else:
-        return str(result)
+    """Format MCP tool result for display and code execution"""
+    # Convert MCP types to Python types first
+    converted = convert_mcp_to_python_types(result)
+    
+    # If the converted result is a simple type, return it as string
+    if isinstance(converted, (str, int, float, bool)):
+        return str(converted)
+    
+    # Special handling for single-item lists containing strings
+    if isinstance(converted, list) and len(converted) == 1 and isinstance(converted[0], str):
+        return converted[0]
+    
+    # If it's a list or dict, format it nicely
+    if isinstance(converted, (list, dict)):
+        import json
+        try:
+            # For lists of strings, join them with newlines for better readability
+            if isinstance(converted, list) and all(isinstance(item, str) for item in converted):
+                return '\n'.join(converted)
+            else:
+                return json.dumps(converted, indent=2, ensure_ascii=False)
+        except:
+            return str(converted)
+    
+    # Fallback
+    return str(converted)
 
 
 class AsyncMcpTool(AsyncBaseTool):
@@ -43,9 +112,34 @@ class AsyncMcpTool(AsyncBaseTool):
         self.__doc__ = description
         self.__input_schema__ = parameters
 
-    async def forward(self, **kwargs) -> str:
+    async def forward(self, *args, **kwargs) -> str:
         """Execute the tool with given parameters"""
         try:
+            # Handle both positional and keyword arguments
+            # If there's a single positional argument that's a dict, use it as kwargs
+            if len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], dict):
+                kwargs = args[0]
+            elif len(args) > 0:
+                # If there are positional arguments, we need to map them to parameter names
+                # For now, we'll assume the first positional argument is the main parameter
+                # This is a simplified approach - in practice, you might want to inspect
+                # the tool's input schema to map positional args correctly
+                if len(args) == 1 and not kwargs:
+                    # Try to determine the parameter name from the schema
+                    if self.parameters and 'properties' in self.parameters:
+                        param_names = list(self.parameters['properties'].keys())
+                        if len(param_names) == 1:
+                            kwargs = {param_names[0]: args[0]}
+                        else:
+                            # Multiple parameters, use the first one or a common name
+                            kwargs = {param_names[0]: args[0]}
+                    else:
+                        # Fallback: use a common parameter name
+                        kwargs = {'path': args[0]} if isinstance(args[0], str) else {'input': args[0]}
+                else:
+                    # Multiple args - this is more complex, for now just pass as is
+                    logger.warning(f"Tool {self.name} received multiple positional args, may not work correctly")
+            
             async with asyncio.timeout(self.timeout):
                 result = await self.session.call_tool(self.name, kwargs)
                 return format_mcp_result(result)
@@ -200,7 +294,7 @@ class MCPToolset(Toolset):
                 session=session
             )
             self.tools.append(mcp_tool)
-        
+        self._is_setup = True
         logger.info(f"MCPToolset '{self.name}' setup completed with {len(self.tools)} tools")
 
     async def ensure_setup(self) -> None:
