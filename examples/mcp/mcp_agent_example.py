@@ -52,7 +52,7 @@ async def main():
         print("\n🤖 Starting conversation with MCP-enabled agent...")
         
         # Test with filesystem operations
-        response = await agent.run_async("Can you list the files in the current directory and tell me what this project is about based on the README.md file?")
+        response = await agent.run_async("Can you list the files in the current directory?")
         print(f"Agent response: {response.content}")
             
     except Exception as e:
