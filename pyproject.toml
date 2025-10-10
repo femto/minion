@@ -69,7 +69,7 @@ dev = ["pytest", "black", "ruff", "pytest-asyncio"]
 google = ["google-adk", "litellm"]
 browser = ["browser-use>=0.1.0"]
 gradio = ["gradio>=4.0.0"]
-utcp = ["utcp", "utcp-http", "utcp-cli"]
+utcp = ["utcp", "utcp-http", "utcp-cli","utcp-text","utcp-mcp"]
 all = ["minionx[dev,google,browser,gradio,utcp]"]
 
 [tool.hatch.build.targets.wheel]

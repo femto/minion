@@ -48,7 +48,7 @@ class UtcpManualToolset(Toolset):
     
     def __init__(
         self, 
-        config_path: Optional[Union[str, Path]] = None,
+        config: Optional[Union[str, Path, Dict[str, Any]]] = None,
         root_dir: Optional[str] = None,
         name: Optional[str] = None,
         setup_timeout: float = 30,  # 30 seconds timeout for setup
@@ -58,7 +58,7 @@ class UtcpManualToolset(Toolset):
         Initialize UtcpManualToolset with configuration
         
         Args:
-            config_path: Path to UTCP configuration file (providers.json)
+            config: UTCP configuration - can be a path to config file, dict config, or UtcpClientConfig
             root_dir: Root directory for UTCP client
             name: Optional name for the toolset
             setup_timeout: Timeout in seconds for toolset setup
@@ -67,7 +67,7 @@ class UtcpManualToolset(Toolset):
         # Initialize with empty tools list first
         super().__init__([])
         
-        self.config_path = config_path
+        self.config = config
         self.root_dir = root_dir
         self.name = name or f"utcp_toolset_{id(self)}"
         self._utcp_client = None
@@ -86,18 +86,23 @@ class UtcpManualToolset(Toolset):
         """Return the setup error if any"""
         return self._setup_error
 
-    async def initialize_utcp_client(self) :
+    async def initialize_utcp_client(self):
         """Initialize the UTCP client with configuration."""
         try:
-            from utcp import UtcpClient
+            from utcp.utcp_client import UtcpClient
+            #from utcp.data.utcp_client_config import UtcpClientConfigSerializer
+            from utcp.data.tool import Tool
         except ImportError as e:
             logger.error(f"UTCP library not available: {e}")
             raise RuntimeError(f"UTCP library not available: {e}")
         
-        logger.info(f"Initializing UTCP client with config: {self.config_path}")
+        # Use provided config or default to providers.json in same directory
+        config = self.config
+
+        logger.info(f"Initializing UTCP client with config: {config}")
         client = await UtcpClient.create(
             root_dir=self.root_dir,
-            config=self.config_path
+            config=config
         )
         return client
 
@@ -179,24 +184,29 @@ class UtcpManualToolset(Toolset):
 
 
 # Factory function for creating UTCP toolset
-def create_utcp_toolset(
-    config_path: Optional[Union[str, Path]] = None,
+async def create_utcp_toolset(
+    config: Optional[Union[str, Path, Dict[str, Any]]] = None,
     root_dir: Optional[str] = None,
     name: Optional[str] = None
 ) -> UtcpManualToolset:
     """
-    Create a UTCP toolset
+    Create a UTCP toolset and set it up
     
     Args:
-        config_path: Path to UTCP configuration file (providers.json)
+        config: UTCP configuration - can be a path to config file, dict config, or UtcpClientConfig
         root_dir: Root directory for UTCP client
         name: Optional name for the toolset
         
     Returns:
-        UtcpManualToolset configured with the provided parameters
+        UtcpManualToolset configured and setup with the provided parameters
     """
-    return UtcpManualToolset(
-        config_path=config_path,
+    toolset = UtcpManualToolset(
+        config=config,
         root_dir=root_dir,
         name=name or "utcp_toolset"
     )
+    
+    # Automatically setup the toolset
+    await toolset._ensure_setup()
+    
+    return toolset

@@ -21,7 +21,7 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
-    llm: Optional[BaseProvider] = None  # LLM provider to pass to Brain
+    llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))

@@ -1,0 +1,22 @@
+{
+    "load_variables_from": [
+        {
+            "variable_loader_type": "dotenv",
+            "env_file_path": ".env"
+        }
+    ],
+    "manual_call_templates": [
+        {
+            "name": "openlibrary",
+            "call_template_type": "http",
+            "http_method": "GET",
+            "url": "https://openlibrary.org/static/openapi.json",
+            "content_type": "application/json"
+        },
+        {
+            "name": "newsapi",
+            "call_template_type": "text",
+            "file_path": "./newsapi_manual.json"
+        }
+    ]
+}
