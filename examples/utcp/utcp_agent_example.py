@@ -43,7 +43,7 @@ async def main():
         # Create agent with UTCP tools
         agent = await CodeAgent.create(
             llm="gpt-4o",
-            tools=utcp_tools,  # Pass UTCP tools directly
+            tools=utcp_tools,  # Pass UTCP tools directly, or should we pass toolset?
             name="UTCP Agent"
         )
         

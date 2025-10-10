@@ -212,10 +212,15 @@ class CodeAgent(BaseAgent):
             if not self.brain:
                 raise ValueError("Brain is not initialized")
             
+            # Get tools list, prioritizing state tools, then agent.tools
+            tools = state.get("tools", self.tools)
+            if tools is None:
+                tools = self.tools
+            
             # Call brain.step with proper state format - brain expects state dict with 'input' key
             brain_state = state.copy()
             brain_state["input"] = enhanced_input
-            result = await self.brain.step(brain_state, stream=stream, **kwargs)
+            result = await self.brain.step(brain_state, tools=tools, stream=stream, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
