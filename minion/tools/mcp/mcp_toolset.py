@@ -123,7 +123,7 @@ class MCPToolset(Toolset):
         """Return the setup error if any"""
         return self._setup_error
 
-    async def _setup(self):
+    async def setup(self):
         """Internal setup method that does the actual work"""
         self._exit_stack = AsyncExitStack()
         await self._exit_stack.__aenter__()
@@ -203,14 +203,14 @@ class MCPToolset(Toolset):
         
         logger.info(f"MCPToolset '{self.name}' setup completed with {len(self.tools)} tools")
 
-    async def _ensure_setup(self) -> None:
+    async def ensure_setup(self) -> None:
         """Ensure toolset is setup, with timeout handling"""
         if self._is_setup:
             return
 
         try:
             async with asyncio.timeout(self._setup_timeout):
-                await self._setup()
+                await self.setup()
                 self._is_setup = True
                 self._setup_error = None
         except Exception as e:

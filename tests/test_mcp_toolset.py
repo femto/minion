@@ -44,12 +44,12 @@ class TestMCPToolset:
         # Setup
         with patch('mcp.ClientSession') as mock_session:
             mock_session.return_value = AsyncMock()
-            await toolset._ensure_setup()
+            await toolset.ensure_setup()
             assert toolset._is_setup
             assert toolset._exit_stack is not None
         
         # Setup again should not fail
-        await toolset._ensure_setup()
+        await toolset.ensure_setup()
         assert toolset._is_setup
         
         # Close
@@ -70,7 +70,7 @@ class TestMCPToolset:
                 ),
                 name="context_test"
             )
-            await toolset._ensure_setup()
+            await toolset.ensure_setup()
             assert toolset._is_setup
             assert isinstance(toolset, MCPToolset)
             await toolset.close()
@@ -92,7 +92,7 @@ class TestMCPToolsetWithMocking:
         )
         with patch.dict('sys.modules', {'mcp': None}):
             with pytest.raises(RuntimeError, match="MCP library not available"):
-                await toolset._ensure_setup()
+                await toolset.ensure_setup()
     
     @pytest.mark.asyncio
     async def test_setup_unsupported_params(self):
@@ -105,7 +105,7 @@ class TestMCPToolsetWithMocking:
             name="test"
         )
         with pytest.raises(ValueError, match="Unsupported connection parameters type"):
-            await toolset._ensure_setup()
+            await toolset.ensure_setup()
     
     @pytest.mark.asyncio
     async def test_get_tools_after_setup(self):
@@ -121,7 +121,7 @@ class TestMCPToolsetWithMocking:
         # Mock successful setup
         with patch('mcp.ClientSession') as mock_session:
             mock_session.return_value = AsyncMock()
-            await toolset._ensure_setup()
+            await toolset.ensure_setup()
             
             # Should not raise after setup
             tools = toolset.get_tools()

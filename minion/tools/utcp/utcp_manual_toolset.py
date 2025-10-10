@@ -1,11 +1,79 @@
 import logging
 import asyncio
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 from minion.tools import AsyncBaseTool, Toolset
 
 logger = logging.getLogger(__name__)
+
+DEBUG = False  # Set to True for debug output
+
+
+def format_tools_for_bedrock(tools: List[AsyncBaseTool]) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+    """
+    Convert minion AsyncBaseTool tools to Bedrock tool format.
+    
+    Args:
+        tools: List of minion AsyncBaseTool tools
+        
+    Returns:
+        Tuple containing:
+        - List of tools formatted for Bedrock
+        - Mapping between modified tool names and original names
+    """
+    bedrock_tools = []
+    tool_name_mapping = {}
+    
+    for tool in tools:
+        # Create the input schema JSON from tool.inputs
+        input_schema_json = {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+        
+        # Add inputs to the input schema
+        if hasattr(tool, 'inputs') and tool.inputs:
+            input_schema_json["properties"] = tool.inputs
+            # Extract required fields from tool inputs
+            # In minion framework, we need to determine required fields
+            # This could be based on tool signature or explicit marking
+            required_fields = []
+            for field_name, field_info in tool.inputs.items():
+                # Check if field is marked as required (you may need to adjust this logic)
+                if isinstance(field_info, dict) and not field_info.get("nullable", False):
+                    required_fields.append(field_name)
+            input_schema_json["required"] = required_fields
+        
+        # Replace periods in tool name with underscores
+        original_name = tool.name
+        bedrock_tool_name = original_name.replace(".", "_")
+        
+        # Truncate if longer than 64 characters (Bedrock's limit)
+        if len(bedrock_tool_name) > 64:
+            short_uuid = str(uuid.uuid4())[:8]
+            short_name = f"{bedrock_tool_name[:55]}_{short_uuid}"
+            if DEBUG:
+                print(f"Tool name '{bedrock_tool_name}' is too long, using '{short_name}' instead")
+            bedrock_tool_name = short_name
+        
+        # Store the mapping between the modified name and original name
+        tool_name_mapping[bedrock_tool_name] = original_name
+        
+        # Format the tool for Bedrock
+        tool_spec = {
+            "name": bedrock_tool_name,
+            "description": tool.description,
+            "inputSchema": {
+                "json": input_schema_json
+            }
+        }
+        
+        bedrock_tools.append({"toolSpec": tool_spec})
+    
+    return bedrock_tools, tool_name_mapping
 
 
 class AsyncUtcpTool(AsyncBaseTool):
@@ -13,18 +81,54 @@ class AsyncUtcpTool(AsyncBaseTool):
     Adapter class to convert UTCP tools to minion framework compatible format
     """
     
-    def __init__(self, name: str, description: str, parameters: Dict[str, Any], utcp_client, original_name: str):
+    def __init__(self, name: str, description: str, utcp_tool, utcp_client, original_name: str):
         super().__init__()
         self.name = name.replace(".", "_")  # Replace dots with underscores for valid method names
         self.description = description
-        self.parameters = parameters
         self.utcp_client = utcp_client
         self.original_name = original_name  # Keep original name for UTCP calls
+        self.utcp_tool = utcp_tool  # Store the original UTCP tool
+        
+        # Convert UTCP tool inputs to minion format
+        self.inputs = self._convert_utcp_inputs_to_minion_format(utcp_tool)
         
         # Add attributes expected by minion framework
         self.__name__ = self.name
         self.__doc__ = description
-        self.__input_schema__ = parameters
+        self.__input_schema__ = self.inputs
+    
+    def _convert_utcp_inputs_to_minion_format(self, utcp_tool) -> Dict[str, Dict[str, Any]]:
+        """
+        Convert UTCP tool inputs to minion framework format
+        
+        Args:
+            utcp_tool: The original UTCP tool object
+            
+        Returns:
+            Dict in minion format for tool inputs
+        """
+        minion_inputs = {}
+        
+        # Extract inputs from UTCP tool
+        if hasattr(utcp_tool, 'inputs') and utcp_tool.inputs:
+            if hasattr(utcp_tool.inputs, 'properties') and utcp_tool.inputs.properties:
+                for field_name, field_info in utcp_tool.inputs.properties.items():
+                    # Convert UTCP field format to minion format
+                    minion_field = {}
+                    
+                    if hasattr(field_info, 'type'):
+                        minion_field["type"] = field_info.type
+                    if hasattr(field_info, 'description'):
+                        minion_field["description"] = field_info.description
+                    
+                    # Check if field is required
+                    required_fields = getattr(utcp_tool.inputs, 'required', [])
+                    if field_name not in required_fields:
+                        minion_field["nullable"] = True
+                    
+                    minion_inputs[field_name] = minion_field
+        
+        return minion_inputs
 
     async def forward(self, **kwargs) -> Dict[str, Any]:
         """Execute the UTCP tool with given parameters"""
@@ -106,7 +210,7 @@ class UtcpManualToolset(Toolset):
         )
         return client
 
-    async def _setup(self):
+    async def setup(self):
         """Internal setup method that does the actual work"""
         # Initialize UTCP client
         self._utcp_client = await self.initialize_utcp_client()
@@ -115,22 +219,21 @@ class UtcpManualToolset(Toolset):
         try:
             # Assuming UTCP client has a method to list available tools
             # This might need to be adjusted based on actual UTCP API
-            tools_info = await self._utcp_client.list_tools()
+            tools_info = await self._utcp_client.search_tools("Please give me all tools")
             logger.info(f"Connected to UTCP with {len(tools_info)} tools")
             
             # Convert to AsyncUtcpTool objects
             self.tools = []
             for tool_info in tools_info:
                 # Extract tool information - adjust based on actual UTCP tool format
-                original_name = tool_info.get("name", "")
+                original_name = tool_info.name
                 safe_name = original_name.replace(".", "_")  # Make name valid for method calls
-                description = tool_info.get("description", "")
-                parameters = tool_info.get("parameters", {})
+                description = tool_info.description
                 
                 utcp_tool = AsyncUtcpTool(
                     name=safe_name,
                     description=description,
-                    parameters=parameters,
+                    utcp_tool=tool_info,  # Pass the entire UTCP tool object
                     utcp_client=self._utcp_client,
                     original_name=original_name
                 )
@@ -142,15 +245,16 @@ class UtcpManualToolset(Toolset):
             # If list_tools method doesn't exist, we'll need to handle this differently
             logger.warning("UTCP client doesn't have list_tools method, creating empty toolset")
             self.tools = []
+        self._is_setup = True
 
-    async def _ensure_setup(self) -> None:
+    async def ensure_setup(self) -> None:
         """Ensure toolset is setup, with timeout handling"""
         if self._is_setup:
             return
 
         try:
             async with asyncio.timeout(self._setup_timeout):
-                await self._setup()
+                await self.setup()
                 self._is_setup = True
                 self._setup_error = None
         except Exception as e:
@@ -207,6 +311,6 @@ async def create_utcp_toolset(
     )
     
     # Automatically setup the toolset
-    await toolset._ensure_setup()
+    await toolset.ensure_setup()
     
     return toolset

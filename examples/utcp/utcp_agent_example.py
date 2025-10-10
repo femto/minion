@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 
 from minion.agents import CodeAgent
-from minion.tools import create_utcp_toolset
+from minion.tools import create_utcp_toolset, UtcpManualToolset
 from minion.agents.base_agent import BaseAgent
 from minion.providers.openai_provider import OpenAIProvider
 
@@ -26,7 +26,7 @@ async def main():
     try:
         # Create UTCP toolset (async - automatically sets up)
         print("Creating and setting up UTCP toolset...")
-        utcp_toolset = await create_utcp_toolset(
+        utcp_toolset = await UtcpManualToolset.create(
             config=str(Path(__file__).parent / "providers.json"),
             name="agent_utcp_toolset"
         )
@@ -51,13 +51,8 @@ async def main():
         print("\n🤖 Starting conversation with UTCP-enabled agent...")
         
         # Test with a calculation if calculator tools are available
-        if True:
-            response = await agent.run_async("Can you add 15 and 27 for me?")
-            print(f"Agent response: {response}")
-        else:
-            print("No calculator tools found, testing with general query...")
-            response = await agent.run("What tools do you have available?")
-            print(f"Agent response: {response}")
+        response = await agent.run_async("Can you get latest news for me")
+        print(f"Agent response: {response.content}")
             
     except Exception as e:
         print(f"❌ Error during UTCP agent example: {e}")

@@ -113,6 +113,7 @@ async def main():
 ```python
 from minion.tools.utcp.utcp_manual_toolset import UtcpManualToolset
 
+
 async def main():
     # Create toolset manually
     utcp_toolset = UtcpManualToolset(
@@ -121,10 +122,10 @@ async def main():
         setup_timeout=30,
         ignore_setup_errors=False
     )
-    
+
     # Setup manually
-    await utcp_toolset._ensure_setup()
-    
+    await utcp_toolset.ensure_setup()
+
     # Use toolset...
 ```
 

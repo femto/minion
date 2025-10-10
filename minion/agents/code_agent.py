@@ -172,6 +172,19 @@ class CodeAgent(BaseAgent):
             }
         logger.info("State tracking initialized")
 
+    async def setup(self):
+        if self._is_setup:
+            return
+        await super().setup()
+        self._is_setup = False #since super setting this to True, we immediately set it to False
+        # Add the think tool and final answer tool
+        #self.add_tool(FinalAnswerTool())
+
+        # Send tools to the python executor
+        #self._update_executor_tools()
+        self._is_setup = True
+
+
     async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
         """
         Execute a step with enhanced code-based reasoning.

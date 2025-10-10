@@ -93,7 +93,7 @@ class BaseAgent:
         # Setup MCP toolsets
         for toolset in self._mcp_toolsets:
             try:
-                await toolset._ensure_setup()
+                await toolset.ensure_setup()
                 if not toolset.is_healthy:
                     logger.warning(f"MCP toolset {toolset.name} failed to setup: {toolset.setup_error}")
             except Exception as e:
