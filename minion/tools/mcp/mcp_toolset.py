@@ -242,7 +242,7 @@ class MCPToolset(Toolset):
 
 
 # Factory functions for common MCP servers
-def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None, name: Optional[str] = None) -> MCPToolset:
+async def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None, name: Optional[str] = None) -> MCPToolset:
     """
     Create a filesystem MCP toolset
     
@@ -261,16 +261,18 @@ def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None, name:
         # Convert all paths to absolute paths
         workspace_paths = [os.path.abspath(path) for path in workspace_paths]
     
-    return MCPToolset(
+    toolset = MCPToolset(
         connection_params=StdioServerParameters(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem"] + workspace_paths
         ),
         name=name or "filesystem_toolset"
     )
+    await toolset.setup()
+    return toolset
 
 
-def create_brave_search_toolset(api_key: str, name: Optional[str] = None) -> MCPToolset:
+async def create_brave_search_toolset(api_key: str, name: Optional[str] = None) -> MCPToolset:
     """
     Create a Brave Search MCP toolset
     
@@ -281,7 +283,7 @@ def create_brave_search_toolset(api_key: str, name: Optional[str] = None) -> MCP
     Returns:
         MCPToolset configured for Brave Search
     """
-    return MCPToolset(
+    toolset = MCPToolset(
         connection_params=StdioServerParameters(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-brave-search"],
@@ -289,3 +291,5 @@ def create_brave_search_toolset(api_key: str, name: Optional[str] = None) -> MCP
         ),
         name=name or "brave_search_toolset"
     )
+    await toolset.setup()
+    return toolset
