@@ -53,7 +53,7 @@ async def main():
         
         # Test with filesystem operations
         response = await agent.run_async("Can you list the files in the current directory?")
-        print(f"Agent response: {response.content}")
+        print(response.answer)
             
     except Exception as e:
         print(f"❌ Error during MCP agent example: {e}")
