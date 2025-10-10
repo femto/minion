@@ -145,21 +145,7 @@ class CodeAgent(BaseAgent):
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
-        
-        # Set brain.python_env to the executor
-        if self.brain:
-            self.brain.python_env = self.python_executor
-        
-        # Add the think tool and final answer tool
-        self.add_tool(FinalAnswerTool())
-        
-        # Send tools to the python executor
-        self._update_executor_tools()
-        
-        # Initialize state tracking if enabled
-        if self.enable_state_tracking:
-            self._initialize_state()
-    
+
     def _initialize_state(self):
         """Initialize persistent state if state tracking is enabled."""
         if not self.persistent_state:
@@ -171,6 +157,27 @@ class CodeAgent(BaseAgent):
                 'learned_patterns': []
             }
         logger.info("State tracking initialized")
+
+    async def setup(self):
+        if self._is_setup:
+            return
+        await super().setup()
+        self._is_setup = False #since super setting this to True, we immediately set it to False
+        
+        # Set brain.python_env to the executor after brain is initialized
+        if self.brain and self.python_executor:
+            self.brain.python_env = self.python_executor
+
+        self.add_tool(FinalAnswerTool())
+
+        # Send tools to the python executor
+        self._update_executor_tools()
+
+        # Initialize state tracking if enabled
+        if self.enable_state_tracking:
+            self._initialize_state()
+        self._is_setup = True
+
 
     async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
         """
@@ -205,10 +212,15 @@ class CodeAgent(BaseAgent):
             if not self.brain:
                 raise ValueError("Brain is not initialized")
             
+            # Get tools list, prioritizing state tools, then agent.tools
+            tools = state.get("tools", self.tools)
+            if tools is None:
+                tools = self.tools
+            
             # Call brain.step with proper state format - brain expects state dict with 'input' key
             brain_state = state.copy()
             brain_state["input"] = enhanced_input
-            result = await self.brain.step(brain_state, stream=stream, **kwargs)
+            result = await self.brain.step(brain_state, tools=tools, stream=stream, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)

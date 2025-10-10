@@ -21,7 +21,7 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
-    llm: Optional[BaseProvider] = None  # LLM provider to pass to Brain
+    llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -29,59 +29,63 @@ class BaseAgent:
     
     # 生命周期管理
     _is_setup: bool = field(default=False, init=False)
-    _mcp_toolsets: List[Any] = field(default_factory=list, init=False)  # List of MCPToolset instances
+    _toolsets: List[Any] = field(default_factory=list, init=False)  # List of toolset instances (MCP, UTCP, etc.)
     
     # 流式输出管理
     _streaming_manager: StreamingActionManager = field(default_factory=StreamingActionManager, init=False)
     
     def __post_init__(self):
         """初始化后的处理"""
-        # Automatically handle MCPToolset objects in tools parameter
-        self._extract_mcp_toolsets_from_tools()
-        
-        # Initialize brain and setup agent synchronously
-        # This ensures brain is available in __post_init__ for all subclasses
-        import asyncio
-        try:
-            # Try to get existing event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an async context, schedule setup for later
-                # This is a fallback - ideally agents should be created in async context
-                asyncio.create_task(self.setup())
-            else:
-                # Run setup synchronously if no loop is running
-                loop.run_until_complete(self.setup())
-        except RuntimeError:
-            # No event loop exists, create one and run setup
-            asyncio.run(self.setup())
-    
-    def _extract_mcp_toolsets_from_tools(self):
+        # Automatically handle toolset objects in tools parameter
+        # not quite useful
+        # current just for setting self._toolsets
+        # and ensure await self._toolsets.ensure_setup() in setup()
+        self._extract_toolsets_from_tools()
+
+    @classmethod
+    async def create(cls, *args, **kwargs) :
         """
-        Extract MCPToolset objects from tools parameter and move them to _mcp_toolsets.
-        This enables direct passing of MCPToolset objects in the tools parameter.
+        异步创建并设置实例
+        
+        Args:
+            *args: 传递给构造函数的位置参数
+            **kwargs: 传递给构造函数的关键字参数
+            
+        Returns:
+            instance: 已设置完成的实例
+        """
+        instance = cls(*args, **kwargs)
+        await instance.setup()
+        return instance
+
+    #what does this method do, not quite useful?
+    def _extract_toolsets_from_tools(self):
+        """
+        Extract toolset objects from tools parameter and move them to _toolsets.
+        This enables direct passing of toolset objects (MCP, UTCP, etc.) in the tools parameter.
         """
         if self._is_setup:
             raise RuntimeError("Cannot modify toolsets after setup")
             
-        # Check if any tools are MCPToolset objects
-        mcp_toolsets = []
+        # Check if any tools are toolset objects (MCP, UTCP, etc.)
+        toolsets = []
         regular_tools = []
         
         for tool in self.tools:
-            # Check if it's an MCPToolset object
-            if hasattr(tool, '_ensure_setup') and hasattr(tool, 'connection_params'):
-                mcp_toolsets.append(tool)
+            # Check if it's a toolset object (has setup methods and connection/config params)
+            if (hasattr(tool, 'ensure_setup') and hasattr(tool, 'connection_params')) or \
+               (hasattr(tool, 'ensure_setup') and hasattr(tool, 'config')):
+                toolsets.append(tool)
             else:
                 regular_tools.append(tool)
         
         # Update the tools list to only contain regular tools
-        self.tools = regular_tools
+        self.tools = regular_tools #will add toolsets later if toolsets are healthy
         
-        # Add MCPToolset objects to _mcp_toolsets
-        for toolset in mcp_toolsets:
-            self._mcp_toolsets.append(toolset)
-            logger.info(f"Auto-detected MCPToolset {getattr(toolset, 'name', 'unnamed')} from tools parameter")
+        # Add toolset objects to _toolsets
+        for toolset in toolsets:
+            self._toolsets.append(toolset)
+            logger.info(f"Auto-detected toolset {getattr(toolset, 'name', 'unnamed')} from tools parameter")
     
     async def setup(self):
         """Setup agent with tools"""
@@ -89,26 +93,34 @@ class BaseAgent:
         if self._is_setup:
             return
             
-        # Setup MCP toolsets
-        for toolset in self._mcp_toolsets:
+        # Setup toolsets (MCP, UTCP, etc.)
+        for toolset in self._toolsets:
             try:
-                await toolset._ensure_setup()
+                await toolset.ensure_setup()
                 if not toolset.is_healthy:
-                    logger.warning(f"MCP toolset {toolset.name} failed to setup: {toolset.setup_error}")
+                    logger.warning(f"Toolset {toolset.name} failed to setup: {toolset.setup_error}")
             except Exception as e:
-                logger.error(f"Failed to setup MCP toolset {toolset.name}: {e}")
+                logger.error(f"Failed to setup toolset {toolset.name}: {e}")
 
-        # Get tools from healthy toolsets
-        tools = []
-        for toolset in self._mcp_toolsets:
+        # Get tools from healthy toolsets and merge into self.tools
+        toolset_tools = []
+        for toolset in self._toolsets:
             if toolset.is_healthy:
-                tools.extend(toolset.get_tools())
+                toolset_tools.extend(toolset.get_tools())
             else:
-                logger.warning(f"Skipping unhealthy MCP toolset {toolset.name}")
+                logger.warning(f"Skipping unhealthy toolset {toolset.name}")
+        
+        # Merge toolset tools into self.tools
+        if toolset_tools:
+            self.tools.extend(toolset_tools)
+            logger.info(f"Added {len(toolset_tools)} toolset tools to agent")
 
         # Initialize brain with tools
         if self.brain is None:
-            brain_kwargs = {'tools': tools}
+            #we don't pass tools to brain, instead we
+            #pass agent.tools when run/run_sync to brain.step
+            #this way we can easily refresh tools on agent
+            brain_kwargs = {'tools': []}
             if self.llm is not None:
                 brain_kwargs['llm'] = self.llm
             self.brain = Brain(**brain_kwargs)
@@ -119,7 +131,7 @@ class BaseAgent:
     async def close(self):
         """
         Agent清理关闭，在停止使用agent时调用
-        这里会清理所有的MCPToolset和其他资源
+        这里会清理所有的toolset和其他资源
         """
         if not self._is_setup:
             logger.warning(f"Agent {self.name} not setup, skipping cleanup")
@@ -127,24 +139,24 @@ class BaseAgent:
         
         logger.info(f"Closing agent {self.name}")
         
-        # 清理所有MCPToolset
-        for toolset in self._mcp_toolsets:
+        # 清理所有toolsets
+        for toolset in self._toolsets:
             try:
                 await toolset.close()
-                logger.info(f"Closed MCP toolset {getattr(toolset, 'name', 'unnamed')}")
+                logger.info(f"Closed toolset {getattr(toolset, 'name', 'unnamed')}")
             except Exception as e:
-                logger.error(f"Error closing MCP toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
+                logger.error(f"Error closing toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
         
-        # 清理MCP相关的工具
-        self.tools = [tool for tool in self.tools if not self._is_mcp_tool(tool)]
-        self._mcp_toolsets.clear()
+        # 清理toolset相关的工具
+        self.tools = [tool for tool in self.tools if not self._is_toolset_tool(tool)]
+        self._toolsets.clear()
         
         self._is_setup = False
         logger.info(f"Agent {self.name} cleanup completed")
     
-    def _is_mcp_tool(self, tool: BaseTool) -> bool:
-        """检查工具是否是MCP工具"""
-        return tool.__class__.__name__ == 'AsyncMcpTool'
+    def _is_toolset_tool(self, tool: BaseTool) -> bool:
+        """检查工具是否是toolset工具"""
+        return tool.__class__.__name__ in ['AsyncMcpTool', 'AsyncUtcpTool']
     
     async def __aenter__(self):
         """支持async context manager"""
@@ -413,13 +425,6 @@ class BaseAgent:
             
         # 预处理输入
         input_obj, kwargs = await self.pre_step(input_obj, kwargs)
-        
-        # 执行主要步骤，优先使用状态中的tools
-        tools = kwargs.pop("tools", None)
-        if tools is None:
-            tools = state.get("tools", self.tools)
-        if tools is None:
-            tools = self.tools
             
         # 执行主要步骤
         result = await self.execute_step(state, stream=stream, **kwargs)
@@ -443,8 +448,13 @@ class BaseAgent:
         Returns:
             AgentResponse: 结构化的响应对象
         """
-        # 传递状态给brain.step
-        result = await self.brain.step(state, stream=stream, **kwargs)
+        # 获取工具列表，优先使用状态中的tools，然后是agent.tools
+        tools = state.get("tools", self.tools)
+        if tools is None:
+            tools = self.tools
+        
+        # 传递状态和工具给brain.step
+        result = await self.brain.step(state, tools=tools, stream=stream, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):
