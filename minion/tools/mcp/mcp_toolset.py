@@ -66,6 +66,107 @@ def convert_mcp_to_python_types(obj):
     return str(obj)
 
 
+def format_mcp_result_new(mcp_output, structured_output: bool = True) -> str:
+    """Format MCP CallToolResult to string, based on SmolAgentsAdapter logic"""
+    import json
+    
+    # Early exit for empty content
+    if not mcp_output.content:
+        raise ValueError("MCP tool returned empty content")
+    
+    # Handle structured features if enabled
+    if structured_output:
+        # Prioritize structuredContent if available
+        if (
+            hasattr(mcp_output, "structuredContent")
+            and mcp_output.structuredContent is not None
+        ):
+            return mcp_output.structuredContent
+
+    
+    # Handle multiple content warning (unified for both modes)
+    if len(mcp_output.content) > 1:
+        warning_msg = (
+            f"MCP tool returned multiple content items but no structuredContent. Using the first content item."
+            if structured_output
+            else f"MCP tool returned multiple content, using the first one"
+        )
+        logger.warning(warning_msg)
+    
+    # Get the first content item
+    content_item = mcp_output.content[0]
+    
+    # Handle different content types
+    if hasattr(content_item, 'text'):  # TextContent
+        text_content = content_item.text
+        
+        # Always try to parse JSON if structured features are enabled and structuredContent is absent
+        if structured_output and text_content:
+            try:
+                parsed_data = json.loads(text_content)
+                return parsed_data
+            except json.JSONDecodeError:
+                logger.debug(
+                    f"MCP tool expected structured output but got unparseable text: {text_content[:100]}..."
+                )
+                # Fall through to return text as-is for backwards compatibility
+        
+        # Return simple text content (works for both modes)
+        return text_content
+    
+    else:
+        # Handle different content types - following SmolAgentsAdapter logic exactly
+        try:
+            import mcp.types
+            
+            if isinstance(content_item, mcp.types.ImageContent):
+                try:
+                    from PIL import Image
+                    import base64
+                    from io import BytesIO
+                    
+                    image_data = base64.b64decode(content_item.data)
+                    image = Image.open(BytesIO(image_data))
+                    return image
+                except ImportError:
+                    return f"[ImageContent: {getattr(content_item, 'mimeType', 'unknown')} - PIL not available]"
+                except Exception as e:
+                    return f"[ImageContent: Error processing image - {str(e)}]"
+            
+            elif isinstance(content_item, mcp.types.AudioContent):
+                try:
+                    # Check if torchaudio is available
+                    try:
+                        import torchaudio
+                    except ImportError:
+                        return f"[AudioContent: {getattr(content_item, 'mimeType', 'unknown')} - torchaudio not available， please install torchaudio package]"
+                    
+                    import base64
+                    from io import BytesIO
+                    
+                    audio_data = base64.b64decode(content_item.data)
+                    audio_io = BytesIO(audio_data)
+                    audio_tensor, _ = torchaudio.load(audio_io)
+                    return audio_tensor
+                except Exception as e:
+                    return f"[AudioContent: Error processing audio - {str(e)}]"
+            
+            else:
+                # Fallback for unknown content types
+                raise ValueError(
+                    f"tool call returned an unsupported content type: {type(content_item)}"
+                )
+                #return str(content_item)
+                
+        except ImportError:
+            # If mcp.types is not available, fall back to attribute checking
+            if hasattr(content_item, 'data'):  # ImageContent or AudioContent
+                content_type = type(content_item).__name__
+                return f"[{content_type}: {getattr(content_item, 'mimeType', 'unknown')}]"
+            else:
+                return str(content_item)
+
+
 def format_mcp_result(result) -> str:
     """Format MCP tool result for display and code execution"""
     # Convert MCP types to Python types first
@@ -99,20 +200,21 @@ class AsyncMcpTool(AsyncBaseTool):
     """
     Adapter class to convert MCP tools to brain.step compatible format
     """
-    def __init__(self, name: str, description: str, parameters: Dict[str, Any], session: "ClientSession", timeout: float = 10):
+    def __init__(self, name: str, description: str, parameters: Dict[str, Any], session: "ClientSession", timeout: float = 10, structured_output: bool = True):
         super().__init__()
         self.name = name
         self.description = description
         self.parameters = parameters
         self.session = session
         self.timeout = timeout
+        self.structured_output = structured_output
 
         # Add attributes expected by minion framework
         self.__name__ = name
         self.__doc__ = description
         self.__input_schema__ = parameters
 
-    async def forward(self, *args, **kwargs) -> str:
+    async def forward(self, *args, **kwargs):
         """Execute the tool with given parameters"""
         try:
             # Handle both positional and keyword arguments
@@ -142,7 +244,9 @@ class AsyncMcpTool(AsyncBaseTool):
             
             async with asyncio.timeout(self.timeout):
                 result = await self.session.call_tool(self.name, kwargs)
-                return format_mcp_result(result)
+                # Use the new format function based on structured_output setting
+                return format_mcp_result_new(result, self.structured_output)
+                    
         except asyncio.TimeoutError:
             error_msg = f"Tool {self.name} execution timed out after {self.timeout} seconds"
             logger.error(error_msg)
@@ -184,6 +288,7 @@ class MCPToolset(Toolset):
         setup_timeout: float = 10,  # 10 seconds timeout for setup
         session_timeout: float = 10,  # 10 seconds timeout for session operations
         ignore_setup_errors: bool = False,  # Whether to ignore setup errors
+        structured_output: bool = True,  # Enable structured output by default
     ):
         """
         Initialize MCPToolset with connection parameters
@@ -206,6 +311,7 @@ class MCPToolset(Toolset):
         self._session_timeout = timedelta(seconds=session_timeout)  # Convert to timedelta
         self._ignore_setup_errors = ignore_setup_errors
         self._setup_error: Optional[Exception] = None
+        self.structured_output = structured_output
 
     @property
     def is_healthy(self) -> bool:
@@ -291,7 +397,8 @@ class MCPToolset(Toolset):
                 name=tool.name,
                 description=tool.description,
                 parameters=tool.inputSchema,
-                session=session
+                session=session,
+                structured_output=self.structured_output
             )
             self.tools.append(mcp_tool)
         self._is_setup = True
@@ -336,7 +443,7 @@ class MCPToolset(Toolset):
 
 
 # Factory functions for common MCP servers
-async def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None, name: Optional[str] = None) -> MCPToolset:
+async def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None, name: Optional[str] = None, structured_output: bool = True) -> MCPToolset:
     """
     Create a filesystem MCP toolset
     
@@ -360,13 +467,14 @@ async def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None,
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem"] + workspace_paths
         ),
-        name=name or "filesystem_toolset"
+        name=name or "filesystem_toolset",
+        structured_output=structured_output
     )
     await toolset.setup()
     return toolset
 
 
-async def create_brave_search_toolset(api_key: str, name: Optional[str] = None) -> MCPToolset:
+async def create_brave_search_toolset(api_key: str, name: Optional[str] = None, structured_output: bool = True) -> MCPToolset:
     """
     Create a Brave Search MCP toolset
     
@@ -383,7 +491,8 @@ async def create_brave_search_toolset(api_key: str, name: Optional[str] = None) 
             args=["-y", "@modelcontextprotocol/server-brave-search"],
             env={"BRAVE_API_KEY": api_key}
         ),
-        name=name or "brave_search_toolset"
+        name=name or "brave_search_toolset",
+        structured_output=structured_output
     )
     await toolset.setup()
     return toolset
