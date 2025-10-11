@@ -115,6 +115,9 @@ class BaseAgent:
             self.tools.extend(toolset_tools)
             logger.info(f"Added {len(toolset_tools)} toolset tools to agent")
 
+        # Auto-convert raw functions to appropriate tool types
+        self._convert_raw_functions_to_tools()
+
         # Initialize brain with tools
         if self.brain is None:
             #we don't pass tools to brain, instead we
@@ -154,6 +157,46 @@ class BaseAgent:
         self._is_setup = False
         logger.info(f"Agent {self.name} cleanup completed")
     
+    def _convert_raw_functions_to_tools(self):
+        """
+        自动将原始函数转换为相应的工具类型
+        - 同步函数转换为BaseTool
+        - 异步函数转换为AsyncBaseTool
+        """
+        from ..tools.tool_decorator import tool
+        from ..tools.async_base_tool import AsyncBaseTool
+        
+        converted_tools = []
+        conversion_count = 0
+        
+        for item in self.tools:
+            # 检查是否是原始函数（不是工具实例）
+            # 使用更通用的判断：如果是可调用对象但没有工具的基本属性，则认为是原始函数
+            if callable(item) and not (hasattr(item, 'name') and hasattr(item, 'description')):
+                try:
+                    # 使用统一的tool装饰器进行转换
+                    converted_tool = tool(item)
+                    converted_tools.append(converted_tool)
+                    conversion_count += 1
+                    
+                    # 记录转换信息
+                    tool_type = "AsyncBaseTool" if isinstance(converted_tool, AsyncBaseTool) else "BaseTool"
+                    logger.info(f"Auto-converted function '{item.__name__}' to {tool_type}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to convert function '{getattr(item, '__name__', str(item))}' to tool: {e}")
+                    # 保留原始函数，不进行转换
+                    converted_tools.append(item)
+            else:
+                # 保留已经是工具实例或具有工具属性的项目
+                converted_tools.append(item)
+        
+        # 更新工具列表
+        self.tools = converted_tools
+        
+        if conversion_count > 0:
+            logger.info(f"Successfully auto-converted {conversion_count} raw functions to tools")
+
     def _is_toolset_tool(self, tool: BaseTool) -> bool:
         """检查工具是否是toolset工具"""
         return tool.__class__.__name__ in ['AsyncMcpTool', 'AsyncUtcpTool']

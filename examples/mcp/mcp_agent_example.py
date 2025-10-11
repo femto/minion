@@ -9,6 +9,7 @@ This example shows how to integrate MCP filesystem toolset with a minion agent.
 import asyncio
 import logging
 from pathlib import Path
+from typing import Union
 
 from minion.agents import CodeAgent
 from minion.tools.mcp.mcp_toolset import create_filesystem_toolset
@@ -38,21 +39,38 @@ async def main():
             
         print(f"✅ MCP toolset ready with {len(mcp_toolset.tools)} tools")
         
-        # Get tools for agent
+        # Get MCP tools
         mcp_tools = mcp_toolset.get_tools()
         
-        # Create agent with MCP tools
+        # Add simple function tools (minion will auto-convert them)
+        custom_tools = [calc, async_func]
+        
+        # Combine all tools
+        all_tools = mcp_tools + custom_tools
+        
+        # Create agent with all tools (MCP + custom functions)
         agent = await CodeAgent.create(
             llm="gpt-4o",
-            tools=mcp_tools,  # Pass MCP tools directly
-            name="MCP Filesystem Agent"
+            tools=all_tools,
+            name="Enhanced MCP Agent"
         )
         
-        # Example conversation
-        print("\n🤖 Starting conversation with MCP-enabled agent...")
+        # Example conversations
+        print("\n🤖 Starting conversation with enhanced MCP agent...")
         
-        # Test with filesystem operations
+        # Test filesystem operations
+        print("\n📁 Testing filesystem operations:")
         response = await agent.run_async("Can you list the files in the current directory?")
+        print(response.answer)
+        
+        # Test synchronous calc tool
+        print("\n🧮 Testing synchronous calc tool:")
+        response = await agent.run_async("Calculate 15 + 27 using the calc tool")
+        print(response.answer)
+        
+        # Test asynchronous func tool
+        print("\n⚡ Testing asynchronous func tool:")
+        response = await agent.run_async("Use the async_func tool to process the message 'hello world' with a 2 second delay")
         print(response.answer)
             
     except Exception as e:
