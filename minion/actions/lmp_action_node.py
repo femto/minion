@@ -16,6 +16,8 @@ from minion.schema.messages import user
 from minion.providers import create_llm_provider
 from minion.models.schemas import Answer  # Import the Answer model
 from minion.exceptions import FinalAnswerException
+from minion.tools.tool_decorator import tool as decorate_tool
+
 
 # @ell.complex(model="gpt-4o-mini")
 # def ell_call(ret):
@@ -557,57 +559,18 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             elif isinstance(tool, dict) and "function" in tool:
                 # 如果已经是正确格式的工具定义
                 formatted_tools.append(tool)
-            else:
-                # 尝试从工具对象的方法生成定义
-                if hasattr(tool, '__call__'):
-                    tool_name = tool.__name__
-                    tool_desc = tool.__doc__ or f"Tool to {tool_name}"
-
-                    # check if the tool has __input__schema__ attribute which we set when wrapping MCP tools
-                    if not hasattr(tool, "__input_schema__"):
-                        # Generate one from the function signature
-                        sig = inspect.signature(tool)
-                        properties = {}
-                        required = []
-
-                        for param_name, param in sig.parameters.items():
-                            # Skip *args and **kwargs
-                            if param.kind in (
-                                    inspect.Parameter.VAR_POSITIONAL,
-                                    inspect.Parameter.VAR_KEYWORD,
-                            ):
-                                continue
-
-                            # Add the parameter to properties
-                            properties[param_name] = {
-                                "type": "string",
-                                "description": f"Parameter {param_name}",
-                            }
-
-                            # If parameter has no default, it's required
-                            if param.default == inspect.Parameter.empty:
-                                required.append(param_name)
-
-                        input_schema = {
-                            "type": "object",
-                            "properties": properties,
-                            "required": required,
-                        }
-                    else:
-                        # Use the provided schema
-                        input_schema = tool.__input_schema__
-
-                    # Add the tool to available tools
-                    formatted_tools.append(
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "description": tool_desc,
-                                "parameters": input_schema,
-                            },
-                        }
-                    )
+            elif callable(tool):
+                decorated = decorate_tool(tool)
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": decorated.name,
+                            "description": decorated.description,
+                            "parameters": decorated.inputs,
+                        },
+                    }
+                )
                      
         return formatted_tools
     
