@@ -561,16 +561,22 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                 formatted_tools.append(tool)
             elif callable(tool):
                 decorated = decorate_tool(tool)
-                formatted_tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": decorated.name,
-                            "description": decorated.description,
-                            "parameters": decorated.inputs,
-                        },
+                tool_def = {
+                    "type": "function",
+                    "function": {
+                        "name": decorated.name,
+                        "description": decorated.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": decorated.inputs,
+                            "required": [
+                                name for name, param in decorated.inputs.items()
+                                if not param.get("nullable", False)
+                            ]
+                        }
                     }
-                )
+                }
+                formatted_tools.append(tool_def)
                      
         return formatted_tools
     
