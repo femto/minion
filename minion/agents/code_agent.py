@@ -261,6 +261,11 @@ class CodeAgent(BaseAgent):
             for tool in self.tools:
                 if hasattr(tool, 'name') and hasattr(tool, 'description'):
                     tool_desc = f"- {tool.name}: {tool.description}"
+                    
+                    # Add readonly information if available
+                    if hasattr(tool, 'readonly') and tool.readonly:
+                        tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
+                    
                     # Add async indicator if using async executor
                     if self.use_async_executor and hasattr(tool, 'forward'):
                         import asyncio
