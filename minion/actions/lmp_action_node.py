@@ -549,6 +549,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                     }
                 }
                 formatted_tools.append(tool_def)
+            elif hasattr(tool, 'to_function_spec'):
+                # 支持 MCP 工具的 to_function_spec 方法
+                spec = tool.to_function_spec()
+                if isinstance(spec, dict):
+                    formatted_tools.append(spec)
             elif hasattr(tool, 'get_schema'):
                 # 支持有 get_schema 方法的工具
                 schema = tool.get_schema()
