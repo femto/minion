@@ -206,7 +206,7 @@ class AsyncMcpTool(AsyncBaseTool):
         self.name = name.replace('-', '_') #name should be valid python method name
 
         self.description = description
-        self.inputs = inputs
+        self.inputs = inputs['properties']
         self.session = session
         self.timeout = timeout
         self.structured_output = structured_output
