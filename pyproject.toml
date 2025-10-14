@@ -54,7 +54,8 @@ dependencies = [
     "astroid",
     "pysnooper",
     "azure-identity",
-    "azure-ai-inference"
+    "azure-ai-inference",
+    "mcp"
 ]
 
 [project.urls]

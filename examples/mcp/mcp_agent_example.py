@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Union
 
 from minion.agents import CodeAgent
-from minion.tools.mcp.mcp_toolset import create_filesystem_toolset
+from minion.tools.mcp.mcp_toolset import create_filesystem_toolset, create_streamable_http_toolset, StreamableHTTPServerParameters
 from minion.agents.base_agent import BaseAgent
 from minion.providers.openai_provider import OpenAIProvider
 
@@ -82,6 +82,23 @@ async def main():
             return
             
         print(f"✅ MCP toolset ready with {len(mcp_toolset.tools)} tools")
+        
+        # Optional: Demonstrate StreamableHTTP toolset creation (commented out as it requires a server)
+        # Uncomment and modify URL when you have a StreamableHTTP MCP server running
+        """
+        print("Creating StreamableHTTP MCP toolset...")
+        try:
+            http_toolset = await create_streamable_http_toolset(
+                url="http://localhost:8080/mcp",
+                headers={"Authorization": "Bearer your-token"},
+                timeout=30.0,
+                name="http_toolset"
+            )
+            print(f"✅ HTTP toolset ready with {len(http_toolset.tools)} tools")
+            # Add http_toolset.get_tools() to mcp_tools below if using
+        except Exception as e:
+            print(f"⚠️ StreamableHTTP toolset creation failed (expected if no server): {e}")
+        """
         
         # Get MCP tools
         mcp_tools = mcp_toolset.get_tools()
