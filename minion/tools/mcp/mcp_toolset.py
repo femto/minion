@@ -210,7 +210,8 @@ class AsyncMcpTool(AsyncBaseTool):
         self.structured_output = structured_output
 
         # Add attributes expected by minion framework
-        self.__name__ = name
+        # Convert hyphens to underscores for Python-compatible function names
+        self.__name__ = name.replace('-', '_')
         self.__doc__ = description
         self.__input_schema__ = parameters
 
@@ -275,6 +276,26 @@ class SSEServerParameters:
         self.sse_read_timeout = sse_read_timeout
 
 
+class StreamableHTTPServerParameters:
+    """Connection parameters for StreamableHTTP MCP servers"""
+    def __init__(
+        self, 
+        url: str, 
+        headers: Optional[Dict[str, str]] = None, 
+        timeout: Optional[Union[float, timedelta]] = 30,
+        sse_read_timeout: Optional[Union[float, timedelta]] = 300,  # 5 minutes
+        terminate_on_close: bool = True,
+        auth: Optional[Any] = None  # httpx.Auth type
+    ):
+        self.url = url
+        self.headers = headers or {}
+        # Convert to timedelta if needed
+        self.timeout = timeout if isinstance(timeout, timedelta) else timedelta(seconds=timeout) if timeout else timedelta(seconds=30)
+        self.sse_read_timeout = sse_read_timeout if isinstance(sse_read_timeout, timedelta) else timedelta(seconds=sse_read_timeout) if sse_read_timeout else timedelta(seconds=300)
+        self.terminate_on_close = terminate_on_close
+        self.auth = auth
+
+
 class MCPToolset(Toolset):
     """
     Simplified MCP toolset that follows Google ADK pattern.
@@ -283,7 +304,7 @@ class MCPToolset(Toolset):
     
     def __init__(
         self, 
-        connection_params: Union[StdioServerParameters, SSEServerParameters], 
+        connection_params: Union[StdioServerParameters, SSEServerParameters, StreamableHTTPServerParameters], 
         name: Optional[str] = None,
         setup_timeout: float = 10,  # 10 seconds timeout for setup
         session_timeout: float = 10,  # 10 seconds timeout for session operations
@@ -371,6 +392,30 @@ class MCPToolset(Toolset):
                 client_kwargs["sse_read_timeout"] = self.connection_params.sse_read_timeout
             
             read, write = await self._exit_stack.enter_async_context(sse_client(**client_kwargs))
+            
+        elif isinstance(self.connection_params, StreamableHTTPServerParameters):
+            try:
+                from mcp.client.streamable_http import streamablehttp_client  # type: ignore
+            except ImportError as e:
+                logger.error(f"MCP streamable HTTP client not available: {e}")
+                raise RuntimeError(f"MCP streamable HTTP client not available: {e}")
+            
+            logger.info(f"Connecting to StreamableHTTP MCP server: {self.connection_params.url}")
+            
+            client_kwargs = {"url": self.connection_params.url}
+            if self.connection_params.headers:
+                client_kwargs["headers"] = self.connection_params.headers
+            if self.connection_params.timeout is not None:
+                client_kwargs["timeout"] = self.connection_params.timeout
+            if self.connection_params.sse_read_timeout is not None:
+                client_kwargs["sse_read_timeout"] = self.connection_params.sse_read_timeout
+            if hasattr(self.connection_params, 'terminate_on_close'):
+                client_kwargs["terminate_on_close"] = self.connection_params.terminate_on_close
+            if hasattr(self.connection_params, 'auth') and self.connection_params.auth is not None:
+                client_kwargs["auth"] = self.connection_params.auth
+            
+            read, write, get_session_id = await self._exit_stack.enter_async_context(streamablehttp_client(**client_kwargs))
+            
         else:
             raise ValueError(f"Unsupported connection parameters type: {type(self.connection_params)}")
         
@@ -492,6 +537,48 @@ async def create_brave_search_toolset(api_key: str, name: Optional[str] = None, 
             env={"BRAVE_API_KEY": api_key}
         ),
         name=name or "brave_search_toolset",
+        structured_output=structured_output
+    )
+    await toolset.setup()
+    return toolset
+
+
+async def create_streamable_http_toolset(
+    url: str, 
+    headers: Optional[Dict[str, str]] = None,
+    timeout: Optional[Union[float, timedelta]] = 30,
+    sse_read_timeout: Optional[Union[float, timedelta]] = 300,
+    terminate_on_close: bool = True,
+    auth: Optional[Any] = None,
+    name: Optional[str] = None, 
+    structured_output: bool = True
+) -> MCPToolset:
+    """
+    Create a StreamableHTTP MCP toolset
+    
+    Args:
+        url: The URL of the StreamableHTTP server
+        headers: Optional headers for the HTTP connection
+        timeout: Connection timeout (float in seconds or timedelta)
+        sse_read_timeout: SSE read timeout (float in seconds or timedelta)
+        terminate_on_close: Whether to terminate on close
+        auth: Optional httpx.Auth authentication
+        name: Optional name for the toolset
+        structured_output: Enable structured output
+        
+    Returns:
+        MCPToolset configured for StreamableHTTP connection
+    """
+    toolset = MCPToolset(
+        connection_params=StreamableHTTPServerParameters(
+            url=url,
+            headers=headers,
+            timeout=timeout,
+            sse_read_timeout=sse_read_timeout,
+            terminate_on_close=terminate_on_close,
+            auth=auth
+        ),
+        name=name or "streamable_http_toolset",
         structured_output=structured_output
     )
     await toolset.setup()

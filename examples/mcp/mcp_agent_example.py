@@ -1,9 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-MCP Agent Integration Example
+MCP Agent Integration Example with Auto-Converted Raw Functions
 
-This example shows how to integrate MCP filesystem toolset with a minion agent.
+This example demonstrates:
+1. How to integrate MCP filesystem toolset with a minion agent
+2. How to use raw Python functions alongside MCP tools
+3. Automatic conversion of raw functions to BaseTool/AsyncBaseTool during agent setup
+
+Key features shown:
+- MCP filesystem tools (pre-converted)
+- Raw sync function (calc) → auto-converted to BaseTool
+- Raw async function (async_func) → auto-converted to AsyncBaseTool
+- Seamless integration of all tool types
 """
 
 import asyncio
@@ -12,13 +21,48 @@ from pathlib import Path
 from typing import Union
 
 from minion.agents import CodeAgent
-from minion.tools.mcp.mcp_toolset import create_filesystem_toolset
+from minion.tools.mcp.mcp_toolset import create_filesystem_toolset, create_streamable_http_toolset, StreamableHTTPServerParameters
 from minion.agents.base_agent import BaseAgent
 from minion.providers.openai_provider import OpenAIProvider
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# Raw functions that will be auto-converted to tools
+def calc(expression: str) -> float:
+    """
+    Calculate the result of a mathematical expression.
+    
+    Args:
+        expression: Mathematical expression to evaluate (e.g., "2 + 3 * 4")
+    """
+    try:
+        # Simple safe evaluation for basic math
+        allowed_chars = set('0123456789+-*/.() ')
+        if all(c in allowed_chars for c in expression):
+            result = eval(expression)
+            return float(result)
+        else:
+            raise ValueError("Expression contains invalid characters")
+    except Exception as e:
+        raise ValueError(f"Invalid expression: {e}")
+
+
+async def async_func(message: str, delay: float = 1.0) -> str:
+    """
+    Process a message asynchronously with a delay.
+    
+    Args:
+        message: The message to process
+        delay: Delay in seconds before processing (default 1.0)
+    """
+    print(f"⏳ Processing message '{message}' with {delay}s delay...")
+    await asyncio.sleep(delay)
+    processed = f"Processed: {message.upper()} (delayed by {delay}s)"
+    print(f"✅ Processing complete!")
+    return processed
 
 
 async def main():
@@ -39,21 +83,53 @@ async def main():
             
         print(f"✅ MCP toolset ready with {len(mcp_toolset.tools)} tools")
         
+        # Optional: Demonstrate StreamableHTTP toolset creation (commented out as it requires a server)
+        # Uncomment and modify URL when you have a StreamableHTTP MCP server running
+        """
+        print("Creating StreamableHTTP MCP toolset...")
+        try:
+            http_toolset = await create_streamable_http_toolset(
+                url="http://localhost:8080/mcp",
+                headers={"Authorization": "Bearer your-token"},
+                timeout=30.0,
+                name="http_toolset"
+            )
+            print(f"✅ HTTP toolset ready with {len(http_toolset.tools)} tools")
+            # Add http_toolset.get_tools() to mcp_tools below if using
+        except Exception as e:
+            print(f"⚠️ StreamableHTTP toolset creation failed (expected if no server): {e}")
+        """
+        
         # Get MCP tools
         mcp_tools = mcp_toolset.get_tools()
         
-        # Add simple function tools (minion will auto-convert them)
+        # Add simple raw functions (minion will auto-convert them to tools during setup)
+        # - calc: sync function → will become BaseTool
+        # - async_func: async function → will become AsyncBaseTool
         custom_tools = [calc, async_func]
         
-        # Combine all tools
+        # Combine all tools: MCP tools (already converted) + raw functions (will be auto-converted)
         all_tools = mcp_tools + custom_tools
         
+        print(f"📦 Total tools before setup: {len(all_tools)} (MCP: {len(mcp_tools)}, Custom: {len(custom_tools)})")
+        
         # Create agent with all tools (MCP + custom functions)
+        # The raw functions will be automatically converted during agent.setup()
         agent = await CodeAgent.create(
             llm="gpt-4o",
             tools=all_tools,
             name="Enhanced MCP Agent"
         )
+        
+        print(f"🔧 Agent setup complete! Final tool count: {len(agent.tools)}")
+        print("📋 Available tools:")
+        for tool in agent.tools:
+            tool_type = "AsyncBaseTool" if hasattr(tool, 'forward') and asyncio.iscoroutinefunction(tool.forward) else "BaseTool"
+            if hasattr(tool, '__class__') and 'Mcp' in tool.__class__.__name__:
+                tool_type = "MCP Tool"
+            print(f"  - {tool.name}: {tool_type}")
+            print(f"    {tool.description}")
+        print()
         
         # Example conversations
         print("\n🤖 Starting conversation with enhanced MCP agent...")

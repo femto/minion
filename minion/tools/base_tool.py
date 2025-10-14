@@ -50,6 +50,8 @@ def get_json_schema(func: Callable) -> Dict[str, Any]:
             
             # 转换类型名到JSON schema类型
             json_type = "string"
+            schema_def = {"type": json_type}
+            
             if "str" in type_name:
                 json_type = "string"
             elif "int" in type_name:
@@ -60,16 +62,29 @@ def get_json_schema(func: Callable) -> Dict[str, Any]:
                 json_type = "boolean"
             elif "list" in type_name or "List" in type_name:
                 json_type = "array"
+                schema_def = {
+                    "type": "array",
+                    "items": {"type": "string"}  # 默认数组项类型
+                }
             elif "dict" in type_name or "Dict" in type_name:
                 json_type = "object"
+                schema_def = {
+                    "type": "object",
+                    "additionalProperties": True
+                }
             
             # 检查参数是否可选
             is_optional = "Optional" in type_name or param.default != inspect.Parameter.empty
             
-            properties[name] = {
-                "type": json_type,
-                "description": param_descriptions.get(name, ""),
-            }
+            # 使用改进的schema定义
+            if isinstance(schema_def, dict) and "type" in schema_def:
+                properties[name] = schema_def.copy()
+                properties[name]["description"] = param_descriptions.get(name, "")
+            else:
+                properties[name] = {
+                    "type": json_type,
+                    "description": param_descriptions.get(name, ""),
+                }
             
             if is_optional:
                 properties[name]["nullable"] = True
