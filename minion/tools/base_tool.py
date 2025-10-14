@@ -148,6 +148,7 @@ class BaseTool(ABC):
     description: str = "基础工具类，所有工具应继承此类"
     inputs: Dict[str, Dict[str, Any]] = {}
     output_type: str = "any"
+    readonly: bool | None = None
     
     def __init__(self):
         """初始化工具"""
@@ -207,6 +208,7 @@ class {self.__class__.__name__}(BaseTool):
     description = "{self.description}"
     inputs = {repr(self.inputs)}
     output_type = "{self.output_type}"
+    readonly = {self.readonly}
     
     def __init__(self):
         super().__init__()
@@ -244,6 +246,7 @@ def tool(tool_function: Callable) -> BaseTool:
         description = tool_json_schema["description"]
         inputs = tool_json_schema["parameters"]["properties"]
         output_type = tool_json_schema["return"]["type"]
+        readonly = getattr(tool_function, '_readonly', False)
         
         def __init__(self):
             super().__init__()
