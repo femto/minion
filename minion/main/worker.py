@@ -1081,6 +1081,10 @@ class CodeMinion(PythonMinion):
                 if hasattr(tool, 'name') and hasattr(tool, 'description'):
                     tool_desc = f"- {tool.name}: {tool.description}"
                     
+                    # Add readonly information if available
+                    if hasattr(tool, 'readonly') and tool.readonly:
+                        tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
+                    
                     # Add parameter information and usage example for tools
                     # Check for both 'parameters' (MCP tools) and 'inputs' (BaseTool/AsyncBaseTool)
                     tool_params = None
