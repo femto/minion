@@ -71,7 +71,8 @@ class Brain:
         llms={},
         python_env=None,
         stats_storer=None,
-        tools=None,  # 新增: 支持工具集
+        tools=None,
+        state = None
     ):
         self.id = id or uuid.uuid4()
         self.minds = {}
@@ -153,6 +154,7 @@ Supporting navigation and spatial memory""",
         self.python_env = python_env or AsyncPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
         self.stats_storer = stats_storer
+        self.state = state
 
     def add_tool(self, tool):
         """
