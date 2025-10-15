@@ -13,10 +13,133 @@ import textwrap
 import warnings
 import ast
 from functools import wraps
-from typing import Callable, Union
+from typing import Callable, Union, Dict, Any
 
 from .base_tool import BaseTool
 from .async_base_tool import AsyncBaseTool
+
+
+def get_json_schema(func: Callable) -> Dict[str, Any]:
+    """从函数提取JSON schema定义"""
+    sig = inspect.signature(func)
+    doc = inspect.getdoc(func) or ""
+
+    # 获取函数名和描述
+    description = doc.split('\n\n')[0] if doc else ""
+
+    # 从docstring解析参数描述
+    param_descriptions = {}
+    if 'Args:' in doc:
+        args_section = doc.split('Args:')[1].split('Returns:')[0] if 'Returns:' in doc else doc.split('Args:')[1]
+        for line in args_section.strip().split('\n'):
+            if ':' in line:
+                param_name = line.split(':')[0].strip()
+                param_desc = line.split(':', 1)[1].strip()
+                param_descriptions[param_name] = param_desc
+
+    # 获取类型提示
+    type_hints = get_type_hints(func)
+
+    # 构建参数属性
+    properties = {}
+    for name, param in sig.parameters.items():
+        if name in type_hints:
+            param_type = type_hints[name]
+            type_name = str(param_type)
+
+            # 转换类型名到JSON schema类型
+            json_type = "string"
+            schema_def = {"type": json_type}
+
+            if "str" in type_name:
+                json_type = "string"
+            elif "int" in type_name:
+                json_type = "integer"
+            elif "float" in type_name:
+                json_type = "number"
+            elif "bool" in type_name:
+                json_type = "boolean"
+            elif "list" in type_name or "List" in type_name:
+                json_type = "array"
+                schema_def = {
+                    "type": "array",
+                    "items": {"type": "string"}  # 默认数组项类型
+                }
+            elif "dict" in type_name or "Dict" in type_name:
+                json_type = "object"
+                schema_def = {
+                    "type": "object",
+                    "additionalProperties": True
+                }
+
+            # 检查参数是否可选
+            is_optional = "Optional" in type_name or param.default != inspect.Parameter.empty
+
+            # 使用改进的schema定义
+            if isinstance(schema_def, dict) and "type" in schema_def:
+                properties[name] = schema_def.copy()
+                properties[name]["description"] = param_descriptions.get(name, "")
+            else:
+                properties[name] = {
+                    "type": json_type,
+                    "description": param_descriptions.get(name, ""),
+                }
+
+            if is_optional:
+                properties[name]["nullable"] = True
+
+    # 获取返回类型
+    return_type = "any"
+    if "return" in type_hints:
+        return_type_str = str(type_hints["return"])
+        if "str" in return_type_str:
+            return_type = "string"
+        elif "int" in return_type_str:
+            return_type = "integer"
+        elif "float" in return_type_str:
+            return_type = "number"
+        elif "bool" in return_type_str:
+            return_type = "boolean"
+        elif "list" in return_type_str or "List" in return_type_str:
+            return_type = "array"
+        elif "dict" in return_type_str or "Dict" in return_type_str:
+            return_type = "object"
+
+    return {
+        "function": {
+            "name": func.__name__,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": [
+                    name for name, param in sig.parameters.items()
+                    if param.default == inspect.Parameter.empty
+                ]
+            },
+            "return": {
+                "type": return_type
+            }
+        }
+    }
+
+
+def get_imports(code: str) -> Set[str]:
+    """获取代码中的导入模块"""
+    imports = set()
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for name in node.names:
+                    imports.add(name.name.split('.')[0])
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.add(node.module.split('.')[0])
+    except SyntaxError:
+        # 语法错误时返回空集合
+        pass
+    return imports
 
 
 def readonly(func: Callable) -> Callable:
