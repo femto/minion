@@ -11,22 +11,11 @@ from ..main.brain import Brain
 from ..main.input import Input
 from ..main.action_step import ActionStep, StreamChunk, StreamingActionManager
 from minion.types.agent_response import AgentResponse
+from minion.types.agent_state import AgentState
 
 logger = logging.getLogger(__name__)
 
 
-def _init_internal_state():
-    """Initialize the internal state dictionary."""
-    return {
-        "history": [],
-        "step_count": 0,
-        "error_count": 0,
-        "task": None,
-        "input": None,
-        "tools": None,
-        "is_final_answer": False,
-        "final_answer_value": None
-    }
 @dataclass
 class BaseAgent:
     """Agent基类，定义所有Agent的基本接口，支持生命周期管理"""
@@ -37,7 +26,7 @@ class BaseAgent:
     llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
     system_prompt: Optional[str] = None  # 系统提示
 
-    state: Dict[str, Any] = field(default_factory=_init_internal_state)
+    state: AgentState = field(default_factory=AgentState)
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -261,7 +250,7 @@ class BaseAgent:
 
     async def run_async(self, 
                        task: Optional[Union[str, Input]] = None,
-                       state: Optional[Dict[str, Any]] = None, 
+                       state: Optional[AgentState] = None, 
                        max_steps: Optional[int] = None,
                        stream: bool = False,
                        **kwargs) -> Any:
@@ -270,7 +259,7 @@ class BaseAgent:
         
         Args:
             task: 任务描述或Input对象 (state为None时必须提供)
-            state: 已有状态，用于恢复中断的执行
+            state: 已有状态，用于恢复中断的执行 (强类型AgentState)
             max_steps: 最大步数
             stream: 若为True则使用异步迭代器返回中间结果
             **kwargs: 附加参数，可包含:
@@ -289,24 +278,25 @@ class BaseAgent:
         if state is None:
             if task is None:
                 raise ValueError("Either 'task' or 'state' must be provided")
-            state = self.init_state(task, **kwargs)
+            # 初始化新状态
+            self._init_state_from_task(task, **kwargs)
         else:
-            # 使用已有状态，可选择更新task
+            # 使用已有状态
+            self.state = state
+                
+            # 可选择更新task
             if task is not None:
                 if isinstance(task, str):
-                    state["task"] = task
+                    self.state.task = task
                     # 更新input对象的query
-                    if "input" in state and hasattr(state["input"], 'query'):
-                        state["input"].query = task
+                    if self.state.input and hasattr(self.state.input, 'query'):
+                        self.state.input.query = task
                 else:
-                    state["task"] = task.query
-                    state["input"] = task
+                    self.state.task = task.query
+                    self.state.input = task
         
         # 确定最大步数
         max_steps = max_steps or self.max_steps
-        
-        # save current state as self.state
-        self.state = state
         
         if stream:
             # 设置 stream_outputs 属性，供 UI 使用
@@ -465,23 +455,23 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
+    async def step(self, state: AgentState, stream: bool = False, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
-            state: 状态字典，包含 input, tools 等必要信息
+            state: 强类型状态对象，包含 input 等必要信息
             **kwargs: 其他参数，直接传递给brain
         Returns:
-            AgentResponse: 结构化的响应对象，支持tuple解包以保持向后兼容性
+            AgentResponse: 结构化的响应对象
         """
-        if "input" not in state:
-            raise ValueError("State must contain 'input' key with Input object")
+        if not state.input:
+            raise ValueError("State must contain input object")
             
-        input_obj = state["input"]
+        input_obj = state.input
         if not isinstance(input_obj, Input):
             # 将字符串转为Input
             input_obj = Input(query=str(input_obj))
-            state["input"] = input_obj
+            state.input = input_obj
             
         # 预处理输入
         input_obj, kwargs = await self.pre_step(input_obj, kwargs)
@@ -495,26 +485,25 @@ class BaseAgent:
             result = AgentResponse.from_tuple(result)
         
         # 执行后处理操作
-        await self.post_step(state["input"], result)
+        await self.post_step(state.input, result)
         
         return result
     
-    async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
+    async def execute_step(self, state: AgentState, stream: bool = False, **kwargs) -> AgentResponse:
         """
         执行实际的步骤操作，默认委托给brain处理。子类可以重写此方法以自定义执行逻辑。
         Args:
-            state: 状态字典，包含 input, tools 等信息
+            state: 强类型状态对象
             **kwargs: 其他参数
         Returns:
             AgentResponse: 结构化的响应对象
         """
-        # 获取工具列表，优先使用状态中的tools，然后是agent.tools
-        tools = state.get("tools", self.tools)
-        if tools is None:
-            tools = self.tools
+        # 使用agent的tools
+        tools = self.tools
         
-        # 传递状态和工具给brain.step
-        result = await self.brain.step(state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
+        # 传递状态和工具给brain.step - brain需要dict格式
+        state_dict = state.model_dump()
+        result = await self.brain.step(state_dict, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):
@@ -596,42 +585,47 @@ Please provide the answer directly, without explaining why you couldn't complete
         # If there is no valid input object, return basic information
         return f"The task execution reached the maximum step limit and could not provide a valid final answer."
     
-    def init_state(self, task: Union[str, Input], **kwargs) -> Dict[str, Any]:
+    def _init_state_from_task(self, task: Union[str, Input], **kwargs) -> None:
         """
-        初始化任务状态
+        从任务初始化内部状态
         Args:
             task: 任务描述或Input对象
             **kwargs: 附加参数
-        Returns:
-            Dict: 初始状态字典
         """
         # 将任务转换为Input对象
         if isinstance(task, str):
             input_obj = Input(query=task)
+            task_str = task
         else:
             input_obj = task
+            task_str = task.query
             
-        return {
-            "input": input_obj,
-            "history": [],
-            "tools": self.tools,
-            "step_count": 0,
-            "task": task if isinstance(task, str) else task.query,
-            **kwargs
-        }
+        # 初始化强类型状态
+        self.state = AgentState(
+            input=input_obj,
+            history=[],
+            step_count=0,
+            task=task_str
+        )
+        
+        # 添加额外的metadata
+        self.state.metadata.update(kwargs)
 
-    def update_state(self, state: Dict[str, Any], result: Any) -> Dict[str, Any]:
+    def update_state(self, state: AgentState, result: Any) -> AgentState:
         """
         根据步骤结果更新状态
         Args:
-            state: 当前状态
+            state: 当前状态 (强类型AgentState)
             result: 步骤执行结果 (可以是5-tuple或AgentResponse)
         Returns:
-            Dict: 更新后的状态
+            AgentState: 更新后的状态
         """
+        # 使用传入的状态
+        self.state = state
+            
         # 添加结果到历史
-        state["history"].append(result)
-        state["step_count"] += 1
+        self.state.history.append(result)
+        self.state.step_count += 1
         
         # 提取响应内容作为下一步输入
         if hasattr(result, 'raw_response'):
@@ -644,17 +638,17 @@ Please provide the answer directly, without explaining why you couldn't complete
         else:
             response = result
             
-        if isinstance(state["input"], Input):
-            state["input"].query = f"上一步结果: {response}\n继续执行任务: {state['task']}"
+        if isinstance(self.state.input, Input):
+            self.state.input.query = f"上一步结果: {response}\n继续执行任务: {self.state.task}"
             
-        return state
+        return self.state
     
-    def is_done(self, result: Any, state: Dict[str, Any]) -> bool:
+    def is_done(self, result: Any, state: AgentState) -> bool:
         """
         判断任务是否完成
         Args:
             result: 当前步骤结果 (可以是5-tuple或AgentResponse)
-            state: 当前状态
+            state: 当前状态 (强类型AgentState)
         Returns:
             bool: 是否完成
         """
@@ -670,21 +664,25 @@ Please provide the answer directly, without explaining why you couldn't complete
             terminated = result[2]
             return terminated
         
-        # 检查结果中是否包含final_answer
-        if isinstance(result, dict) and "final_answer" in result:
+        # 检查状态中的final_answer标志
+        if state.is_final_answer:
             return True
             
         return False
     
-    def finalize(self, result: Any, state: Dict[str, Any]) -> Any:
+    def finalize(self, result: Any, state: AgentState) -> Any:
         """
         整理最终结果
         Args:
             result: 最后一步结果 (可以是5-tuple或AgentResponse)
-            state: 当前状态
+            state: 当前状态 (强类型AgentState)
         Returns:
             最终处理后的结果
         """
+        # 检查状态中的final_answer_value
+        if state.final_answer_value is not None:
+            return state.final_answer_value
+            
         # 检查AgentResponse类型
         if hasattr(result, 'answer') and result.answer is not None:
             return result.answer
