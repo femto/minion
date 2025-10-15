@@ -8,7 +8,7 @@ This agent extends the BaseAgent to provide:
 - Safe code execution with sandboxing
 - Memory integration for learning
 """
-
+from copy import copy
 from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 import re
@@ -340,13 +340,8 @@ Now Begin!
 """
         
         # Create a new Input with enhanced query
-        enhanced_input = Input(
-            query=enhanced_query,
-            route=getattr(input_data, 'route', None) or 'code',
-            check=getattr(input_data, 'check', False),
-            dataset=getattr(input_data, 'dataset', None),
-            metadata=getattr(input_data, 'metadata', {})
-        )
+        enhanced_input = copy(input_data)
+        enhanced_input.query = enhanced_query
         
         return enhanced_input
     
