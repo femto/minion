@@ -174,6 +174,7 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
+    #will update brain.state to state passed in
     async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
         # 处理不同类型的state参数
         if state is None:
