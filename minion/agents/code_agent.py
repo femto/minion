@@ -228,10 +228,8 @@ class CodeAgent(BaseAgent):
             # Get tools list from agent
             tools = self.tools
             
-            # Call brain.step with proper state format - brain expects state dict with 'input' key
-            brain_state = self.state.model_dump()
-            brain_state["input"] = enhanced_input
-            result = await self.brain.step(brain_state, tools=tools, stream=stream,system_prompt=self.system_prompt, **kwargs)
+            # Call brain.step with enhanced input directly
+            result = await self.brain.step(enhanced_input, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
@@ -685,7 +683,7 @@ Use Python code to:
         self._prepare_internal_state(task, reset)
         
         # Record input in state for interaction tracking
-        self.state['input'] = enhanced_input
+        self.state.input = enhanced_input
         
         try:
             # Use BaseAgent's logic but with our enhanced input and internal state
@@ -749,18 +747,20 @@ Use Python code to:
             task: Task description or Input object
             reset: Whether to reset state before execution
         """
-        # Handle reset functionality (only if state tracking is enabled)
-        if reset and self.enable_state_tracking:
-            self.reset_state()
-            logger.info("Agent state has been reset")
-        
         # Initialize internal state if needed
         if not hasattr(self, 'state') or self.state is None:
             self.state = CodeAgentState()
         
-        # Reset state if requested
+        # Handle reset functionality
         if reset:
-            self.state.reset()
+            if self.enable_state_tracking:
+                # Reset both internal state and persistent state
+                self.reset_state()
+                logger.info("Agent state has been reset (including persistent state)")
+            else:
+                # Just reset internal state
+                self.state.reset()
+                logger.info("Agent internal state has been reset")
         
         # Set task information
         if task is not None:
@@ -774,10 +774,6 @@ Use Python code to:
             # Merge persistent state into metadata
             self.state.metadata.update(self.persistent_state)
             self.state.metadata['conversation_history'] = self.get_recent_history()
-        
-        # Ensure tools are set
-        if not self.state.tools:
-            self.state.tools = self.tools
     
     def reset_state(self) -> None:
         """

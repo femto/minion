@@ -230,8 +230,9 @@ class BaseAgent:
 
     def run(self, 
            task: Optional[Union[str, Input]] = None,
-           state: Optional[Dict[str, Any]] = None, 
+           state: Optional[AgentState] = None, 
            max_steps: Optional[int] = None,
+           reset: bool = False,
            **kwargs) -> Any:
         """
         Synchronous interface for running the agent.
@@ -240,18 +241,20 @@ class BaseAgent:
             task: Task description or Input object (required if state is None)
             state: Existing state for resuming interrupted execution
             max_steps: Maximum number of steps
+            reset: If True, reset the agent state before execution
             **kwargs: Additional parameters
             
         Returns:
             Final task result
         """
         import asyncio
-        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, stream=False, **kwargs))
+        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, reset=reset, stream=False, **kwargs))
 
     async def run_async(self, 
                        task: Optional[Union[str, Input]] = None,
                        state: Optional[AgentState] = None, 
                        max_steps: Optional[int] = None,
+                       reset: bool = False,
                        stream: bool = False,
                        **kwargs) -> Any:
         """
@@ -261,6 +264,7 @@ class BaseAgent:
             task: 任务描述或Input对象 (state为None时必须提供)
             state: 已有状态，用于恢复中断的执行 (强类型AgentState)
             max_steps: 最大步数
+            reset: If True, reset the agent state before execution
             stream: 若为True则使用异步迭代器返回中间结果
             **kwargs: 附加参数，可包含:
                 - tools: 临时工具覆盖
@@ -501,9 +505,8 @@ class BaseAgent:
         # 使用agent的tools
         tools = self.tools
         
-        # 传递状态和工具给brain.step - brain需要dict格式
-        state_dict = state.model_dump()
-        result = await self.brain.step(state_dict, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
+        # 传递强类型状态给brain.step
+        result = await self.brain.step(state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):

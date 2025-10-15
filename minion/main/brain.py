@@ -7,7 +7,7 @@
 """
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 from jinja2 import Template
 from mem0 import Memory
@@ -25,6 +25,7 @@ from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
 from minion.providers import create_llm_provider
 from minion.types.agent_response import AgentResponse
+from minion.types.agent_state import AgentState
 
 class Mind(BaseModel):
     id: str = "UnnamedMind"
@@ -170,25 +171,40 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    async def step(self, state: Dict[str, Any] = None, **config_kwargs):
-        # 处理state参数
+    async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
+        # 处理不同类型的state参数
         if state is None:
             state = {}
             
-        # 从状态中提取参数
-        input = state.get("input")
+        # 根据state类型提取参数
+        if isinstance(state, Input):
+            # 直接是Input对象
+            input = state
+            current_tools = config_kwargs.get("tools", self.tools)
+        elif isinstance(state, AgentState):
+            # 强类型AgentState
+            input = state.input
+            current_tools = config_kwargs.get("tools", self.tools)
+        elif isinstance(state, dict):
+            # 字典格式（向后兼容）
+            input = state.get("input")
+            current_tools = config_kwargs.get("tools", state.get("tools", self.tools))
+        else:
+            raise ValueError(f"Unsupported state type: {type(state)}")
+            
+        # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
         query_type = config_kwargs.get("query_type", "")
         system_prompt = config_kwargs.get("system_prompt")
-        tools = config_kwargs.get("tools")
         messages = config_kwargs.get("messages")
         stream = config_kwargs.get("stream", False)
         
-        # 验证state中必须有input
+        # 验证必须有input或者有query/messages
         if input is None:
-            if not query:
-                raise ValueError("State must contain 'input' or query must be provided in config_kwargs")
-            # 从 query 创建 Input，移除已使用的参数避免重复
+            if not query and messages is None:
+                raise ValueError("State must contain 'input' or query/messages must be provided in config_kwargs")
+            
+            # 准备Input创建参数
             input_kwargs = config_kwargs.copy()
             input_kwargs.pop('query', None)
             input_kwargs.pop('query_type', None) 
@@ -197,27 +213,20 @@ Supporting navigation and spatial memory""",
             input_kwargs.pop('messages', None)
             input_kwargs.pop('stream', None)
             
-            input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
-            state["input"] = input
+            # 如果有messages，优先使用messages创建Input
+            if messages is not None:
+                input = Input(query=messages, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
+            else:
+                # 否则使用query创建Input
+                input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
         
-        # 处理传入的tools
-        current_tools = tools if tools is not None else state.get("tools", self.tools)
-        
-        # 如果传入了messages，优先使用messages
-        if messages is not None:
-            # 从messages中提取query和system_prompt
+        # 如果传入了messages，从中提取system_prompt（如果没有显式提供的话）
+        if messages is not None and system_prompt is None:
             if isinstance(messages, list):
                 for msg in messages:
-                    if isinstance(msg, dict):
-                        if msg.get("role") == "user":
-                            query = msg.get("content", query)
-                        elif msg.get("role") == "system" and system_prompt is None:
-                            system_prompt = msg.get("content", "")
-            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **config_kwargs)
-            input.query = query  # 覆盖query
-        else:
-            # 创建Input
-            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **config_kwargs)
+                    if isinstance(msg, dict) and msg.get("role") == "system":
+                        system_prompt = msg.get("content", "")
+                        break  # 只取第一个system消息
             
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64
