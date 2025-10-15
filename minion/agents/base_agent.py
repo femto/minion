@@ -14,6 +14,19 @@ from minion.types.agent_response import AgentResponse
 
 logger = logging.getLogger(__name__)
 
+
+def _init_internal_state():
+    """Initialize the internal state dictionary."""
+    return {
+        "history": [],
+        "step_count": 0,
+        "error_count": 0,
+        "task": None,
+        "input": None,
+        "tools": None,
+        "is_final_answer": False,
+        "final_answer_value": None
+    }
 @dataclass
 class BaseAgent:
     """Agent基类，定义所有Agent的基本接口，支持生命周期管理"""
@@ -24,6 +37,7 @@ class BaseAgent:
     llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
     system_prompt: Optional[str] = None  # 系统提示
 
+    state: Dict[str, Any] = field(default_factory=_init_internal_state)
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -43,6 +57,7 @@ class BaseAgent:
         # current just for setting self._toolsets
         # and ensure await self._toolsets.ensure_setup() in setup()
         self._extract_toolsets_from_tools()
+
 
     @classmethod
     async def create(cls, *args, **kwargs) :
@@ -596,7 +611,7 @@ Please provide the answer directly, without explaining why you couldn't complete
         else:
             input_obj = task
             
-        return {
+        self.state = {
             "input": input_obj,
             "history": [],
             "tools": self.tools,
@@ -604,6 +619,7 @@ Please provide the answer directly, without explaining why you couldn't complete
             "task": task if isinstance(task, str) else task.query,
             **kwargs
         }
+        return self.state
     
     def update_state(self, state: Dict[str, Any], result: Any) -> Dict[str, Any]:
         """
