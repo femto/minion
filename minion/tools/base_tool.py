@@ -148,6 +148,7 @@ class BaseTool(ABC):
     description: str = "基础工具类，所有工具应继承此类"
     inputs: Dict[str, Dict[str, Any]] = {}
     output_type: str
+    output_schema: dict[str, Any] | None = None #not used now
     readonly: bool | None = None
     
     def __init__(self):
