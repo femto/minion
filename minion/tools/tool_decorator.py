@@ -13,7 +13,7 @@ import textwrap
 import warnings
 import ast
 from functools import wraps
-from typing import Callable, Union, Dict, Any
+from typing import Callable, Union, Dict, Any, get_type_hints
 
 from .base_tool import BaseTool
 from .async_base_tool import AsyncBaseTool
