@@ -305,8 +305,8 @@ class BaseAgent:
         # 确定最大步数
         max_steps = max_steps or self.max_steps
         
-        # 保存当前状态引用，便于外部访问
-        self._current_state = state
+        # save current state as self.state
+        self.state = state
         
         if stream:
             # 设置 stream_outputs 属性，供 UI 使用
@@ -611,7 +611,7 @@ Please provide the answer directly, without explaining why you couldn't complete
         else:
             input_obj = task
             
-        self.state = {
+        return {
             "input": input_obj,
             "history": [],
             "tools": self.tools,
@@ -619,8 +619,7 @@ Please provide the answer directly, without explaining why you couldn't complete
             "task": task if isinstance(task, str) else task.query,
             **kwargs
         }
-        return self.state
-    
+
     def update_state(self, state: Dict[str, Any], result: Any) -> Dict[str, Any]:
         """
         根据步骤结果更新状态
@@ -874,14 +873,14 @@ Please provide the answer directly, without explaining why you couldn't complete
                 
         return []
     
-    def get_current_state(self) -> Dict[str, Any]:
+    def get_state(self) -> Dict[str, Any]:
         """
         获取当前执行状态
         Returns:
             Dict[str, Any]: 当前状态的副本
         """
-        if hasattr(self, '_current_state') and self._current_state:
-            return self._current_state.copy()
+        if hasattr(self, 'state') and self.state:
+            return self.state.copy()
         else:
             raise ValueError("No current state available. Run agent first.")
     
@@ -892,7 +891,7 @@ Please provide the answer directly, without explaining why you couldn't complete
             filepath: 保存路径
         """
         import pickle
-        state = self.get_current_state()
+        state = self.get_state()
         with open(filepath, 'wb') as f:
             pickle.dump(state, f)
     
