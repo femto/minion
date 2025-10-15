@@ -15,7 +15,7 @@ import ast
 from functools import wraps
 from typing import Callable, Union
 
-from .base_tool import BaseTool, get_json_schema
+from .base_tool import BaseTool
 from .async_base_tool import AsyncBaseTool
 
 

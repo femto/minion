@@ -17,7 +17,7 @@ import functools
 import ast
 import sys
 
-from .base_tool import get_json_schema, get_imports
+from .base_tool import get_imports
 
 T = TypeVar('T', bound='AsyncBaseTool')
 
