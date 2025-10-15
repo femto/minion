@@ -295,14 +295,57 @@ def construct_simple_message(
             "content": actual_content
         })
     elif isinstance(actual_content, list):
-        # 多媒体内容
-        formatted_content = []
-        for item in actual_content:
-            formatted_content.append(_format_multimodal_content(item))
-        
-        messages.append({
-            "role": "user",
-            "content": formatted_content
-        })
+        # 检查是否是messages格式（包含role字段的字典列表）
+        if actual_content and isinstance(actual_content[0], dict) and "role" in actual_content[0]:
+            # 这是messages列表，直接返回（但要确保content格式正确）
+            formatted_messages = []
+            for msg in actual_content:
+                if isinstance(msg, dict):
+                    formatted_msg = msg.copy()
+                    # 确保content字段格式正确
+                    if "content" in formatted_msg:
+                        content = formatted_msg["content"]
+                        if isinstance(content, str):
+                            # 字符串content需要转换为标准格式
+                            formatted_msg["content"] = [
+                                {
+                                    "type": "text",
+                                    "text": content
+                                }
+                            ]
+                        elif isinstance(content, list):
+                            # 如果已经是列表，确保每个项都有type
+                            formatted_content = []
+                            for item in content:
+                                if isinstance(item, dict) and "type" in item:
+                                    # 已经有type，保持不变
+                                    formatted_content.append(item)
+                                elif isinstance(item, dict) and "text" in item:
+                                    # 有text但没有type，添加type
+                                    formatted_content.append({
+                                        "type": "text",
+                                        **item
+                                    })
+                                else:
+                                    # 其他情况，转换为text
+                                    formatted_content.append({
+                                        "type": "text",
+                                        "text": str(item)
+                                    })
+                            formatted_msg["content"] = formatted_content
+                    formatted_messages.append(formatted_msg)
+                else:
+                    formatted_messages.append(msg)
+            return formatted_messages
+        else:
+            # 多媒体内容
+            formatted_content = []
+            for item in actual_content:
+                formatted_content.append(_format_multimodal_content(item))
+            
+            messages.append({
+                "role": "user",
+                "content": formatted_content
+            })
     
     return messages 

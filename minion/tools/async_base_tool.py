@@ -28,7 +28,8 @@ class AsyncBaseTool(ABC):
     name: str = "async_base_tool"
     description: str = "异步基础工具类，所有异步工具应继承此类"
     inputs: Dict[str, Dict[str, Any]] = {}
-    output_type: str = "any"
+    output_type: str
+    output_schema: dict[str, Any] | None = None #not used now
     readonly: bool = False
     
     def __init__(self):
