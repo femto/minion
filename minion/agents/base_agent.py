@@ -124,6 +124,9 @@ class BaseAgent:
 
         # Auto-convert raw functions to appropriate tool types
         self._convert_raw_functions_to_tools()
+        
+        # Wrap state-aware tools to automatically pass agent state
+        self._wrap_state_aware_tools()
 
         # Initialize brain with tools
         if self.brain is None:
@@ -204,6 +207,55 @@ class BaseAgent:
         
         if conversion_count > 0:
             logger.info(f"Successfully auto-converted {conversion_count} raw functions to tools")
+    
+    def _wrap_state_aware_tools(self):
+        """
+        包装需要state的工具，使其能够接收agent的state
+        """
+        from ..tools.base_tool import BaseTool
+        from ..tools.async_base_tool import AsyncBaseTool
+        import asyncio
+        
+        wrapped_tools = []
+        wrap_count = 0
+        
+        for tool in self.tools:
+            if hasattr(tool, 'needs_state') and tool.needs_state:
+                # 创建包装器
+                if isinstance(tool, AsyncBaseTool):
+                    # 异步工具包装器
+                    original_forward = tool.forward
+                    
+                    async def wrapped_async_forward(self_tool, *args, **kwargs):
+                        # 获取agent的state
+                        agent_state = getattr(self, 'state', None)
+                        return await original_forward(self_tool, state=agent_state, *args, **kwargs)
+
+                    # 替换forward方法
+                    tool.forward = wrapped_async_forward.__get__(tool, type(tool))
+                    
+                elif isinstance(tool, BaseTool):
+                    # 同步工具包装器
+                    original_forward = tool.forward
+                    
+                    def wrapped_sync_forward(self_tool, *args, **kwargs):
+                        # 获取agent的state
+                        agent_state = getattr(self, 'state', None)
+                        return original_forward(self_tool, state=agent_state, *args, **kwargs)
+
+                    # 替换forward方法
+                    tool.forward = wrapped_sync_forward.__get__(tool, type(tool))
+                
+                wrap_count += 1
+                logger.info(f"Wrapped state-aware tool: {tool.name}")
+            
+            wrapped_tools.append(tool)
+        
+        # 更新工具列表
+        self.tools = wrapped_tools
+        
+        if wrap_count > 0:
+            logger.info(f"Successfully wrapped {wrap_count} state-aware tools")
 
     def _is_toolset_tool(self, tool: BaseTool) -> bool:
         """检查工具是否是toolset工具"""

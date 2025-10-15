@@ -17,7 +17,23 @@ import functools
 import ast
 import sys
 
-from .base_tool import get_imports
+# 将get_imports函数直接定义在这里以避免循环导入
+def get_imports(code: str):
+    """获取代码中的导入模块"""
+    import ast
+    imports = set()
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.add(node.module)
+    except:
+        pass
+    return imports
 
 T = TypeVar('T', bound='AsyncBaseTool')
 
@@ -31,6 +47,7 @@ class AsyncBaseTool(ABC):
     output_type: str
     output_schema: dict[str, Any] | None = None #not used now
     readonly: bool = False
+    needs_state: bool = False  # 是否需要接收agent state
     
     def __init__(self):
         """初始化异步工具"""

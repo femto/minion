@@ -13,7 +13,7 @@ import textwrap
 import warnings
 import ast
 from functools import wraps
-from typing import Callable, Union, Dict, Any, get_type_hints
+from typing import Callable, Union, Dict, Any, get_type_hints, Set
 
 from .base_tool import BaseTool
 from .async_base_tool import AsyncBaseTool
@@ -181,6 +181,21 @@ def tool(tool_function: Callable) -> Union[BaseTool, AsyncBaseTool]:
     # 获取JSON schema
     tool_json_schema = get_json_schema(tool_function)["function"]
     
+    # 检查函数是否需要state参数
+    sig = inspect.signature(tool_function)
+    type_hints = get_type_hints(tool_function)
+    needs_state = False
+    
+    # 检查是否有state参数且类型为AgentState
+    for param_name, param in sig.parameters.items():
+        if param_name == 'state' and param_name in type_hints:
+            type_hint = type_hints[param_name]
+            # 检查类型提示是否包含AgentState
+            type_str = str(type_hint)
+            if 'AgentState' in type_str:
+                needs_state = True
+                break
+    
     # 检查返回类型
     if "return" not in tool_json_schema:
         if len(tool_json_schema["parameters"]["properties"]) == 0:
@@ -211,6 +226,7 @@ def tool(tool_function: Callable) -> Union[BaseTool, AsyncBaseTool]:
         SimpleAsyncTool.output_type = tool_json_schema["return"]["type"]
         readonly_value = getattr(tool_function, '_readonly', False)
         SimpleAsyncTool.readonly = readonly_value
+        SimpleAsyncTool.needs_state = needs_state
         # Debug print
         # print(f"DEBUG: Setting readonly={readonly_value} for async {tool_json_schema['name']}")
         
@@ -253,6 +269,7 @@ def tool(tool_function: Callable) -> Union[BaseTool, AsyncBaseTool]:
         SimpleTool.output_type = tool_json_schema["return"]["type"]
         readonly_value = getattr(tool_function, '_readonly', False)
         SimpleTool.readonly = readonly_value
+        SimpleTool.needs_state = needs_state
         # Debug print
         # print(f"DEBUG: Setting readonly={readonly_value} for {tool_json_schema['name']}")
         

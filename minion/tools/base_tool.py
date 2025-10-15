@@ -28,6 +28,7 @@ class BaseTool(ABC):
     output_type: str
     output_schema: dict[str, Any] | None = None #not used now
     readonly: bool | None = None
+    needs_state: bool = False  # 是否需要接收agent state
     
     def __init__(self):
         """初始化工具"""
