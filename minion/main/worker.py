@@ -1071,64 +1071,73 @@ class CodeMinion(PythonMinion):
             
             self.python_env.send_tools(all_tools)
         
-    def construct_prompt(self, query, task=None, error=""):
-        """Construct smolagents-style prompt with <end_code> support"""
+    def construct_prompt(self, query,tools = [], task=None, error=""):
+        """Construct smolagents-style prompt with <end_code> support
+        
+        Args:
+            query: Can be string or messages list
+            task: Task information
+            error: Error information
+        """
         
         # Get available tools description
         available_tools = []
-        if self.brain.tools:
-            for tool in self.brain.tools:
-                if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                    tool_desc = f"- {tool.name}: {tool.description}"
-                    
-                    # Add readonly information if available
-                    if hasattr(tool, 'readonly') and tool.readonly:
-                        tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
-                    
-                    # Add parameter information and usage example for tools
-                    # Check for both 'parameters' (MCP tools) and 'inputs' (BaseTool/AsyncBaseTool)
-                    tool_params = None
-                    if hasattr(tool, 'parameters') and tool.parameters:
-                        if 'properties' in tool.parameters:
-                            tool_params = tool.parameters['properties']
-                    elif hasattr(tool, 'inputs') and tool.inputs:
-                        tool_params = tool.inputs
-                    
-                    if tool_params:
-                        params = tool_params
-                        param_list = []
-                        for param_name, param_info in params.items():
-                            param_type = param_info.get('type', 'any')
-                            param_desc = param_info.get('description', '')
-                            param_list.append(f"{param_name} ({param_type}): {param_desc}")
-                            
-                            if param_list:
-                                tool_desc += f"\n  Parameters: {', '.join(param_list)}"
-                                
-                                # Add usage example with keyword arguments
-                                example_params = []
-                                for param_name, param_info in params.items():
-                                    param_type = param_info.get('type', 'str')
-                                    if param_type == 'string':
-                                        example_params.append(f'{param_name}="example_value"')
-                                    elif param_type == 'integer':
-                                        example_params.append(f'{param_name}=123')
-                                    elif param_type == 'boolean':
-                                        example_params.append(f'{param_name}=True')
-                                    else:
-                                        example_params.append(f'{param_name}="value"')
-                                
-                                if example_params:
-                                    tool_desc += f"\n  Usage: await {tool.name}({', '.join(example_params)})"
-                    
-                    available_tools.append(tool_desc)
+
+        for tool in tools:
+            if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                tool_desc = f"- {tool.name}: {tool.description}"
+
+                # Add readonly information if available
+                if hasattr(tool, 'readonly') and tool.readonly:
+                    tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
+
+                # Add parameter information and usage example for tools
+                # Check for both 'parameters' (MCP tools) and 'inputs' (BaseTool/AsyncBaseTool)
+                tool_params = None
+                if hasattr(tool, 'parameters') and tool.parameters:
+                    if 'properties' in tool.parameters:
+                        tool_params = tool.parameters['properties']
+                elif hasattr(tool, 'inputs') and tool.inputs:
+                    tool_params = tool.inputs
+
+                if tool_params:
+                    params = tool_params
+                    param_list = []
+                    for param_name, param_info in params.items():
+                        param_type = param_info.get('type', 'any')
+                        param_desc = param_info.get('description', '')
+                        param_list.append(f"{param_name} ({param_type}): {param_desc}")
+
+                        if param_list:
+                            tool_desc += f"\n  Parameters: {', '.join(param_list)}"
+
+                            # Add usage example with keyword arguments
+                            example_params = []
+                            for param_name, param_info in params.items():
+                                param_type = param_info.get('type', 'str')
+                                if param_type == 'string':
+                                    example_params.append(f'{param_name}="example_value"')
+                                elif param_type == 'integer':
+                                    example_params.append(f'{param_name}=123')
+                                elif param_type == 'boolean':
+                                    example_params.append(f'{param_name}=True')
+                                else:
+                                    example_params.append(f'{param_name}="value"')
+
+                            if example_params:
+                                tool_desc += f"\n  Usage: await {tool.name}({', '.join(example_params)})"
+
+                available_tools.append(tool_desc)
         
         tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
+        
+        # Extract query content (handle both string and messages format)
+        query_text = self._extract_query_text(query)
         
         # Construct the main query content
         if task:
             query_content = f"""
-**Task:** {task.get('instruction', query)}
+**Task:** {task.get('instruction', query_text)}
 **Description:** {task.get('task_description', '')}
 """
             # Add dependent outputs if available
@@ -1141,7 +1150,7 @@ class CodeMinion(PythonMinion):
                         dependent_info += f"- {dependent_key}: {symbol.output}\n"
                 query_content += dependent_info
         else:
-            query_content = f"**Problem:** {query}"
+            query_content = f"**Problem:** {query_text}"
         
         # Add error information if available
         error_info = ""
@@ -1194,6 +1203,57 @@ Let's start! Remember to end your code blocks with <end_code>.
         
         return prompt
     
+    def _extract_query_text(self, query):
+        """Extract text content from query (handle both string and messages format)
+        
+        Args:
+            query: Can be string or messages list
+            
+        Returns:
+            str: Extracted text content
+        """
+        if isinstance(query, str):
+            return query
+        elif isinstance(query, list):
+            # Handle messages format
+            text_parts = []
+            for msg in query:
+                if isinstance(msg, dict) and "content" in msg:
+                    content = msg["content"]
+                    if isinstance(content, str):
+                        text_parts.append(f"{msg.get('role', 'user')}: {content}")
+                    elif isinstance(content, list):
+                        # Extract text from content list
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_parts.append(f"{msg.get('role', 'user')}: {item.get('text', '')}")
+            return "\n".join(text_parts) if text_parts else str(query)
+        else:
+            return str(query)
+    
+    def _get_conversation_history(self):
+        """Get conversation history from brain.state if available"""
+        if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
+            # Extract conversation from agent state history
+            conversation = []
+            for item in self.brain.state.history:
+                if isinstance(item, str):
+                    conversation.append(item)
+                elif hasattr(item, 'raw_response'):
+                    conversation.append(item.raw_response)
+                elif isinstance(item, tuple) and len(item) > 0:
+                    conversation.append(str(item[0]))
+                else:
+                    conversation.append(str(item))
+            return conversation
+        return []
+    
+    def _update_conversation_history(self, attempt_info):
+        """Update conversation history in brain.state if available"""
+        if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
+            # Add to agent state history
+            self.brain.state.history.append(attempt_info)
+    
     async def execute(self):
         """Execute with smolagents-style Thought -> Code -> Observation cycle"""
         
@@ -1204,11 +1264,11 @@ Let's start! Remember to end your code blocks with <end_code>.
             query = self.input.query
         
         error = ""
-        full_conversation = []
-        
+        full_conversation = self._get_conversation_history()
+        tools = self.brain.tools + self.input.tools
         for iteration in range(self.max_iterations):
             # Construct the prompt
-            prompt = self.construct_prompt(query, self.task, error)
+            prompt = self.construct_prompt(query, tools,self.task, error)
             
             # Add previous conversation context
             if full_conversation:
@@ -1272,9 +1332,13 @@ Let's start! Remember to end your code blocks with <end_code>.
                     observation = f"**Observation:** Error occurred:\n{error}"
                     
                     # Add to conversation history
+                    attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
                     full_conversation.append(f"**Attempt {iteration + 1}:**")
                     full_conversation.append(response)
                     full_conversation.append(observation)
+                    
+                    # Update brain.state history
+                    self._update_conversation_history(attempt_info)
                     
                     # Try again with error feedback
                     continue
@@ -1321,9 +1385,13 @@ Let's start! Remember to end your code blocks with <end_code>.
                         )
                     
                     # Add to conversation and continue
+                    attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
                     full_conversation.append(f"**Attempt {iteration + 1}:**")
                     full_conversation.append(response)
                     full_conversation.append(observation)
+                    
+                    # Update brain.state history
+                    self._update_conversation_history(attempt_info)
                     
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
@@ -1361,9 +1429,13 @@ Let's start! Remember to end your code blocks with <end_code>.
                 logger.error(f"Execution error: {error}")
                 observation = f"**Observation:** Execution failed:\n{error}"
                 
+                attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
                 full_conversation.append(f"**Attempt {iteration + 1}:**")
                 full_conversation.append(response)
                 full_conversation.append(observation)
+                
+                # Update brain.state history
+                self._update_conversation_history(attempt_info)
                 
                 continue
         

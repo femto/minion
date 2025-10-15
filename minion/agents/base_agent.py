@@ -505,6 +505,9 @@ class BaseAgent:
         # 使用agent的tools
         tools = self.tools
         
+        # 同步state到brain，这样minion可以访问agent的状态
+        self.brain.state = state
+        
         # 传递强类型状态给brain.step
         result = await self.brain.step(state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
         

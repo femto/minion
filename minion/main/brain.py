@@ -146,6 +146,9 @@ Supporting navigation and spatial memory""",
         # 设置工具集
         self.tools = tools or []
         
+        # Agent state reference (will be set by agent during execution)
+        self.state = None
+        
         # 默认使用 AsyncPythonExecutor，提供更好的异步支持
         self.python_env = python_env or AsyncPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
@@ -174,23 +177,26 @@ Supporting navigation and spatial memory""",
     async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
         # 处理不同类型的state参数
         if state is None:
-            state = {}
+            state = AgentState()
             
         # 根据state类型提取参数
         if isinstance(state, Input):
             # 直接是Input对象
             input = state
-            current_tools = config_kwargs.get("tools", self.tools)
+            current_tools = config_kwargs.get("tools", [])
         elif isinstance(state, AgentState):
             # 强类型AgentState
             input = state.input
-            current_tools = config_kwargs.get("tools", self.tools)
+            current_tools = config_kwargs.get("tools", [])
         elif isinstance(state, dict):
             # 字典格式（向后兼容）
-            input = state.get("input")
-            current_tools = config_kwargs.get("tools", state.get("tools", self.tools))
+            state = AgentState.model_validate(state) #convert dict to AgentState
+            input = state.input
+            current_tools = config_kwargs.get("tools", [])
         else:
             raise ValueError(f"Unsupported state type: {type(state)}")
+
+        self.state = state #sync brain.state to agent.state passed in
             
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
