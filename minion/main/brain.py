@@ -174,7 +174,6 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    #will update brain.state to state passed in
     async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
         # 处理不同类型的state参数
         if state is None:
@@ -197,8 +196,6 @@ Supporting navigation and spatial memory""",
         else:
             raise ValueError(f"Unsupported state type: {type(state)}")
 
-        self.state = state #sync brain.state to agent.state passed in
-            
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
         query_type = config_kwargs.get("query_type", "")

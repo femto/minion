@@ -132,6 +132,7 @@ class BaseAgent:
             brain_kwargs = {'tools': []}
             if self.llm is not None:
                 brain_kwargs['llm'] = self.llm
+                brain_kwargs['state'] = self.state
             self.brain = Brain(**brain_kwargs)
         
         # Mark agent as setup
