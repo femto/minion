@@ -22,6 +22,8 @@ class BaseAgent:
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
     llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
+    system_prompt: Optional[str] = None  # 系统提示
+
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -397,7 +399,7 @@ class BaseAgent:
         """执行单个步骤的流式输出"""
         try:
             # 调用 brain.step 并检查是否返回流式生成器
-            result = await self.brain.step(state, stream=True, **kwargs)
+            result = await self.brain.step(state, stream=True,system_prompt=self.system_prompt, **kwargs)
             
             # 如果 brain.step 返回的是异步生成器，则流式处理
             if inspect.isasyncgen(result):
@@ -497,7 +499,7 @@ class BaseAgent:
             tools = self.tools
         
         # 传递状态和工具给brain.step
-        result = await self.brain.step(state, tools=tools, stream=stream, **kwargs)
+        result = await self.brain.step(state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):

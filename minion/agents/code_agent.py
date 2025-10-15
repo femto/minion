@@ -220,7 +220,7 @@ class CodeAgent(BaseAgent):
             # Call brain.step with proper state format - brain expects state dict with 'input' key
             brain_state = state.copy()
             brain_state["input"] = enhanced_input
-            result = await self.brain.step(brain_state, tools=tools, stream=stream, **kwargs)
+            result = await self.brain.step(brain_state, tools=tools, stream=stream,system_prompt=self.system_prompt, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
@@ -342,6 +342,9 @@ Now Begin!
         # Create a new Input with enhanced query
         enhanced_input = copy(input_data)
         enhanced_input.query = enhanced_query
+        # Ensure route is set to 'code' for code thinking
+        if not enhanced_input.route:
+            enhanced_input.route = 'code'
         
         return enhanced_input
     
