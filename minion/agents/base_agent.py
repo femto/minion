@@ -46,6 +46,7 @@ class BaseAgent:
         # current just for setting self._toolsets
         # and ensure await self._toolsets.ensure_setup() in setup()
         self._extract_toolsets_from_tools()
+        self.state.agent = self
 
 
     @classmethod

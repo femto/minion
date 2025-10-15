@@ -7,6 +7,8 @@ the weakly-typed Dict[str, Any] approach.
 
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
+
+from ..agents import BaseAgent
 from ..main.input import Input
 
 
@@ -21,7 +23,7 @@ class AgentState(BaseModel):
     - Better documentation
     - Built-in serialization/deserialization via Pydantic
     """
-    
+    agent: BaseAgent = None
     # Core execution state
     history: List[Any] = Field(default_factory=list, description="Execution history")
     step_count: int = Field(default=0, description="Number of steps executed")
