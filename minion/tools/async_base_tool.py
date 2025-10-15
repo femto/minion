@@ -29,6 +29,7 @@ class AsyncBaseTool(ABC):
     description: str = "异步基础工具类，所有异步工具应继承此类"
     inputs: Dict[str, Dict[str, Any]] = {}
     output_type: str = "any"
+    readonly: bool = False
     
     def __init__(self):
         """初始化异步工具"""
@@ -88,6 +89,7 @@ class {self.__class__.__name__}(AsyncBaseTool):
     description = "{self.description}"
     inputs = {repr(self.inputs)}
     output_type = "{self.output_type}"
+    readonly = {self.readonly}
     
     def __init__(self):
         super().__init__()
@@ -129,6 +131,7 @@ def async_tool(tool_function: Callable) -> AsyncBaseTool:
         description = tool_json_schema["description"]
         inputs = tool_json_schema["parameters"]["properties"]
         output_type = tool_json_schema["return"]["type"]
+        readonly = getattr(tool_function, '_readonly', False)
         
         def __init__(self):
             super().__init__()
@@ -203,6 +206,7 @@ class SyncToAsyncToolAdapter(AsyncBaseTool):
         self.description = sync_tool.description
         self.inputs = sync_tool.inputs
         self.output_type = sync_tool.output_type
+        self.readonly = sync_tool.readonly
         self.is_initialized = True
     
     async def forward(self, *args, **kwargs):

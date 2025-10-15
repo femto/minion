@@ -80,6 +80,15 @@ The core logic of Minion is implemented in `examples/smart_minion/brain.py`. You
 
 - **CodeAgent**: A powerful Python code execution agent with optional state tracking capability. Use it for code reasoning, problem solving, and stateful conversations. See [CodeAgent Documentation](docs/merged_code_agent.md) for details.
 - **BaseAgent**: The foundation for all agents, providing core functionality for step-by-step reasoning.
+```commandline
+agent = await CodeAgent.create(
+                name="Minion Code Assistant",
+                llm="your-model",  
+                tools=all_tools,
+            )
+await agent.run_async("your task here")
+```
+see examples/mcp/mcp_agent_example.py for how to create CodeAgent and uses mcp tool.
 
 ## Quick Demo
 
@@ -158,35 +167,6 @@ DEFAULT_BASE_URL=base_url
 DEFAULT_MODEL=deepseek-chat
 ```
 
-### Other Dependencies
-#### Using Brain with docker python env
-```
-docker build -t intercode-python -f docker/python.Dockerfile .
-```
-```
-brain = Brain() #default will use docker python env
-```
-
-#### Using Brain with rpyc env(If you don't want to use docker)
-```
-python docker/utils/python_server.py --port 3007
-```
-```
-brain = Brain(python_env=RpycPythonEnv(port=3007))
-```
-#### Using Brain with Local Python env(be aware of this method, since llm can generate bad code)
-```
-brain = Brain(python_env=LocalPythonEnv(verbose=False))
-```
-#### Troubleshooting with docker python env
-#### stop existing container if necessary
-```
-docker stop intercode-python_ic_ctr
-docker rm intercode-python_ic_ctr
-docker run -d -p 3006:3006 --name intercode-python_ic_ctr intercode-python
-```
-make sure container name intercode-python_ic_ctr is listening on 3006
-
 ## Community and Support
 
 Join our Discord community to connect with other Minion users, get support, and stay updated on the latest developments:
@@ -196,10 +176,3 @@ Join our Discord community to connect with other Minion users, get support, and 
 Follow the project creator on Twitter for announcements and insights:
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)
-
-## Enjoy Your Brain.Step() Journey
-
-Then enjoy you brain.step("some requirement") journey
-currently game of 24 and solve equation can reach near 100% accuracy,
-while writing novel can generate plan, I'm still writing what's left.
-

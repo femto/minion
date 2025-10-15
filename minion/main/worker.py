@@ -1081,15 +1081,26 @@ class CodeMinion(PythonMinion):
                 if hasattr(tool, 'name') and hasattr(tool, 'description'):
                     tool_desc = f"- {tool.name}: {tool.description}"
                     
-                    # Add parameter information and usage example for MCP tools
+                    # Add readonly information if available
+                    if hasattr(tool, 'readonly') and tool.readonly:
+                        tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
+                    
+                    # Add parameter information and usage example for tools
+                    # Check for both 'parameters' (MCP tools) and 'inputs' (BaseTool/AsyncBaseTool)
+                    tool_params = None
                     if hasattr(tool, 'parameters') and tool.parameters:
                         if 'properties' in tool.parameters:
-                            params = tool.parameters['properties']
-                            param_list = []
-                            for param_name, param_info in params.items():
-                                param_type = param_info.get('type', 'any')
-                                param_desc = param_info.get('description', '')
-                                param_list.append(f"{param_name} ({param_type}): {param_desc}")
+                            tool_params = tool.parameters['properties']
+                    elif hasattr(tool, 'inputs') and tool.inputs:
+                        tool_params = tool.inputs
+                    
+                    if tool_params:
+                        params = tool_params
+                        param_list = []
+                        for param_name, param_info in params.items():
+                            param_type = param_info.get('type', 'any')
+                            param_desc = param_info.get('description', '')
+                            param_list.append(f"{param_name} ({param_type}): {param_desc}")
                             
                             if param_list:
                                 tool_desc += f"\n  Parameters: {', '.join(param_list)}"

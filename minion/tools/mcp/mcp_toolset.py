@@ -200,20 +200,22 @@ class AsyncMcpTool(AsyncBaseTool):
     """
     Adapter class to convert MCP tools to brain.step compatible format
     """
-    def __init__(self, name: str, description: str, parameters: Dict[str, Any], session: "ClientSession", timeout: float = 10, structured_output: bool = True):
+    def __init__(self, name: str, description: str, inputs: Dict[str, Any], session: "ClientSession", timeout: float = 10, structured_output: bool = True):
         super().__init__()
-        self.name = name
+        self.tool_name = name
+        self.name = name.replace('-', '_') #name should be valid python method name
+
         self.description = description
-        self.parameters = parameters
+        self.inputs = inputs['properties']
         self.session = session
         self.timeout = timeout
         self.structured_output = structured_output
 
         # Add attributes expected by minion framework
         # Convert hyphens to underscores for Python-compatible function names
-        self.__name__ = name.replace('-', '_')
+        self.__name__ = name
         self.__doc__ = description
-        self.__input_schema__ = parameters
+        self.__input_schema__ = inputs
 
     async def forward(self, *args, **kwargs):
         """Execute the tool with given parameters"""
@@ -441,7 +443,7 @@ class MCPToolset(Toolset):
             mcp_tool = AsyncMcpTool(
                 name=tool.name,
                 description=tool.description,
-                parameters=tool.inputSchema,
+                inputs=tool.inputSchema,
                 session=session,
                 structured_output=self.structured_output
             )

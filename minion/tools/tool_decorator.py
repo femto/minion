@@ -19,6 +19,20 @@ from .base_tool import BaseTool, get_json_schema
 from .async_base_tool import AsyncBaseTool
 
 
+def readonly(func: Callable) -> Callable:
+    """
+    装饰器，将函数标记为只读工具
+    
+    Args:
+        func: 要标记为只读的函数
+        
+    Returns:
+        Callable: 标记了_readonly=True的函数
+    """
+    func._readonly = True
+    return func
+
+
 class TypeHintParsingException(Exception):
     """工具类型提示解析异常"""
     pass
@@ -72,6 +86,10 @@ def tool(tool_function: Callable) -> Union[BaseTool, AsyncBaseTool]:
         SimpleAsyncTool.description = tool_json_schema["description"]
         SimpleAsyncTool.inputs = tool_json_schema["parameters"]["properties"]
         SimpleAsyncTool.output_type = tool_json_schema["return"]["type"]
+        readonly_value = getattr(tool_function, '_readonly', False)
+        SimpleAsyncTool.readonly = readonly_value
+        # Debug print
+        # print(f"DEBUG: Setting readonly={readonly_value} for async {tool_json_schema['name']}")
         
         # 设置输出schema（如果存在）
         if "output_schema" in tool_json_schema:
@@ -110,6 +128,10 @@ def tool(tool_function: Callable) -> Union[BaseTool, AsyncBaseTool]:
         SimpleTool.description = tool_json_schema["description"]
         SimpleTool.inputs = tool_json_schema["parameters"]["properties"]
         SimpleTool.output_type = tool_json_schema["return"]["type"]
+        readonly_value = getattr(tool_function, '_readonly', False)
+        SimpleTool.readonly = readonly_value
+        # Debug print
+        # print(f"DEBUG: Setting readonly={readonly_value} for {tool_json_schema['name']}")
         
         # 设置输出schema（如果存在）
         if "output_schema" in tool_json_schema:
