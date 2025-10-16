@@ -219,6 +219,7 @@ class BaseAgent:
         """
         from ..tools.base_tool import BaseTool
         from ..tools.async_base_tool import AsyncBaseTool
+        from ..tools.agent_state_aware_tool import AgentStateAwareTool
         import asyncio
         
         wrapped_tools = []
@@ -226,45 +227,48 @@ class BaseAgent:
         
         for tool in self.tools:
             if hasattr(tool, 'needs_state') and tool.needs_state:
-                # 创建包装器
-                tool_type = type(tool).__name__
-                is_async = isinstance(tool, AsyncBaseTool)
-                is_base = isinstance(tool, BaseTool)
-                print(f"DEBUG: Wrapping tool {tool.name}: type={tool_type}, is_async={is_async}, is_base={is_base}")
-                print(f"DEBUG: Tool MRO: {[cls.__name__ for cls in type(tool).__mro__]}")
+                # Check if it's an AgentStateAwareTool
+                if isinstance(tool, AgentStateAwareTool):
+                    # For AgentStateAwareTool, just set the agent context
+                    tool._set_agent_context(self)
+                    wrap_count += 1
+                    logger.info(f"Set agent context for AgentStateAwareTool: {tool.name}")
                 
-                if isinstance(tool, AsyncBaseTool):
-                    print(f"DEBUG: Using ASYNC wrapper for {tool.name}")
-                    # 异步工具包装器 - 使用默认参数来捕获变量
-                    def create_async_wrapper(original_forward, agent_ref):
-                        async def wrapped_async_forward(self_tool, *args, **kwargs):
-                            # 获取agent的state
-                            agent_state = getattr(agent_ref, 'state', None)
-                            # 将state作为关键字参数传递，这样不依赖于参数位置
-                            return await original_forward(self_tool, *args, state=agent_state, **kwargs)
-                        return wrapped_async_forward
-                    
-                    wrapper = create_async_wrapper(tool.forward, self)
-                    tool.forward = wrapper.__get__(tool, type(tool))
-                    
-                elif isinstance(tool, BaseTool):
-                    print(f"DEBUG: Using SYNC wrapper for {tool.name}")
-                    # 同步工具包装器 - 使用默认参数来捕获变量
-                    def create_sync_wrapper(original_forward, agent_ref):
-                        def wrapped_sync_forward(self_tool, *args, **kwargs):
-                            # 获取agent的state
-                            agent_state = getattr(agent_ref, 'state', None)
-                            # 将state作为第一个位置参数传递，不传递self_tool
-                            return original_forward(self_tool, *args, state=agent_state, **kwargs)
-                        return wrapped_sync_forward
-                    
-                    wrapper = create_sync_wrapper(tool.forward, self)
-                    tool.forward = wrapper.__get__(tool, type(tool))
                 else:
-                    print(f"DEBUG: Unknown tool type for {tool.name}: {type(tool)}")
-                
-                wrap_count += 1
-                logger.info(f"Successfully wrapped state-aware tool: {tool.name}")
+                    # Legacy wrapping for other state-aware tools
+                    tool_type = type(tool).__name__
+                    is_async = isinstance(tool, AsyncBaseTool)
+                    is_base = isinstance(tool, BaseTool)
+                    logger.debug(f"Wrapping tool {tool.name}: type={tool_type}, is_async={is_async}, is_base={is_base}")
+                    
+                    if isinstance(tool, AsyncBaseTool):
+                        # 异步工具包装器 - 使用默认参数来捕获变量
+                        def create_async_wrapper(original_forward, agent_ref):
+                            async def wrapped_async_forward(self_tool, *args, **kwargs):
+                                # 获取agent的state
+                                agent_state = getattr(agent_ref, 'state', None)
+                                # 将state作为关键字参数传递，这样不依赖于参数位置
+                                return await original_forward(self_tool, *args, state=agent_state, **kwargs)
+                            return wrapped_async_forward
+                        
+                        wrapper = create_async_wrapper(tool.forward, self)
+                        tool.forward = wrapper.__get__(tool, type(tool))
+                        
+                    elif isinstance(tool, BaseTool):
+                        # 同步工具包装器 - 使用默认参数来捕获变量
+                        def create_sync_wrapper(original_forward, agent_ref):
+                            def wrapped_sync_forward(self_tool, *args, **kwargs):
+                                # 获取agent的state
+                                agent_state = getattr(agent_ref, 'state', None)
+                                # 将state作为第一个位置参数传递，不传递self_tool
+                                return original_forward(self_tool, *args, state=agent_state, **kwargs)
+                            return wrapped_sync_forward
+                        
+                        wrapper = create_sync_wrapper(tool.forward, self)
+                        tool.forward = wrapper.__get__(tool, type(tool))
+                    
+                    wrap_count += 1
+                    logger.info(f"Successfully wrapped legacy state-aware tool: {tool.name}")
             
             wrapped_tools.append(tool)
         
@@ -774,6 +778,24 @@ Please provide the answer directly, without explaining why you couldn't complete
             return result.get("answer", result.get("final_answer"))  # 兼容旧格式
             
         return result
+    
+    def _get_builtin_meta_tools(self) -> Dict[str, Any]:
+        """获取内置的meta工具"""
+        from ..tools.think_tool import ThinkTool
+        from ..tools.meta_tools import PlanTool, ReflectionTool
+        
+        return {
+            "think": ThinkTool(),
+            "plan": PlanTool(),
+            "reflect": ReflectionTool(),
+        }
+    
+    def add_meta_tools(self) -> None:
+        """添加内置的meta工具到agent"""
+        meta_tools = self._get_builtin_meta_tools()
+        for tool_name, tool in meta_tools.items():
+            self.add_tool(tool)
+            logger.info(f"Added meta tool: {tool_name}")
     
     def add_tool(self, tool: BaseTool) -> None:
         """
