@@ -255,7 +255,7 @@ class BaseAgent:
                             # 获取agent的state
                             agent_state = getattr(agent_ref, 'state', None)
                             # 将state作为第一个位置参数传递，不传递self_tool
-                            return original_forward(agent_state, *args, **kwargs)
+                            return original_forward(self_tool, *args, state=agent_state, **kwargs)
                         return wrapped_sync_forward
                     
                     wrapper = create_sync_wrapper(tool.forward, self)
