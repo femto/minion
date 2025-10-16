@@ -4,6 +4,7 @@ import json
 import base64
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
+from openai.types.chat import ChatCompletion
 
 from minion.configs.config import ContentType, ImageDetail
 from minion.logs import logger
@@ -58,7 +59,7 @@ class BedrockProvider(BaseProvider):
             raise
     
     def _prepare_messages(self, messages: List[Message]) -> List[Dict]:
-        """Convert Message objects to Bedrock Claude format"""
+        """Convert Message objects to Bedrock Claude format and merge consecutive same-role messages"""
         bedrock_messages = []
         
         for message in messages:
@@ -94,15 +95,30 @@ class BedrockProvider(BaseProvider):
                                 content.append({"type": "text", "text": item.content})
                         elif item.type == ContentType.IMAGE and isinstance(item.content, ImageContent):
                             # 处理图片内容
-                            if item.content.image_type == "base64":
+                            if item.content.type == "image_base64":
+                                # 提取图片格式（如果data是data:image/jpeg;base64,xxx格式）
+                                data = item.content.data
+                                media_type = "image/jpeg"  # 默认格式
+                                
+                                if data.startswith("data:"):
+                                    # 解析data URL格式
+                                    header, base64_data = data.split(",", 1)
+                                    if "image/" in header:
+                                        media_type = header.split(";")[0].replace("data:", "")
+                                    data = base64_data
+                                
                                 content.append({
                                     "type": "image",
                                     "source": {
                                         "type": "base64",
-                                        "media_type": f"image/{item.content.image_format}",
-                                        "data": item.content.data
+                                        "media_type": media_type,
+                                        "data": data
                                     }
                                 })
+                            elif item.content.type == "image_url":
+                                # Bedrock不直接支持URL图片，需要下载并转换为base64
+                                # 这里可以添加URL到base64的转换逻辑
+                                logger.warning("Image URLs are not directly supported by Bedrock, consider converting to base64")
                     elif isinstance(item, dict):
                         # Handle dict format content
                         if item.get("type") == "text" and item.get("text", "").strip():
@@ -115,12 +131,73 @@ class BedrockProvider(BaseProvider):
             
             # 只有在有内容时才添加消息
             if content:
-                bedrock_messages.append({
-                    "role": role,
-                    "content": content
-                })
+                # 检查是否需要合并相同角色的连续消息
+                if bedrock_messages and bedrock_messages[-1]["role"] == role:
+                    # 合并到上一条消息
+                    bedrock_messages[-1]["content"].extend(content)
+                else:
+                    # 添加新消息
+                    bedrock_messages.append({
+                        "role": role,
+                        "content": content
+                    })
         
-        return bedrock_messages
+        return self._ensure_alternating_roles(bedrock_messages)
+    
+    def _ensure_alternating_roles(self, messages: List[Dict]) -> List[Dict]:
+        """Ensure messages alternate between user and assistant roles"""
+        if not messages:
+            return messages
+        
+        result = []
+        
+        for message in messages:
+            role = message["role"]
+            content = message["content"]
+            
+            # 如果结果为空，直接添加
+            if not result:
+                result.append(message)
+                continue
+            
+            last_role = result[-1]["role"]
+            
+            # 如果角色相同，合并内容
+            if last_role == role:
+                # 合并文本内容，用换行分隔
+                text_parts = []
+                
+                # 提取上一条消息的文本内容
+                for item in result[-1]["content"]:
+                    if item.get("type") == "text":
+                        text_parts.append(item.get("text", ""))
+                
+                # 提取当前消息的文本内容
+                for item in content:
+                    if item.get("type") == "text":
+                        text_parts.append(item.get("text", ""))
+                
+                # 合并文本并更新上一条消息
+                merged_text = "\n\n".join(filter(None, text_parts))
+                
+                # 保留非文本内容（如图片）
+                non_text_content = []
+                for item in result[-1]["content"] + content:
+                    if item.get("type") != "text":
+                        non_text_content.append(item)
+                
+                # 重新构建内容
+                new_content = []
+                if merged_text.strip():
+                    new_content.append({"type": "text", "text": merged_text})
+                new_content.extend(non_text_content)
+                
+                result[-1]["content"] = new_content
+            else:
+                # 角色不同，直接添加
+                result.append(message)
+        
+        return result
     
     def _extract_system_message(self, messages: List[Message]) -> Optional[str]:
         """Extract system message from messages list"""
@@ -229,7 +306,7 @@ class BedrockProvider(BaseProvider):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self.generate_sync, messages, temperature, **kwargs)
     
-    async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Any:
+    async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> ChatCompletion:
         """
         Generate streaming completion from messages, returning a response object
         
@@ -278,7 +355,13 @@ class BedrockProvider(BaseProvider):
                         break
             
             # 返回类似 OpenAI 的响应格式
-            return {
+            import time
+            
+            response = {
+                "id": f"chatcmpl-bedrock-{hash(str(messages))}"[:29],  # 生成一个伪 ID
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": self.model_id,
                 "choices": [
                     {
                         "message": {
@@ -293,10 +376,9 @@ class BedrockProvider(BaseProvider):
                     "prompt_tokens": input_tokens,
                     "completion_tokens": output_tokens,
                     "total_tokens": input_tokens + output_tokens
-                },
-                "model": self.model_id,
-                "object": "chat.completion"
+                }
             }
+            return ChatCompletion(**response)
             
         except ClientError as e:
             logger.error(f"Bedrock streaming response error: {e}")
