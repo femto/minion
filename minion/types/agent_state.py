@@ -6,7 +6,7 @@ the weakly-typed Dict[str, Any] approach.
 """
 
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from ..main.input import Input
 
 
@@ -21,6 +21,9 @@ class AgentState(BaseModel):
     - Better documentation
     - Built-in serialization/deserialization via Pydantic
     """
+    
+    # Agent reference (using Any to avoid circular imports)
+    agent: Optional[Any] = Field(default=None, description="Reference to the agent instance")
     
     # Core execution state
     history: List[Any] = Field(default_factory=list, description="Execution history")
@@ -46,6 +49,8 @@ class AgentState(BaseModel):
     
     def reset(self) -> None:
         """Reset the state to initial values."""
+        # Keep agent reference when resetting
+        agent_ref = self.agent
         self.history = []
         self.step_count = 0
         self.error_count = 0
@@ -55,6 +60,7 @@ class AgentState(BaseModel):
         self.final_answer_value = None
         self.last_confidence = 1.0
         self.metadata = {}
+        self.agent = agent_ref
 
 
 class CodeAgentState(AgentState):
@@ -92,3 +98,5 @@ class CodeAgentState(AgentState):
         logs = self.code_logs.get(f'code_logs_{index}', '')
         is_final_answer = self.code_final_answers.get(f'is_final_answer_{index}', False)
         return output, logs, is_final_answer
+
+
