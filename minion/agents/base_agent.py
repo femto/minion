@@ -1,11 +1,12 @@
 from typing import Dict, Any, List, Optional, Tuple, Union
-from dataclasses import dataclass, field
 import uuid
 import asyncio
 import logging
 import inspect
 
+from pydantic import BaseModel, Field
 from ..providers import BaseProvider
+from ..tools import AsyncBaseTool
 from ..tools.base_tool import BaseTool
 from ..main.brain import Brain
 from ..main.input import Input
@@ -16,36 +17,47 @@ from minion.types.agent_state import AgentState
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class BaseAgent:
+class BaseAgent(BaseModel):
     """Agent基类，定义所有Agent的基本接口，支持生命周期管理"""
     
-    name: str = "base_agent"
-    tools: List[BaseTool] = field(default_factory=list)
-    brain: Optional[Brain] = None
-    llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
-    system_prompt: Optional[str] = None  # 系统提示
+    name: str = Field(default="base_agent", description="Agent name")
+    tools: List[Union[BaseTool,AsyncBaseTool,callable]] = Field(default_factory=list, description="List of available tools")
+    brain: Optional[Brain] = Field(default=None, description="Brain instance for reasoning")
+    llm: Optional[Union[BaseProvider, str]] = Field(default=None, description="LLM provider or model name to pass to Brain")
+    system_prompt: Optional[str] = Field(default=None, description="System prompt")
 
-    state: AgentState = field(default_factory=AgentState)
-    user_id: Optional[str] = None
-    agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    max_steps: int = 20
+    state: AgentState = Field(default_factory=AgentState, description="Agent execution state")
+    user_id: Optional[str] = Field(default=None, description="User identifier")
+    agent_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Agent identifier")
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Session identifier")
+    max_steps: int = Field(default=20, gt=0, description="Maximum execution steps")
     
-    # 生命周期管理
-    _is_setup: bool = field(default=False, init=False)
-    _toolsets: List[Any] = field(default_factory=list, init=False)  # List of toolset instances (MCP, UTCP, etc.)
+    # 生命周期管理 - 使用 model_fields 来定义私有属性
+    model_config = {
+        "arbitrary_types_allowed": True,  # Allow custom types like Brain, BaseTool, etc.
+        "validate_assignment": True,      # Validate on assignment
+        "extra": "forbid"                 # Don't allow extra fields
+    }
     
-    # 流式输出管理
-    _streaming_manager: StreamingActionManager = field(default_factory=StreamingActionManager, init=False)
-    
-    def __post_init__(self):
-        """初始化后的处理"""
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Initialize private attributes after Pydantic initialization
+        self._is_setup: bool = False
+        self._toolsets: List[Any] = []
+
         # Automatically handle toolset objects in tools parameter
         # not quite useful
         # current just for setting self._toolsets
         # and ensure await self._toolsets.ensure_setup() in setup()
         self._extract_toolsets_from_tools()
+    
+    model_config = {
+        "arbitrary_types_allowed": True,  # Allow custom types like Brain, BaseTool, etc.
+        "validate_assignment": True,      # Validate on assignment
+        "extra": "allow"                 # Don't allow extra fields
+    }
+    
+
 
 
     @classmethod

@@ -10,13 +10,13 @@ This agent extends the BaseAgent to provide:
 """
 from copy import copy
 from typing import Dict, Any, List, Optional, Tuple, Union
-from dataclasses import dataclass, field
 import re
 import traceback
 import logging
 import uuid
 from datetime import datetime
 
+from pydantic import Field
 from .base_agent import BaseAgent
 from minion.types.agent_response import AgentResponse
 from minion.types.agent_state import AgentState, CodeAgentState
@@ -94,7 +94,6 @@ Let me analyze this step by step using code...
         return '\n'.join(formatted) if formatted else "No recent actions"
 
 
-@dataclass
 class CodeAgent(BaseAgent):
     """
     A "think in code" agent that uses Python code for reasoning and actions.
@@ -108,26 +107,27 @@ class CodeAgent(BaseAgent):
     - Optional state management and conversation tracking
     """
     
-    name: str = "code_agent"
-    thinking_engine: Optional[ThinkingEngine] = None
-    python_executor: Optional[Union[LocalPythonExecutor, AsyncPythonExecutor]] = None
-    enable_reflection: bool = True
-    max_code_length: int = 2000
-    use_async_executor: bool = True  # Parameter to control async support
+    name: str = Field(default="code_agent", description="Code agent name")
+    thinking_engine: Optional[ThinkingEngine] = Field(default=None, description="Thinking engine for reflection")
+    python_executor: Optional[Union[LocalPythonExecutor, AsyncPythonExecutor]] = Field(default=None, description="Python code executor")
+    enable_reflection: bool = Field(default=True, description="Enable self-reflection capabilities")
+    max_code_length: int = Field(default=2000, gt=0, description="Maximum code length for execution")
+    use_async_executor: bool = Field(default=True, description="Use async executor for code execution")
     
     # State tracking and conversation history (optional)
-    enable_state_tracking: bool = False  # Whether to enable persistent state tracking functionality
-    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
-    persistent_state: Dict[str, Any] = field(default_factory=dict)
-    auto_save_state: bool = True
-    conversation_context_limit: int = 10  # Limit conversation history for context
+    enable_state_tracking: bool = Field(default=False, description="Enable persistent state tracking")
+    conversation_history: List[Dict[str, Any]] = Field(default_factory=list, description="Conversation history")
+    persistent_state: Dict[str, Any] = Field(default_factory=dict, description="Persistent state storage")
+    auto_save_state: bool = Field(default=True, description="Auto-save state after interactions")
+    conversation_context_limit: int = Field(default=10, ge=0, description="Limit conversation history for context")
     
-    # Internal state management
-    state: CodeAgentState = field(default_factory=CodeAgentState, init=False)
+    # Internal state management - will be initialized in __init__
     
-    def __post_init__(self):
-        """Initialize the CodeAgent with thinking capabilities and optional state tracking."""
-        super().__post_init__()
+    def __init__(self, **data):
+        super().__init__(**data)
+        
+        # Initialize internal state management
+        self.state: CodeAgentState = CodeAgentState()
         
         # Initialize thinking engine
         self.thinking_engine = ThinkingEngine(self)
@@ -145,6 +145,9 @@ class CodeAgent(BaseAgent):
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
+        
+        # Call the extraction method that was in model_post_init
+        self._extract_toolsets_from_tools()
         
     @property
     def history(self) -> List[Any]:
