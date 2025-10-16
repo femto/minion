@@ -32,7 +32,7 @@ def regular_tool(message: str) -> str:
     return f"Regular tool processed: {message}"
 
 @tool
-def state_aware_tool(state: CodeAgentState, action: str) -> str:
+def state_aware_tool(action: str, state: CodeAgentState) -> str:
     """A tool that needs access to agent state.
     
     Args:
@@ -47,7 +47,7 @@ def state_aware_tool(state: CodeAgentState, action: str) -> str:
     return f"State-aware tool: {action} (step={step_count}, history={history_len})"
 
 @tool
-async def async_state_aware_tool(state: CodeAgentState, task: str) -> str:
+async def async_state_aware_tool(task: str, state: CodeAgentState) -> str:
     """An async tool that needs access to agent state.
     
     Args:
