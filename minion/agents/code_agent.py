@@ -228,6 +228,9 @@ class CodeAgent(BaseAgent):
             # Get tools list from agent
             tools = self.tools
             
+            # 同步state到brain，这样minion可以访问agent的状态
+            self.brain.state = self.state
+            
             # Call brain.step with enhanced input directly
             result = await self.brain.step(enhanced_input, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
             

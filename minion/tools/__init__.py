@@ -4,7 +4,7 @@
 工具模块
 """
 from minion.tools.base_tool import BaseTool, ToolCollection, Toolset
-from minion.tools.async_base_tool import AsyncBaseTool, async_tool, SyncToAsyncToolAdapter, AsyncToolCollection
+from minion.tools.async_base_tool import AsyncBaseTool
 from minion.tools.tool_decorator import tool
 
 # Optional imports with fallbacks
