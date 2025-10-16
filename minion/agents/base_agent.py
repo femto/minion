@@ -227,48 +227,40 @@ class BaseAgent:
         
         for tool in self.tools:
             if hasattr(tool, 'needs_state') and tool.needs_state:
-                # Check if it's an AgentStateAwareTool
-                if isinstance(tool, AgentStateAwareTool):
-                    # For AgentStateAwareTool, just set the agent context
-                    tool._set_agent_context(self)
-                    wrap_count += 1
-                    logger.info(f"Set agent context for AgentStateAwareTool: {tool.name}")
-                
-                else:
-                    # Legacy wrapping for other state-aware tools
-                    tool_type = type(tool).__name__
-                    is_async = isinstance(tool, AsyncBaseTool)
-                    is_base = isinstance(tool, BaseTool)
-                    logger.debug(f"Wrapping tool {tool.name}: type={tool_type}, is_async={is_async}, is_base={is_base}")
-                    
-                    if isinstance(tool, AsyncBaseTool):
-                        # 异步工具包装器 - 使用默认参数来捕获变量
-                        def create_async_wrapper(original_forward, agent_ref):
-                            async def wrapped_async_forward(self_tool, *args, **kwargs):
-                                # 获取agent的state
-                                agent_state = getattr(agent_ref, 'state', None)
-                                # 将state作为关键字参数传递，这样不依赖于参数位置
-                                return await original_forward(self_tool, *args, state=agent_state, **kwargs)
-                            return wrapped_async_forward
-                        
-                        wrapper = create_async_wrapper(tool.forward, self)
-                        tool.forward = wrapper.__get__(tool, type(tool))
-                        
-                    elif isinstance(tool, BaseTool):
-                        # 同步工具包装器 - 使用默认参数来捕获变量
-                        def create_sync_wrapper(original_forward, agent_ref):
-                            def wrapped_sync_forward(self_tool, *args, **kwargs):
-                                # 获取agent的state
-                                agent_state = getattr(agent_ref, 'state', None)
-                                # 将state作为第一个位置参数传递，不传递self_tool
-                                return original_forward(self_tool, *args, state=agent_state, **kwargs)
-                            return wrapped_sync_forward
-                        
-                        wrapper = create_sync_wrapper(tool.forward, self)
-                        tool.forward = wrapper.__get__(tool, type(tool))
-                    
-                    wrap_count += 1
-                    logger.info(f"Successfully wrapped legacy state-aware tool: {tool.name}")
+
+                tool_type = type(tool).__name__
+                is_async = isinstance(tool, AsyncBaseTool)
+                is_base = isinstance(tool, BaseTool)
+                logger.debug(f"Wrapping tool {tool.name}: type={tool_type}, is_async={is_async}, is_base={is_base}")
+
+                if isinstance(tool, AsyncBaseTool):
+                    # 异步工具包装器 - 使用默认参数来捕获变量
+                    def create_async_wrapper(original_forward, agent_ref):
+                        async def wrapped_async_forward(self_tool, *args, **kwargs):
+                            # 获取agent的state
+                            agent_state = getattr(agent_ref, 'state', None)
+                            # 将state作为关键字参数传递，这样不依赖于参数位置
+                            return await original_forward(*args, state=agent_state, **kwargs)
+                        return wrapped_async_forward
+
+                    wrapper = create_async_wrapper(tool.forward, self)
+                    tool.forward = wrapper.__get__(tool, type(tool))
+
+                elif isinstance(tool, BaseTool):
+                    # 同步工具包装器 - 使用默认参数来捕获变量
+                    def create_sync_wrapper(original_forward, agent_ref):
+                        def wrapped_sync_forward(self_tool, *args, **kwargs):
+                            # 获取agent的state
+                            agent_state = getattr(agent_ref, 'state', None)
+                            # 将state作为第一个位置参数传递，不传递self_tool
+                            return original_forward(*args, state=agent_state, **kwargs)
+                        return wrapped_sync_forward
+
+                    wrapper = create_sync_wrapper(tool.forward, self)
+                    tool.forward = wrapper.__get__(tool, type(tool))
+
+                wrap_count += 1
+                logger.info(f"Successfully wrapped legacy state-aware tool: {tool.name}")
             
             wrapped_tools.append(tool)
         
