@@ -41,6 +41,10 @@ class BaseAgent:
     
     def __post_init__(self):
         """初始化后的处理"""
+        # Set agent reference in state
+        if self.state and not self.state.agent:
+            self.state.agent = self
+            
         # Automatically handle toolset objects in tools parameter
         # not quite useful
         # current just for setting self._toolsets
@@ -675,6 +679,7 @@ Please provide the answer directly, without explaining why you couldn't complete
             
         # 初始化强类型状态
         self.state = AgentState(
+            agent=self,
             input=input_obj,
             history=[],
             step_count=0,
@@ -977,3 +982,5 @@ Please provide the answer directly, without explaining why you couldn't complete
         import pickle
         with open(filepath, 'rb') as f:
             return pickle.load(f)
+
+

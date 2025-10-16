@@ -20,7 +20,6 @@ from datetime import datetime
 from .base_agent import BaseAgent
 from minion.types.agent_response import AgentResponse
 from minion.types.agent_state import AgentState, CodeAgentState
-from ..tools.agent_state_aware_tool import AgentStateAwareTool
 from ..tools.base_tool import BaseTool
 from ..main.input import Input
 from ..main.local_python_executor import LocalPythonExecutor
@@ -128,6 +127,10 @@ class CodeAgent(BaseAgent):
     def __post_init__(self):
         """Initialize the CodeAgent with thinking capabilities and optional state tracking."""
         super().__post_init__()
+        
+        # Set agent reference in state if not already set
+        if self.state and not self.state.agent:
+            self.state.agent = self
         
         # Initialize thinking engine
         self.thinking_engine = ThinkingEngine(self)
@@ -752,7 +755,7 @@ Use Python code to:
         """
         # Initialize internal state if needed
         if not hasattr(self, 'state') or self.state is None:
-            self.state = CodeAgentState()
+            self.state = CodeAgentState(agent=self)
         
         # Handle reset functionality
         if reset:
@@ -795,7 +798,7 @@ Use Python code to:
         if hasattr(self, 'state') and self.state:
             self.state.reset()
         else:
-            self.state = CodeAgentState()
+            self.state = CodeAgentState(agent=self)
         
         if self.enable_state_tracking:
             # Clear conversation history
