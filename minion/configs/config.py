@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from minion.const import MINION_ROOT
 
@@ -45,8 +45,7 @@ class LLMConfig(BaseModel):
     vision_enabled: bool = False
     region: Optional[str] = None  # For AWS Bedrock and other cloud providers
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class EllConfig(BaseModel):
@@ -63,8 +62,7 @@ class Config(BaseModel):
     ell: Dict[str, Any] = Field(default_factory=dict)
     mem0: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 @lru_cache()

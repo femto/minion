@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict, Optional, Union, Callable, List
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from minion.utils.utils import extract_number_from_string
 from minion.utils.answer_extraction import extract_math_answer, extract_python
@@ -68,8 +68,7 @@ class Input(BaseModel):
     user_id: Optional[str] = None  # 用户ID
     stream: bool = False  # 是否启用流式输出
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # Basic fields
     long_context: str = Field(default="")  # Full context of the input

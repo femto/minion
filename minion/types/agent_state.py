@@ -6,7 +6,7 @@ the weakly-typed Dict[str, Any] approach.
 """
 
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, ConfigDict
 from ..main.input import Input
 
 
@@ -44,8 +44,7 @@ class AgentState(BaseModel):
     # Additional metadata
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
     
-    class Config:
-        arbitrary_types_allowed = True  # Allow Input and other custom types
+    model_config = ConfigDict(arbitrary_types_allowed=True)  # Allow Input and other custom types
     
     def reset(self) -> None:
         """Reset the state to initial values."""
