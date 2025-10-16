@@ -110,7 +110,13 @@ class BaseAgent(BaseModel):
         # Prevent duplicate setup
         if self._is_setup:
             return
-            
+
+        await self.pure_setup()
+
+        # Mark agent as setup
+        self._is_setup = True
+
+    async def pure_setup(self):
         # Setup toolsets (MCP, UTCP, etc.)
         for toolset in self._toolsets:
             try:
@@ -119,7 +125,6 @@ class BaseAgent(BaseModel):
                     logger.warning(f"Toolset {toolset.name} failed to setup: {toolset.setup_error}")
             except Exception as e:
                 logger.error(f"Failed to setup toolset {toolset.name}: {e}")
-
         # Get tools from healthy toolsets and merge into self.tools
         toolset_tools = []
         for toolset in self._toolsets:
@@ -127,34 +132,27 @@ class BaseAgent(BaseModel):
                 toolset_tools.extend(toolset.get_tools())
             else:
                 logger.warning(f"Skipping unhealthy toolset {toolset.name}")
-        
         # Merge toolset tools into self.tools
         if toolset_tools:
             self.tools.extend(toolset_tools)
             logger.info(f"Added {len(toolset_tools)} toolset tools to agent")
-
         # Auto-convert raw functions to appropriate tool types
         self._convert_raw_functions_to_tools()
-        
         # Wrap state-aware tools to automatically pass agent state
         logger.info("About to wrap state-aware tools...")
         self._wrap_state_aware_tools()
         logger.info("Finished wrapping state-aware tools")
-
         # Initialize brain with tools
         if self.brain is None:
-            #we don't pass tools to brain, instead we
-            #pass agent.tools when run/run_sync to brain.step
-            #this way we can easily refresh tools on agent
+            # we don't pass tools to brain, instead we
+            # pass agent.tools when run/run_sync to brain.step
+            # this way we can easily refresh tools on agent
             brain_kwargs = {'tools': []}
             if self.llm is not None:
                 brain_kwargs['llm'] = self.llm
                 brain_kwargs['state'] = self.state
             self.brain = Brain(**brain_kwargs)
-        
-        # Mark agent as setup
-        self._is_setup = True
-    
+
     async def close(self):
         """
         Agent清理关闭，在停止使用agent时调用

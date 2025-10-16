@@ -146,8 +146,7 @@ class CodeAgent(BaseAgent):
                 additional_functions={}
             )
         
-        # Call the extraction method that was in model_post_init
-        self._extract_toolsets_from_tools()
+        # Note: _extract_toolsets_from_tools() is already called in BaseAgent.__init__
         
     @property
     def history(self) -> List[Any]:
@@ -174,8 +173,12 @@ class CodeAgent(BaseAgent):
     async def setup(self):
         if self._is_setup:
             return
-        await super().setup()
-        self._is_setup = False #since super setting this to True, we immediately set it to False
+            
+        # Call parent setup first
+        await super().pure_setup()
+        
+        # Note: _is_setup is now True from parent setup
+        # We don't reset it to False, just add our additional setup
         
         # Set brain.python_env to the executor after brain is initialized
         if self.brain and self.python_executor:
@@ -189,8 +192,9 @@ class CodeAgent(BaseAgent):
         # Initialize state tracking if enabled
         if self.enable_state_tracking:
             self._initialize_state()
+            
+        # Mark agent as setup
         self._is_setup = True
-
 
     async def execute_step(self, state: CodeAgentState, stream: bool = False, **kwargs) -> AgentResponse:
         """
