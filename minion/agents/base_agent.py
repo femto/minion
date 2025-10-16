@@ -38,7 +38,7 @@ class BaseAgent(BaseModel):
         "validate_assignment": True,      # Validate on assignment
         "extra": "forbid"                 # Don't allow extra fields
     }
-    
+
     def __init__(self, **data):
         super().__init__(**data)
         # Initialize private attributes after Pydantic initialization
