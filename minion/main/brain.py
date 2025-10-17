@@ -223,6 +223,7 @@ Supporting navigation and spatial memory""",
             
             # 如果有messages，优先使用messages创建Input
             if messages is not None:
+                # 支持标准 OpenAI messages 格式
                 input = Input(query=messages, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
             else:
                 # 否则使用query创建Input

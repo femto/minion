@@ -102,12 +102,19 @@ class RawMinion(WorkerMinion):
             response = await node.execute(messages, tools=tools, stream=False)
         else:
             query = self.input.query
-            # Support both string and multimodal queries
+            # Support string, content blocks, and full messages format
             if isinstance(query, list):
-                # For multimodal queries, construct proper message format
-                # Create a temporary object with query and system_prompt
-                temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
-                messages = construct_simple_message(temp_input)
+                # Check if it's already in OpenAI messages format
+                if query and isinstance(query[0], dict) and "role" in query[0]:
+                    # Already in messages format, use directly
+                    messages = query
+                    # Add system prompt if provided and not already present
+                    if self.input.system_prompt and (not messages or messages[0].get("role") != "system"):
+                        messages = [{"role": "system", "content": self.input.system_prompt}] + messages
+                else:
+                    # Content blocks format, convert to messages
+                    temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
+                    messages = construct_simple_message(temp_input)
                 response = await node.execute(messages, tools=tools, stream=False)
             else:
                 # For simple string queries, use traditional approach
@@ -141,11 +148,19 @@ class RawMinion(WorkerMinion):
             stream_generator = await node.execute(messages, tools=tools, stream=True)
         else:
             query = self.input.query
-            # Support both string and multimodal queries
+            # Support string, content blocks, and full messages format
             if isinstance(query, list):
-                # For multimodal queries, construct proper message format
-                temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
-                messages = construct_simple_message(temp_input)
+                # Check if it's already in OpenAI messages format
+                if query and isinstance(query[0], dict) and "role" in query[0]:
+                    # Already in messages format, use directly
+                    messages = query
+                    # Add system prompt if provided and not already present
+                    if self.input.system_prompt and (not messages or messages[0].get("role") != "system"):
+                        messages = [{"role": "system", "content": self.input.system_prompt}] + messages
+                else:
+                    # Content blocks format, convert to messages
+                    temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
+                    messages = construct_simple_message(temp_input)
                 stream_generator = await node.execute(messages, tools=tools, stream=True)
             else:
                 # For simple string queries, use traditional approach
@@ -221,17 +236,28 @@ class NativeMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        if self.task:
-            # Task mode: use TASK_INPUT template
-            template_str = WORKER_PROMPT + TASK_INPUT
-            messages = construct_messages_from_template(
-                template_str, self.input, task=self.task
-            )
+        query = self.input.query
+        
+        # Support string, content blocks, and full messages format
+        if isinstance(query, list) and query and isinstance(query[0], dict) and "role" in query[0]:
+            # Already in messages format, use directly
+            messages = query
+            # Add system prompt if provided and not already present
+            if self.input.system_prompt and (not messages or messages[0].get("role") != "system"):
+                messages = [{"role": "system", "content": self.input.system_prompt}] + messages
         else:
-            # Normal mode: use original WORKER_PROMPT
-            messages = construct_messages_from_template(
-                WORKER_PROMPT, self.input
-            )
+            # Use template-based approach for other formats
+            if self.task:
+                # Task mode: use TASK_INPUT template
+                template_str = WORKER_PROMPT + TASK_INPUT
+                messages = construct_messages_from_template(
+                    template_str, self.input, task=self.task
+                )
+            else:
+                # Normal mode: use original WORKER_PROMPT
+                messages = construct_messages_from_template(
+                    WORKER_PROMPT, self.input
+                )
         
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
@@ -1075,11 +1101,11 @@ class CodeMinion(PythonMinion):
         """Construct OpenAI messages format for smolagents-style execution
         
         Args:
-            query: Can be string or messages list (supports multimodal)
+            query: Can be string, content blocks, or full messages list
             tools: Available tools list
             task: Task information
             error: Error information from previous attempts
-            conversation_history: Previous conversation history
+            conversation_history: Previous conversation history (list of message dicts)
             
         Returns:
             List[Dict]: OpenAI messages format
@@ -1228,6 +1254,48 @@ Please fix the error and try again."""
             "role": "user", 
             "content": user_content_parts
         })
+        
+        return messages
+
+    def construct_messages_with_history(self, query, tools=[], task=None, error="", conversation_history=[]):
+        """Construct messages including conversation history
+        
+        Args:
+            query: Can be string, content blocks, or full messages list
+            tools: Available tools list
+            task: Task information
+            error: Error information from previous attempts
+            conversation_history: Previous conversation history (list of message dicts)
+            
+        Returns:
+            List[Dict]: OpenAI messages format including history
+        """
+        # Start with system message
+        messages = []
+        
+        # Handle different query formats
+        if isinstance(query, list) and query and isinstance(query[0], dict) and "role" in query[0]:
+            # Already in messages format
+            messages = query.copy()
+        else:
+            # Use construct_messages for other formats
+            messages = self.construct_messages(query, tools, task, error, [])
+        
+        # Insert conversation history before the last user message
+        if conversation_history:
+            # Find the last user message
+            last_user_idx = -1
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i].get("role") == "user":
+                    last_user_idx = i
+                    break
+            
+            if last_user_idx >= 0:
+                # Insert history before the last user message
+                messages = messages[:last_user_idx] + conversation_history + messages[last_user_idx:]
+            else:
+                # No user message found, append history at the end
+                messages.extend(conversation_history)
         
         return messages
 
@@ -1405,27 +1473,25 @@ Let's start! Remember to end your code blocks with <end_code>.
             return str(query)
     
     def _get_conversation_history(self):
-        """Get conversation history from brain.state if available"""
+        """Get conversation history from brain.state if available
+        
+        Returns:
+            List[Dict]: List of OpenAI message format dicts
+        """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
-            # Extract conversation from agent state history
-            conversation = []
-            for item in self.brain.state.history:
-                if isinstance(item, str):
-                    conversation.append(item)
-                elif hasattr(item, 'raw_response'):
-                    conversation.append(item.raw_response)
-                elif isinstance(item, tuple) and len(item) > 0:
-                    conversation.append(str(item[0]))
-                else:
-                    conversation.append(str(item))
-            return conversation
+            # Return the history as-is if it's already in messages format
+            return self.brain.state.history
         return []
     
-    def _append_conversation_history(self, attempt_info):
-        """Append new attempt info to conversation history in brain.state if available"""
+    def _append_conversation_history(self, message_dict):
+        """Append new message to conversation history in brain.state if available
+        
+        Args:
+            message_dict: OpenAI message format dict with role and content
+        """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
-            # Add to agent state history
-            self.brain.state.history.append(attempt_info)
+            # Add to agent state history in full messages format
+            self.brain.state.history.append(message_dict)
     
     async def execute(self):
         """Execute with smolagents-style Thought -> Code -> Observation cycle"""
@@ -1437,11 +1503,26 @@ Let's start! Remember to end your code blocks with <end_code>.
             query = self.input.query
         
         error = ""
-        full_conversation = self._get_conversation_history()
+        conversation_history = self._get_conversation_history()
         tools = self.brain.tools + self.input.tools
+        
+        # If query is already in messages format, extract the initial user message
+        initial_user_message = None
+        if isinstance(query, list) and query and isinstance(query[0], dict) and "role" in query[0]:
+            # Find the user message
+            for msg in query:
+                if msg.get("role") == "user":
+                    initial_user_message = msg
+                    break
+        
         for iteration in range(self.max_iterations):
-            # Construct messages instead of plain prompt
-            messages = self.construct_messages(query, tools, self.task, error, full_conversation)
+            # Construct messages for this iteration
+            if iteration == 0 and initial_user_message:
+                # Use the original user message for first iteration
+                messages = self.construct_messages_with_history(query, tools, self.task, error, conversation_history)
+            else:
+                # For subsequent iterations, construct new messages
+                messages = self.construct_messages(query, tools, self.task, error, conversation_history)
             
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
@@ -1500,14 +1581,24 @@ Let's start! Remember to end your code blocks with <end_code>.
                     logger.error(f"Code execution error: {error}")
                     observation = f"**Observation:** Error occurred:\n{error}"
                     
-                    # Add to conversation history
-                    attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
-                    full_conversation.append(f"**Attempt {iteration + 1}:**")
-                    full_conversation.append(response)
-                    full_conversation.append(observation)
+                    # Add to conversation history in full messages format
+                    assistant_message = {
+                        "role": "assistant", 
+                        "content": response
+                    }
+                    tool_message = {
+                        "role": "tool",
+                        "content": observation,
+                        "tool_call_id": f"attempt_{iteration + 1}"
+                    }
                     
-                    # Update brain.state history
-                    self._append_conversation_history(attempt_info)
+                    # Update brain.state history with full messages
+                    self._append_conversation_history(assistant_message)
+                    self._append_conversation_history(tool_message)
+                    
+                    # Update local conversation history
+                    conversation_history.append(assistant_message)
+                    conversation_history.append(tool_message)
                     
                     # Try again with error feedback
                     continue
@@ -1553,14 +1644,24 @@ Let's start! Remember to end your code blocks with <end_code>.
                             info={'final_answer_heuristic': True}
                         )
                     
-                    # Add to conversation and continue
-                    attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
-                    full_conversation.append(f"**Attempt {iteration + 1}:**")
-                    full_conversation.append(response)
-                    full_conversation.append(observation)
+                    # Add to conversation and continue in full messages format
+                    assistant_message = {
+                        "role": "assistant", 
+                        "content": response
+                    }
+                    tool_message = {
+                        "role": "tool",
+                        "content": observation,
+                        "tool_call_id": f"attempt_{iteration + 1}"
+                    }
                     
-                    # Update brain.state history
-                    self._append_conversation_history(attempt_info)
+                    # Update brain.state history with full messages
+                    self._append_conversation_history(assistant_message)
+                    self._append_conversation_history(tool_message)
+                    
+                    # Update local conversation history
+                    conversation_history.append(assistant_message)
+                    conversation_history.append(tool_message)
                     
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
@@ -1598,13 +1699,24 @@ Let's start! Remember to end your code blocks with <end_code>.
                 logger.error(f"Execution error: {error}")
                 observation = f"**Observation:** Execution failed:\n{error}"
                 
-                attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
-                full_conversation.append(f"**Attempt {iteration + 1}:**")
-                full_conversation.append(response)
-                full_conversation.append(observation)
+                # Add failed attempt to conversation history in full messages format
+                assistant_message = {
+                    "role": "assistant", 
+                    "content": response
+                }
+                tool_message = {
+                    "role": "tool",
+                    "content": observation,
+                    "tool_call_id": f"attempt_{iteration + 1}_failed"
+                }
                 
-                # Update brain.state history
-                self._append_conversation_history(attempt_info)
+                # Update brain.state history with full messages
+                self._append_conversation_history(assistant_message)
+                self._append_conversation_history(tool_message)
+                
+                # Update local conversation history
+                conversation_history.append(assistant_message)
+                conversation_history.append(tool_message)
                 
                 continue
         
