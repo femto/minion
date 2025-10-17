@@ -198,6 +198,8 @@ Supporting navigation and spatial memory""",
         else:
             raise ValueError(f"Unsupported state type: {type(state)}")
 
+        self.state = state #set up state when step, already set state when agent initialize brain, should we add if self.state is None here?
+
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
         query_type = config_kwargs.get("query_type", "")

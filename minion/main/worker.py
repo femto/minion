@@ -1248,8 +1248,8 @@ Let's start! Remember to end your code blocks with <end_code>.
             return conversation
         return []
     
-    def _update_conversation_history(self, attempt_info):
-        """Update conversation history in brain.state if available"""
+    def _append_conversation_history(self, attempt_info):
+        """Append new attempt info to conversation history in brain.state if available"""
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
             # Add to agent state history
             self.brain.state.history.append(attempt_info)
@@ -1338,7 +1338,7 @@ Let's start! Remember to end your code blocks with <end_code>.
                     full_conversation.append(observation)
                     
                     # Update brain.state history
-                    self._update_conversation_history(attempt_info)
+                    self._append_conversation_history(attempt_info)
                     
                     # Try again with error feedback
                     continue
@@ -1391,7 +1391,7 @@ Let's start! Remember to end your code blocks with <end_code>.
                     full_conversation.append(observation)
                     
                     # Update brain.state history
-                    self._update_conversation_history(attempt_info)
+                    self._append_conversation_history(attempt_info)
                     
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
@@ -1435,7 +1435,7 @@ Let's start! Remember to end your code blocks with <end_code>.
                 full_conversation.append(observation)
                 
                 # Update brain.state history
-                self._update_conversation_history(attempt_info)
+                self._append_conversation_history(attempt_info)
                 
                 continue
         
