@@ -8,6 +8,7 @@ the weakly-typed Dict[str, Any] approach.
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field, validator, ConfigDict
 from ..main.input import Input
+from .conversation_history import History
 
 
 class AgentState(BaseModel):
@@ -26,7 +27,7 @@ class AgentState(BaseModel):
     agent: Optional[Any] = Field(default=None, description="Reference to the agent instance")
     
     # Core execution state
-    history: List[Any] = Field(default_factory=list, description="Execution history")
+    history: History = Field(default_factory=History, description="Conversation history in OpenAI messages format")
     step_count: int = Field(default=0, description="Number of steps executed")
     error_count: int = Field(default=0, description="Number of errors encountered")
     
@@ -50,7 +51,7 @@ class AgentState(BaseModel):
         """Reset the state to initial values."""
         # Keep agent reference when resetting
         agent_ref = self.agent
-        self.history = []
+        self.history = History()
         self.step_count = 0
         self.error_count = 0
         self.task = None

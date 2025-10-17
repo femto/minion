@@ -1257,7 +1257,7 @@ Please fix the error and try again."""
         
         return messages
 
-    def construct_messages_with_history(self, query, tools=[], task=None, error="", conversation_history=[]):
+    def construct_messages_with_history(self, query, tools=[], task=None, error="", conversation_history=None):
         """Construct messages including conversation history
         
         Args:
@@ -1265,7 +1265,7 @@ Please fix the error and try again."""
             tools: Available tools list
             task: Task information
             error: Error information from previous attempts
-            conversation_history: Previous conversation history (list of message dicts)
+            conversation_history: ConversationHistory object or None
             
         Returns:
             List[Dict]: OpenAI messages format including history
@@ -1282,7 +1282,10 @@ Please fix the error and try again."""
             messages = self.construct_messages(query, tools, task, error, [])
         
         # Insert conversation history before the last user message
-        if conversation_history:
+        if conversation_history and len(conversation_history) > 0:
+            # Convert ConversationHistory to list of dicts
+            history_messages = conversation_history.to_list()
+            
             # Find the last user message
             last_user_idx = -1
             for i in range(len(messages) - 1, -1, -1):
@@ -1292,10 +1295,10 @@ Please fix the error and try again."""
             
             if last_user_idx >= 0:
                 # Insert history before the last user message
-                messages = messages[:last_user_idx] + conversation_history + messages[last_user_idx:]
+                messages = messages[:last_user_idx] + history_messages + messages[last_user_idx:]
             else:
                 # No user message found, append history at the end
-                messages.extend(conversation_history)
+                messages.extend(history_messages)
         
         return messages
 
@@ -1476,12 +1479,15 @@ Let's start! Remember to end your code blocks with <end_code>.
         """Get conversation history from brain.state if available
         
         Returns:
-            List[Dict]: List of OpenAI message format dicts
+            ConversationHistory: Strongly typed conversation history
         """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
-            # Return the history as-is if it's already in messages format
+            # Return the history (ConversationHistory object)
             return self.brain.state.history
-        return []
+        
+        # Import here to avoid circular imports
+        from minion.types.conversation_history import History
+        return History()
     
     def _append_conversation_history(self, message_dict):
         """Append new message to conversation history in brain.state if available
@@ -1490,7 +1496,7 @@ Let's start! Remember to end your code blocks with <end_code>.
             message_dict: OpenAI message format dict with role and content
         """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
-            # Add to agent state history in full messages format
+            # Add to agent state history (ConversationHistory object)
             self.brain.state.history.append(message_dict)
     
     async def execute(self):
@@ -1516,13 +1522,8 @@ Let's start! Remember to end your code blocks with <end_code>.
                     break
         
         for iteration in range(self.max_iterations):
-            # Construct messages for this iteration
-            if iteration == 0 and initial_user_message:
-                # Use the original user message for first iteration
-                messages = self.construct_messages_with_history(query, tools, self.task, error, conversation_history)
-            else:
-                # For subsequent iterations, construct new messages
-                messages = self.construct_messages(query, tools, self.task, error, conversation_history)
+            # Construct messages for this iteration including history
+            messages = self.construct_messages_with_history(query, tools, self.task, error, conversation_history)
             
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
@@ -1596,10 +1597,6 @@ Let's start! Remember to end your code blocks with <end_code>.
                     self._append_conversation_history(assistant_message)
                     self._append_conversation_history(tool_message)
                     
-                    # Update local conversation history
-                    conversation_history.append(assistant_message)
-                    conversation_history.append(tool_message)
-                    
                     # Try again with error feedback
                     continue
                 else:
@@ -1659,10 +1656,6 @@ Let's start! Remember to end your code blocks with <end_code>.
                     self._append_conversation_history(assistant_message)
                     self._append_conversation_history(tool_message)
                     
-                    # Update local conversation history
-                    conversation_history.append(assistant_message)
-                    conversation_history.append(tool_message)
-                    
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
                         self.answer = self.input.answer = result_text
@@ -1713,10 +1706,6 @@ Let's start! Remember to end your code blocks with <end_code>.
                 # Update brain.state history with full messages
                 self._append_conversation_history(assistant_message)
                 self._append_conversation_history(tool_message)
-                
-                # Update local conversation history
-                conversation_history.append(assistant_message)
-                conversation_history.append(tool_message)
                 
                 continue
         

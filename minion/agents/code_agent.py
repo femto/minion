@@ -739,9 +739,8 @@ Use Python code to:
         # Enhance input with code-thinking instructions
         enhanced_input = self._enhance_input_for_code_thinking(input_data)
         
-        # Add conversation context if state tracking is enabled
-        if self.enable_state_tracking:
-            enhanced_input = self._add_conversation_context(enhanced_input)
+        # Note: Conversation context is now handled by Minion via brain.state.history
+        # No need to embed history in the query anymore
         
         return enhanced_input
     
