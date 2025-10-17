@@ -1071,6 +1071,166 @@ class CodeMinion(PythonMinion):
             
             self.python_env.send_tools(all_tools)
         
+    def construct_messages(self, query, tools=[], task=None, error="", conversation_history=[]):
+        """Construct OpenAI messages format for smolagents-style execution
+        
+        Args:
+            query: Can be string or messages list (supports multimodal)
+            tools: Available tools list
+            task: Task information
+            error: Error information from previous attempts
+            conversation_history: Previous conversation history
+            
+        Returns:
+            List[Dict]: OpenAI messages format
+        """
+        # Get available tools description
+        available_tools = []
+        for tool in tools:
+            if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                tool_desc = f"- {tool.name}: {tool.description}"
+
+                # Add readonly information if available
+                if hasattr(tool, 'readonly') and tool.readonly:
+                    tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
+
+                # Add parameter information and usage example for tools
+                tool_params = None
+                if hasattr(tool, 'parameters') and tool.parameters:
+                    if 'properties' in tool.parameters:
+                        tool_params = tool.parameters['properties']
+                elif hasattr(tool, 'inputs') and tool.inputs:
+                    tool_params = tool.inputs
+
+                if tool_params:
+                    params = tool_params
+                    param_list = []
+                    for param_name, param_info in params.items():
+                        param_type = param_info.get('type', 'any')
+                        param_desc = param_info.get('description', '')
+                        param_list.append(f"{param_name} ({param_type}): {param_desc}")
+
+                        if param_list:
+                            tool_desc += f"\n  Parameters: {', '.join(param_list)}"
+
+                            # Add usage example with keyword arguments
+                            example_params = []
+                            for param_name, param_info in params.items():
+                                param_type = param_info.get('type', 'str')
+                                if param_type == 'string':
+                                    example_params.append(f'{param_name}="example_value"')
+                                elif param_type == 'integer':
+                                    example_params.append(f'{param_name}=123')
+                                elif param_type == 'boolean':
+                                    example_params.append(f'{param_name}=True')
+                                else:
+                                    example_params.append(f'{param_name}="value"')
+
+                            if example_params:
+                                tool_desc += f"\n  Usage: await {tool.name}({', '.join(example_params)})"
+
+                available_tools.append(tool_desc)
+        
+        tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
+        
+        # Construct system message
+        prompt = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
+To do so, you have been given access to a list of tools. Each tool is actually a Python function which you can call by writing Python code. You can use the tool by writing Python code that calls the function.
+
+You are provided with the following tools:
+{tools_description}
+
+**Important Notes for Asynchronous Operations:**
+- You are already in an async context - DON'T use `asyncio.run()`
+- Use `await` directly at the top level in your code: `result = await async_function()`
+- When calling async tools or functions, always use `await` to get the actual result
+- No need to wrap your code in async functions - just use `await` directly
+
+**Important Notes for Tool Usage:**
+- ALWAYS use keyword arguments when calling tools, never use positional arguments
+- Example: `await tool_name(param1="value1", param2="value2")` ✓
+- Never: `await tool_name("value1", "value2")` ✗
+- All tool parameters must be explicitly named
+
+You will be given a task to solve as best you can. To solve the task, you must plan and execute Python code step by step until you have solved the task.
+
+Here is the format you should follow:
+**Thought:** Your reasoning about what to do next
+**Code:** 
+```python
+# Your Python code here
+```<end_code>
+
+**Observation:** [This will be filled automatically with the execution result]
+
+Continue this Thought/Code/Observation cycle until you solve the task completely."""
+
+        messages = [{"role": "user", "content": prompt}]
+        
+        # Construct user message content
+        user_content_parts = []
+        
+        # Add task or problem description
+        if task:
+            task_text = f"""**Task:** {task.get('instruction', '')}
+**Description:** {task.get('task_description', '')}"""
+            
+            # Add dependent outputs if available
+            if task.get("dependent"):
+                dependent_info = "\n**Dependent outputs:**\n"
+                for dependent in task["dependent"]:
+                    dependent_key = dependent.get("dependent_key")
+                    if dependent_key in self.input.symbols:
+                        symbol = self.input.symbols[dependent_key]
+                        dependent_info += f"- {dependent_key}: {symbol.output}\n"
+                task_text += dependent_info
+            
+            user_content_parts.append({"type": "text", "text": task_text})
+        else:
+            # Handle different query formats
+            if isinstance(query, str):
+                user_content_parts.append({"type": "text", "text": f"**Problem:** {query}"})
+            elif isinstance(query, list):
+                # Add problem header
+                user_content_parts.append({"type": "text", "text": "**Problem:**"})
+                # Add multimodal content
+                for item in query:
+                    if isinstance(item, dict):
+                        # Already formatted content block
+                        user_content_parts.append(item)
+                    elif isinstance(item, str):
+                        # Plain text
+                        user_content_parts.append({"type": "text", "text": item})
+                    else:
+                        # Convert other types to text
+                        user_content_parts.append({"type": "text", "text": str(item)})
+        
+        # Add error information if available
+        if error:
+            error_text = f"""
+
+**Previous Error:** 
+{error}
+
+Please fix the error and try again."""
+            user_content_parts.append({"type": "text", "text": error_text})
+        
+        # Add conversation history if available
+        if conversation_history:
+            history_text = "\n\n**Previous attempts:**\n" + "\n".join(conversation_history)
+            user_content_parts.append({"type": "text", "text": history_text})
+        
+        # Add final instruction
+        user_content_parts.append({"type": "text", "text": "\n\nLet's start! Remember to end your code blocks with <end_code>."})
+        
+        # Add user message
+        messages.append({
+            "role": "user", 
+            "content": user_content_parts
+        })
+        
+        return messages
+
     def construct_prompt(self, query,tools = [], task=None, error=""):
         """Construct smolagents-style prompt with <end_code> support
         
@@ -1280,18 +1440,14 @@ Let's start! Remember to end your code blocks with <end_code>.
         full_conversation = self._get_conversation_history()
         tools = self.brain.tools + self.input.tools
         for iteration in range(self.max_iterations):
-            # Construct the prompt
-            prompt = self.construct_prompt(query, tools,self.task, error)
-            
-            # Add previous conversation context
-            if full_conversation:
-                prompt += "\n\n**Previous attempts:**\n" + "\n".join(full_conversation)
+            # Construct messages instead of plain prompt
+            messages = self.construct_messages(query, tools, self.task, error, full_conversation)
             
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
             tools = (self.input.tools or []) + (self.brain.tools or [])
             try:
-                response = await node.execute(prompt, tools=tools)
+                response = await node.execute(messages, tools=tools)
             except FinalAnswerException as e:
                 # 收到 final_answer 工具调用，直接返回结果
                 final_answer = e.answer
