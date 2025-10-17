@@ -250,9 +250,9 @@ Supporting navigation and spatial memory""",
         # 选择心智
         mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
-            self.llm.config.temperature = 1
+            self.llm.config.temperature = 0.1
         elif mind_id == "right_mind":
-            self.llm.config.temperature = 1
+            self.llm.config.temperature = 0.7
         mind = self.minds[mind_id]
         
         # 检查是否需要流式输出

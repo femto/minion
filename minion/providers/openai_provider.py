@@ -401,7 +401,7 @@ class OpenAIProvider(BaseProvider):
                     content = delta.content
                     full_content += content
                     # 调用log_llm_stream实时显示流式内容
-                    #log_llm_stream(content)
+                    log_llm_stream(content)
                 # Track finish_reason and role if present
                 if hasattr(chunk.choices[0], 'finish_reason') and chunk.choices[0].finish_reason:
                     finish_reason = chunk.choices[0].finish_reason
