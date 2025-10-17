@@ -1207,7 +1207,7 @@ Let's start! Remember to end your code blocks with <end_code>.
         """Extract text content from query (handle both string and messages format)
         
         Args:
-            query: Can be string or messages list
+            query: Can be string or messages list (supports both OpenAI messages format and content blocks format)
             
         Returns:
             str: Extracted text content
@@ -1215,18 +1215,31 @@ Let's start! Remember to end your code blocks with <end_code>.
         if isinstance(query, str):
             return query
         elif isinstance(query, list):
-            # Handle messages format
             text_parts = []
             for msg in query:
-                if isinstance(msg, dict) and "content" in msg:
-                    content = msg["content"]
-                    if isinstance(content, str):
-                        text_parts.append(f"{msg.get('role', 'user')}: {content}")
-                    elif isinstance(content, list):
-                        # Extract text from content list
-                        for item in content:
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                text_parts.append(f"{msg.get('role', 'user')}: {item.get('text', '')}")
+                if isinstance(msg, dict):
+                    # Check if it's a content block format: {"type": "text", "content": "..."}
+                    if msg.get("type") == "text" and "content" in msg:
+                        text_parts.append(msg.get("content", ""))
+                    # Check if it's a content block format with "text" field: {"type": "text", "text": "..."}
+                    elif msg.get("type") == "text" and "text" in msg:
+                        text_parts.append(msg.get("text", ""))
+                    # Check if it's OpenAI messages format: {"role": "user", "content": "..."}
+                    elif "role" in msg and "content" in msg:
+                        content = msg["content"]
+                        if isinstance(content, str):
+                            text_parts.append(f"{msg.get('role', 'user')}: {content}")
+                        elif isinstance(content, list):
+                            # Extract text from nested content list
+                            for item in content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    # Handle both "text" and "content" fields in nested items
+                                    text_content = item.get("text") or item.get("content", "")
+                                    if text_content:
+                                        text_parts.append(f"{msg.get('role', 'user')}: {text_content}")
+                    # Handle plain string items in the list
+                elif isinstance(msg, str):
+                    text_parts.append(msg)
             return "\n".join(text_parts) if text_parts else str(query)
         else:
             return str(query)
