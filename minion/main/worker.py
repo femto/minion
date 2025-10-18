@@ -1386,7 +1386,10 @@ Please fix the error and try again."""
             code_blocks = self.extract_code_blocks(response)
             
             if not code_blocks:
-                # No code found, return the response as-is
+                # No code found, add LLM response to current turn and return
+                self.current_turn_attempts.append(f"**Assistant Response {iteration+1}:** {response}")
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                
                 self.answer = self.input.answer = response
                 # Return AgentResponse for non-code response
                 return AgentResponse(
@@ -1394,9 +1397,13 @@ Please fix the error and try again."""
                     answer=self.answer,
                     score=0.5,
                     terminated=True,
+                    is_final_answer=True,
                     truncated=False,
                     info={'no_code_found': True}
                 )
+            
+            # Add LLM response to current turn attempts (before execution)
+            self.current_turn_attempts.append(f"**Assistant Response {iteration+1}:** {response}")
             
             # Execute the first code block
             code = code_blocks[0]
@@ -1417,7 +1424,7 @@ Please fix the error and try again."""
                     error = str(output)
                     logger.error(f"Code execution error: {error}")
                     observation = f"**Observation:** Error occurred:\n{error}"
-                    self.current_turn_attempts.append(f"Attempt {iteration+1}:{observation}")
+                    self.current_turn_attempts.append(observation)
                     # Try again with error feedback
                     continue
                 else:
@@ -1430,7 +1437,7 @@ Please fix the error and try again."""
                         observation_parts.append(f"Output: {output}")
                     
                     observation = f"**Observation:** Code executed successfully:\n" + "\n".join(observation_parts)
-                    self.current_turn_attempts.append(f"Attempt {iteration+1}:{observation}")
+                    self.current_turn_attempts.append(observation)
                     
                     # Use the final answer from LocalPythonExecutor if available
                     if is_final_answer:
@@ -1481,6 +1488,7 @@ Please fix the error and try again."""
                             answer=self.answer,
                             score=0.8,
                             terminated=False,
+                            is_final_answer=False,
                             truncated=True,
                             info={'max_iterations_reached': True}
                         )
@@ -1511,7 +1519,7 @@ Please fix the error and try again."""
                 error = str(e)
                 logger.error(f"Execution error: {error}")
                 observation = f"**Observation:** Execution failed:\n{error}"
-                
+                self.current_turn_attempts.append(observation)
                 continue
         
         # If we've exhausted all iterations, return the last response
@@ -1523,6 +1531,7 @@ Please fix the error and try again."""
             answer=self.answer,
             score=0.3,
             terminated=False,
+            is_final_answer=False,
             truncated=True,
             info={'all_iterations_failed': True}
         )
