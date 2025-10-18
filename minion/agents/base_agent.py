@@ -701,19 +701,8 @@ Please provide the answer directly, without explaining why you couldn't complete
         self.state.history.append(result)
         self.state.step_count += 1
         
-        # 提取响应内容作为下一步输入
-        if hasattr(result, 'raw_response'):
-            response = result.raw_response
-        elif hasattr(result, 'answer'):
-            response = result.answer
-        # 检查5-tuple格式
-        elif isinstance(result, tuple) and len(result) > 0:
-            response = result[0]  # 返回response部分
-        else:
-            response = result
-            
         if isinstance(self.state.input, Input):
-            self.state.input.query = f"上一步结果: {response}\n继续执行任务: {self.state.task}"
+            self.state.input.query = f"Continue your task: {self.state.task}"
             
         return self.state
     
