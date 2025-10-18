@@ -674,10 +674,11 @@ Please provide the answer directly, without explaining why you couldn't complete
             task_str = task.query
             
         # 初始化强类型状态
+        from minion.types.history import History
         self.state = AgentState(
             agent=self,
             input=input_obj,
-            history=[],
+            history=History(),
             step_count=0,
             task=task_str
         )
@@ -697,14 +698,94 @@ Please provide the answer directly, without explaining why you couldn't complete
         # 使用传入的状态
         self.state = state
             
-        # 添加结果到历史
-        self.state.history.append(result)
+        # 将结果转换为消息格式并添加到历史
+        message_dict = self._convert_result_to_message(result)
+        self.state.history.append(message_dict)
         self.state.step_count += 1
         
         if isinstance(self.state.input, Input):
             self.state.input.query = f"Continue your task: {self.state.task}"
             
         return self.state
+    
+    def _convert_result_to_message(self, result: Any) -> Dict[str, Any]:
+        """
+        将步骤结果转换为OpenAI消息格式
+        Args:
+            result: 步骤执行结果 (可以是5-tuple或AgentResponse)
+        Returns:
+            Dict[str, Any]: OpenAI消息格式的字典
+        """
+        from minion.types.agent_response import AgentResponse
+        
+        # 如果是AgentResponse对象
+        if isinstance(result, AgentResponse):
+            content = result.content or str(result.raw_response) if result.raw_response is not None else ""
+            message = {
+                "role": "assistant",
+                "content": content,
+                "metadata": {
+                    "score": result.score,
+                    "confidence": result.confidence,
+                    "terminated": result.terminated,
+                    "truncated": result.truncated,
+                    "is_final_answer": result.is_final_answer,
+                    "timestamp": result.timestamp
+                }
+            }
+            
+            # 添加答案信息
+            if result.answer is not None:
+                message["metadata"]["answer"] = result.answer
+            
+            # 添加错误信息
+            if result.error:
+                message["metadata"]["error"] = result.error
+                
+            # 添加执行统计
+            if result.execution_time:
+                message["metadata"]["execution_time"] = result.execution_time
+            if result.tokens_used:
+                message["metadata"]["tokens_used"] = result.tokens_used
+                
+            return message
+        
+        # 如果是5-tuple格式
+        elif isinstance(result, tuple) and len(result) >= 5:
+            response, score, terminated, truncated, info = result
+            content = str(response) if response is not None else ""
+            
+            message = {
+                "role": "assistant", 
+                "content": content,
+                "metadata": {
+                    "score": score,
+                    "terminated": terminated,
+                    "truncated": truncated,
+                    "info": info if isinstance(info, dict) else {}
+                }
+            }
+            
+            # 从info中提取特殊字段
+            if isinstance(info, dict):
+                if "answer" in info:
+                    message["metadata"]["answer"] = info["answer"]
+                if "is_final_answer" in info:
+                    message["metadata"]["is_final_answer"] = info["is_final_answer"]
+                if "confidence" in info:
+                    message["metadata"]["confidence"] = info["confidence"]
+                if "error" in info:
+                    message["metadata"]["error"] = info["error"]
+                    
+            return message
+        
+        # 其他格式，直接转换为字符串内容
+        else:
+            return {
+                "role": "assistant",
+                "content": str(result),
+                "metadata": {}
+            }
     
     def is_done(self, result: Any, state: AgentState) -> bool:
         """

@@ -155,7 +155,8 @@ Supporting navigation and spatial memory""",
 
         self.stats_storer = stats_storer
         if state is None:
-            state = AgentState() #when brain is used standalone, create a AgentState to bind to it, it's like a simple agent
+            from minion.types.history import History
+            state = AgentState(history=History()) #when brain is used standalone, create a AgentState to bind to it, it's like a simple agent
         self.state = state
 
     def add_tool(self, tool):
