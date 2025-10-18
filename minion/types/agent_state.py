@@ -8,7 +8,7 @@ the weakly-typed Dict[str, Any] approach.
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field, validator, ConfigDict
 from ..main.input import Input
-from .conversation_history import History
+from .history import History
 
 
 class AgentState(BaseModel):
