@@ -1332,15 +1332,20 @@ Please fix the error and try again."""
         from minion.types.history import History
         return History()
     
-    def _append_history(self, message_dict):
-        """Append new message to conversation history in brain.state if available
+    def _append_history(self, messages):
+        """Append new messages to conversation history in brain.state if available
         
         Args:
-            message_dict: OpenAI message format dict with role and content
+            messages: List of OpenAI message format dicts or single message dict
         """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
             # Add to agent state history (ConversationHistory object)
-            self.brain.state.history.append(message_dict)
+            if isinstance(messages, list):
+                # Extend with multiple messages
+                self.brain.state.history.extend(messages)
+            else:
+                # Append single message
+                self.brain.state.history.append(messages)
     
     async def execute(self):
         """Execute with smolagents-style Thought -> Code -> Observation cycle"""
@@ -1371,6 +1376,8 @@ Please fix the error and try again."""
                 final_answer = e.answer
                 self.answer = self.input.answer = final_answer
                 print(f"Final answer exception detected: {final_answer}")
+
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
                 # 返回 AgentResponse并标记为终止
                 return AgentResponse(
                     raw_response=final_answer,  # raw_response是正确的属性名

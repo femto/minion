@@ -747,7 +747,7 @@ Please provide the answer directly, without explaining why you couldn't complete
                 message["metadata"]["execution_time"] = result.execution_time
             if result.tokens_used:
                 message["metadata"]["tokens_used"] = result.tokens_used
-                
+            message.pop("metadata")
             return message
         
         # 如果是5-tuple格式
