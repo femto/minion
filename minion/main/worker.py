@@ -1270,35 +1270,29 @@ Please fix the error and try again."""
         Returns:
             List[Dict]: OpenAI messages format including history
         """
-        # Start with system message
-        messages = []
+        # Construct current messages
+        current_messages = self.construct_messages(query, tools, task, error, conversation_history)
         
-        # Handle different query formats
-        if isinstance(query, list) and query and isinstance(query[0], dict) and "role" in query[0]:
-            # Already in messages format
-            messages = query.copy()
-        else:
-            # Use construct_messages for other formats
-            messages = self.construct_messages(query, tools, task, error, [])
-        
-        # Insert conversation history before the last user message
+        # Simple logic: history + current_messages
         if conversation_history and len(conversation_history) > 0:
             # Convert ConversationHistory to list of dicts
             history_messages = conversation_history.to_list()
+            # Insert history before current messages (after system prompt if exists)
             
-            # Find the last user message
-            last_user_idx = -1
-            for i in range(len(messages) - 1, -1, -1):
-                if messages[i].get("role") == "user":
-                    last_user_idx = i
-                    break
+            # Find system message if exists
+            system_messages = []
+            non_system_messages = []
             
-            if last_user_idx >= 0:
-                # Insert history before the last user message
-                messages = messages[:last_user_idx] + history_messages + messages[last_user_idx:]
-            else:
-                # No user message found, append history at the end
-                messages.extend(history_messages)
+            for msg in current_messages:
+                if msg.get("role") == "system":
+                    system_messages.append(msg)
+                else:
+                    non_system_messages.append(msg)
+            
+            # Construct final order: system + history + current_messages
+            messages = system_messages + history_messages + non_system_messages
+        else:
+            messages = current_messages
         
         return messages
 
@@ -1512,15 +1506,6 @@ Let's start! Remember to end your code blocks with <end_code>.
         conversation_history = self._get_conversation_history()
         tools = self.brain.tools + self.input.tools
         
-        # If query is already in messages format, extract the initial user message
-        initial_user_message = None
-        if isinstance(query, list) and query and isinstance(query[0], dict) and "role" in query[0]:
-            # Find the user message
-            for msg in query:
-                if msg.get("role") == "user":
-                    initial_user_message = msg
-                    break
-        
         for iteration in range(self.max_iterations):
             # Construct messages for this iteration including history
             messages = self.construct_messages_with_history(query, tools, self.task, error, conversation_history)
@@ -1581,21 +1566,6 @@ Let's start! Remember to end your code blocks with <end_code>.
                     error = str(output)
                     logger.error(f"Code execution error: {error}")
                     observation = f"**Observation:** Error occurred:\n{error}"
-                    
-                    # Add to conversation history in full messages format
-                    assistant_message = {
-                        "role": "assistant", 
-                        "content": response
-                    }
-                    tool_message = {
-                        "role": "tool",
-                        "content": observation,
-                        "tool_call_id": f"attempt_{iteration + 1}"
-                    }
-                    
-                    # Update brain.state history with full messages
-                    self._append_conversation_history(assistant_message)
-                    self._append_conversation_history(tool_message)
                     
                     # Try again with error feedback
                     continue
