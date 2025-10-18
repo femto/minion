@@ -1097,18 +1097,18 @@ class CodeMinion(PythonMinion):
             
             self.python_env.send_tools(all_tools)
         
-    def construct_messages(self, query, tools=[], task=None, error="", conversation_history=[]):
-        """Construct OpenAI messages format for smolagents-style execution
+    def construct_current_turn_messages(self, query, tools=[], task=None, error="", current_turn_attempts=[]):
+        """Construct OpenAI messages format for current turn execution
         
         Args:
             query: Can be string, content blocks, or full messages list
             tools: Available tools list
             task: Task information
-            error: Error information from previous attempts
-            conversation_history: Previous conversation history (list of message dicts)
-            
+            error: Error information from previous attempts within current turn
+            current_turn_attempts: current_turn_attempts
+
         Returns:
-            List[Dict]: OpenAI messages format
+            List[Dict]: OpenAI messages format for current turn
         """
         # Get available tools description
         available_tools = []
@@ -1242,8 +1242,8 @@ Please fix the error and try again."""
             user_content_parts.append({"type": "text", "text": error_text})
         
         # Add conversation history if available
-        if conversation_history:
-            history_text = "\n\n**Previous attempts:**\n" + "\n".join(conversation_history)
+        if current_turn_attempts:
+            history_text = "\n\n**Previous attempts:**\n" + "\n".join(current_turn_attempts)
             user_content_parts.append({"type": "text", "text": history_text})
         
         # Add final instruction
@@ -1257,42 +1257,41 @@ Please fix the error and try again."""
         
         return messages
 
-    def construct_messages_with_history(self, query, tools=[], task=None, error="", conversation_history=None):
-        """Construct messages including conversation history
+    def construct_messages_with_history(self, query, tools=[], task=None, error="", previous_turns_history=None):
+        """Construct messages including previous turns history
         
         Args:
             query: Can be string, content blocks, or full messages list
             tools: Available tools list
             task: Task information
-            error: Error information from previous attempts
-            conversation_history: ConversationHistory object or None
+            error: Error information from previous attempts within current turn
+            previous_turns_history: ConversationHistory object containing previous turns (from agent.state.history)
             
         Returns:
-            List[Dict]: OpenAI messages format including history
+            List[Dict]: OpenAI messages format including previous turns history
         """
-        # Construct current messages
-        current_messages = self.construct_messages(query, tools, task, error, conversation_history)
+        # Construct current turn messages (includes error handling for current turn attempts)
+        current_turn_messages = self.construct_current_turn_messages(query, tools, task, error, self.current_turn_attempts)
         
-        # Simple logic: history + current_messages
-        if conversation_history and len(conversation_history) > 0:
+        # Simple logic: previous_turns_history + current_turn_messages
+        if previous_turns_history and len(previous_turns_history) > 0:
             # Convert ConversationHistory to list of dicts
-            history_messages = conversation_history.to_list()
-            # Insert history before current messages (after system prompt if exists)
+            history_messages = previous_turns_history.to_list()
             
-            # Find system message if exists
+            # Find system message if exists in current turn
             system_messages = []
             non_system_messages = []
             
-            for msg in current_messages:
+            for msg in current_turn_messages:
                 if msg.get("role") == "system":
                     system_messages.append(msg)
                 else:
                     non_system_messages.append(msg)
             
-            # Construct final order: system + history + current_messages
+            # Construct final order: system + previous_turns_history + current_turn_messages
             messages = system_messages + history_messages + non_system_messages
         else:
-            messages = current_messages
+            messages = current_turn_messages
         
         return messages
 
@@ -1469,21 +1468,21 @@ Let's start! Remember to end your code blocks with <end_code>.
         else:
             return str(query)
     
-    def _get_conversation_history(self):
-        """Get conversation history from brain.state if available
+    def _get_history(self):
+        """Get previous turns history from brain.state if available
         
         Returns:
-            ConversationHistory: Strongly typed conversation history
+            ConversationHistory: Previous conversation turns (from agent.state.history)
         """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
             # Return the history (ConversationHistory object)
             return self.brain.state.history
         
         # Import here to avoid circular imports
-        from minion.types.conversation_history import History
+        from minion.types.history import History
         return History()
     
-    def _append_conversation_history(self, message_dict):
+    def _append_history(self, message_dict):
         """Append new message to conversation history in brain.state if available
         
         Args:
@@ -1501,14 +1500,16 @@ Let's start! Remember to end your code blocks with <end_code>.
             query = self.task.get("instruction", "") or self.task.get("task_description", "")
         else:
             query = self.input.query
+
+        self.current_turn_attempts = []
         
         error = ""
-        conversation_history = self._get_conversation_history()
+        previous_turns_history = self._get_history()  # From agent.state.history (previous turns)
         tools = self.brain.tools + self.input.tools
         
         for iteration in range(self.max_iterations):
-            # Construct messages for this iteration including history
-            messages = self.construct_messages_with_history(query, tools, self.task, error, conversation_history)
+            # Construct messages for this iteration including previous turns history
+            messages = self.construct_messages_with_history(query, tools, self.task, error, previous_turns_history)
             
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
@@ -1566,7 +1567,7 @@ Let's start! Remember to end your code blocks with <end_code>.
                     error = str(output)
                     logger.error(f"Code execution error: {error}")
                     observation = f"**Observation:** Error occurred:\n{error}"
-                    
+                    self.current_turn_attempts.append(f"Attempt {iteration+1}:{observation}")
                     # Try again with error feedback
                     continue
                 else:
@@ -1579,11 +1580,15 @@ Let's start! Remember to end your code blocks with <end_code>.
                         observation_parts.append(f"Output: {output}")
                     
                     observation = f"**Observation:** Code executed successfully:\n" + "\n".join(observation_parts)
+                    self.current_turn_attempts.append(f"Attempt {iteration+1}:{observation}")
                     
                     # Use the final answer from LocalPythonExecutor if available
                     if is_final_answer:
                         self.answer = self.input.answer = output
                         print(f"Final answer detected: {self.answer}")
+
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
+                                                                                  self.current_turn_attempts))
                         # Return AgentResponse with final answer flag
                         return AgentResponse(
                             raw_response=output,
@@ -1600,6 +1605,9 @@ Let's start! Remember to end your code blocks with <end_code>.
                     if self.is_final_answer(result_text):
                         self.answer = self.input.answer = result_text
                         print(f"Final answer: {self.answer}")
+
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
+                                                                                  self.current_turn_attempts))
                         # Return AgentResponse with final answer flag
                         return AgentResponse(
                             raw_response=result_text,
@@ -1611,24 +1619,12 @@ Let's start! Remember to end your code blocks with <end_code>.
                             info={'final_answer_heuristic': True}
                         )
                     
-                    # Add to conversation and continue in full messages format
-                    assistant_message = {
-                        "role": "assistant", 
-                        "content": response
-                    }
-                    tool_message = {
-                        "role": "tool",
-                        "content": observation,
-                        "tool_call_id": f"attempt_{iteration + 1}"
-                    }
-                    
-                    # Update brain.state history with full messages
-                    self._append_conversation_history(assistant_message)
-                    self._append_conversation_history(tool_message)
-                    
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
                         self.answer = self.input.answer = result_text
+
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
+                                                                                  self.current_turn_attempts))
                         # Return AgentResponse for final iteration
                         return AgentResponse(
                             raw_response=self.answer,
@@ -1641,12 +1637,16 @@ Let's start! Remember to end your code blocks with <end_code>.
                     
                     # Continue for more iterations if needed
                     error = ""
+
                     
             except FinalAnswerException as e:
                 # 特殊处理 FinalAnswerException
                 final_answer = e.answer
                 self.answer = self.input.answer = final_answer
                 print(f"Final answer exception detected: {final_answer}")
+
+                self._append_history(
+                    self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
                 # 返回 AgentResponse并标记为终止
                 return AgentResponse(
                     raw_response=final_answer,  # raw_response是正确的属性名
@@ -1662,26 +1662,12 @@ Let's start! Remember to end your code blocks with <end_code>.
                 logger.error(f"Execution error: {error}")
                 observation = f"**Observation:** Execution failed:\n{error}"
                 
-                # Add failed attempt to conversation history in full messages format
-                assistant_message = {
-                    "role": "assistant", 
-                    "content": response
-                }
-                tool_message = {
-                    "role": "tool",
-                    "content": observation,
-                    "tool_call_id": f"attempt_{iteration + 1}_failed"
-                }
-                
-                # Update brain.state history with full messages
-                self._append_conversation_history(assistant_message)
-                self._append_conversation_history(tool_message)
-                
                 continue
         
         # If we've exhausted all iterations, return the last response
         self.answer = self.input.answer = response
         # Return AgentResponse for exhausted iterations
+        self._append_history(self.construct_current_turn_messages(query,tools,self.task,error,self.current_turn_attempts))
         return AgentResponse(
             raw_response=self.answer,
             answer=self.answer,
