@@ -220,7 +220,7 @@ class CodeAgent(BaseAgent):
         if self.enable_reflection and self.thinking_engine and self.thinking_engine.should_reflect(self.state):
             await self._perform_reflection()
         
-        # Enhance the input with code-thinking instructions
+        # Enhance the input with code minion routing
         enhanced_input = self._enhance_input_for_code_thinking(input_data)
         
         # Execute the step
@@ -268,95 +268,8 @@ class CodeAgent(BaseAgent):
             )
     
     def _enhance_input_for_code_thinking(self, input_data: Input) -> Input:
-        """Enhance input with code-thinking instructions based on smolagents approach."""
-        
-        # 获取可用的工具列表
-        available_tools = []
-        if self.tools:
-            for tool in self.tools:
-                if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                    tool_desc = f"- {tool.name}: {tool.description}"
-                    
-                    # Add readonly information if available
-                    if hasattr(tool, 'readonly') and tool.readonly:
-                        tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
-                    
-                    # Add async indicator if using async executor
-                    if self.use_async_executor and hasattr(tool, 'forward'):
-                        import asyncio
-                        if asyncio.iscoroutinefunction(tool.forward):
-                            tool_desc += " (async)"
-                    available_tools.append(tool_desc)
-        
-        tools_description = "\n".join(available_tools) if available_tools else "- final_answer: Provide the final answer to complete the task"
-        
-        # Add async-specific instructions if using async executor
-        async_instructions = ""
-        if self.use_async_executor:
-            async_instructions = """
-**Async Tool Support:**
-- You can use async tools with `await` syntax: `result = await async_tool_name(args)`
-- For concurrent execution, use `asyncio.gather()`: `results = await asyncio.gather(task1, task2, task3)`
-- Regular (sync) tools can be used normally without `await`
-- The `asyncio` module is available for advanced async operations
-"""
-        
-        enhanced_query = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
-To do so, you have been given access to a list of tools: these tools are basically Python functions which you can call with code.
-To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
-
-At each step, in the 'Thought:' sequence, you should first explain your reasoning towards solving the task and the tools that you want to use.
-Then in the 'Code:' sequence, you should write the code in simple Python. The code sequence must end with '<end_code>' sequence.
-During each intermediate step, you can use 'print()' to save whatever important information you will then need.
-These print outputs will then appear in the 'Observation:' field, which will be available as input for the next step.
-In the end you have to return a final answer using the `final_answer` tool.
-
-**Available Tools:**
-{tools_description}
-{async_instructions}
-**Your Task:**
-{input_data.query}
-
-**Rules you must follow:**
-1. Always provide a 'Thought:' sequence, and a 'Code:\\n```py' sequence ending with '```<end_code>' sequence, else you will fail.
-2. Use only variables that you have defined!
-3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict, but use the arguments directly.
-4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. Use print() to output results for use in the next block.
-5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
-6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
-7. Never create any notional variables in your code, as having these in your logs will derail you from the true variables.
-8. You can use imports in your code, but only from standard Python libraries (math, datetime, json, etc.) and common data science libraries (numpy, pandas, matplotlib, seaborn).
-9. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
-10. Don't give up! You're in charge of solving the task, not providing directions to solve it.
-11. **CRUCIAL**: Make sure your code is well-defined and complete. Include all necessary imports, define all variables, and ensure the code can run independently.
-12. **IMPORTANT**: When you have the final answer, call `final_answer(your_result)` to complete the task.
-13. **ASYNC TOOLS**: For async tools, use `await` syntax and consider using `asyncio.gather()` for concurrent execution.
-
-**Example Pattern:**
-Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
-
-Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool.
-Code:
-```py
-result = 5 + 3 + 1294.678
-print(f"The calculation result is: {{result}}")
-final_answer(result)
-```<end_code>
-
-**Remember:**
-- Always start with "Thought:" to explain your reasoning
-- Write complete, well-defined code in "Code:" blocks
-- End code blocks with ```<end_code>
-- Use print() to output intermediate results
-- Call final_answer() when you have the solution
-- Use `await` for async tools and `asyncio.gather()` for concurrent execution
-
-Now Begin!
-"""
-        
         # Create a new Input with enhanced query
-        enhanced_input = copy(input_data)
-        enhanced_input.query = enhanced_query
+        enhanced_input = input_data
         # Ensure route is set to 'code' for code thinking
         if not enhanced_input.route:
             enhanced_input.route = 'code'
@@ -736,12 +649,9 @@ Use Python code to:
         else:
             raise ValueError(f"Task must be string or Input object, got {type(task)}")
         
-        # Enhance input with code-thinking instructions
-        enhanced_input = self._enhance_input_for_code_thinking(input_data)
-        
-        # Note: Conversation context is now handled by Minion via brain.state.history
-        # No need to embed history in the query anymore
-        
+        # Enhance input with code-thinking instructions, do not repeat what's done in CodeMinion
+        enhanced_input = input_data
+
         return enhanced_input
     
     def _prepare_internal_state(self, task: Optional[Union[str, Input]], reset: bool) -> None:
