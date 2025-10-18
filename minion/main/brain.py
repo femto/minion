@@ -154,6 +154,8 @@ Supporting navigation and spatial memory""",
         self.python_env = python_env or AsyncPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
         self.stats_storer = stats_storer
+        if state is None:
+            state = AgentState() #when brain is used standalone, create a AgentState to bind to it, it's like a simple agent
         self.state = state
 
     def add_tool(self, tool):
@@ -178,8 +180,8 @@ Supporting navigation and spatial memory""",
 
     async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
         # 处理不同类型的state参数
-        if state is None:
-            state = AgentState()
+        # if state is None: #we don't handle this since this means input.query is None
+        #     state = AgentState()
             
         # 根据state类型提取参数
         if isinstance(state, Input):
@@ -198,7 +200,11 @@ Supporting navigation and spatial memory""",
         else:
             raise ValueError(f"Unsupported state type: {type(state)}")
 
-        self.state = state #set up state when step, already set state when agent initialize brain, should we add if self.state is None here?
+        # 注意：不在这里设置 self.state，因为：
+        # 1. Brain 构造时已经通过 Brain(state=agent.state) 建立了引用关系
+        # 2. agent.state 的任何修改都会自动反映到 brain.state
+        # 3. 重新赋值会破坏引用关系，导致状态不同步
+        # 4. 如果 brain.step() 被直接调用（不通过 agent），self.state 可能为 None，这是正常的
 
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")

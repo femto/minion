@@ -222,6 +222,7 @@ class CodeAgent(BaseAgent):
         
         # Enhance the input with code minion routing
         enhanced_input = self._enhance_input_for_code_thinking(input_data)
+        self.state.input = enhanced_input
         
         # Execute the step
         try:
@@ -235,7 +236,7 @@ class CodeAgent(BaseAgent):
             self.brain.state = self.state
             
             # Call brain.step with enhanced input directly
-            result = await self.brain.step(enhanced_input, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
+            result = await self.brain.step(self.state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
@@ -607,7 +608,7 @@ Use Python code to:
         try:
             # Use BaseAgent's logic but with our enhanced input and internal state
             result = await super().run_async(
-                task=enhanced_input, 
+                task=enhanced_input,
                 state=self.state, 
                 max_steps=max_steps, 
                 stream=stream, 
