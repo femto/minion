@@ -205,6 +205,7 @@ Supporting navigation and spatial memory""",
         # 2. agent.state 的任何修改都会自动反映到 brain.state
         # 3. 重新赋值会破坏引用关系，导致状态不同步
         # 4. 如果 brain.step() 被直接调用（不通过 agent），self.state 可能为 None，这是正常的
+        self.state.input = input #now set input back to state, make sure state.input is this.
 
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
