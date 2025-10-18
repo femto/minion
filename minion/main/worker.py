@@ -1332,25 +1332,7 @@ Please fix the error and try again."""
                         param_desc = param_info.get('description', '')
                         param_list.append(f"{param_name} ({param_type}): {param_desc}")
 
-                        if param_list:
-                            tool_desc += f"\n  Parameters: {', '.join(param_list)}"
-
-                            # Add usage example with keyword arguments
-                            example_params = []
-                            for param_name, param_info in params.items():
-                                param_type = param_info.get('type', 'str')
-                                if param_type == 'string':
-                                    example_params.append(f'{param_name}="example_value"')
-                                elif param_type == 'integer':
-                                    example_params.append(f'{param_name}=123')
-                                elif param_type == 'boolean':
-                                    example_params.append(f'{param_name}=True')
-                                else:
-                                    example_params.append(f'{param_name}="value"')
-
-                            if example_params:
-                                tool_desc += f"\n  Usage: await {tool.name}({', '.join(example_params)})"
-
+                tool_desc += f"\n  Parameters: {', '.join(param_list)}"
                 available_tools.append(tool_desc)
         
         tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
