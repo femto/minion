@@ -1069,7 +1069,7 @@ class CodeMinion(PythonMinion):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.input.instruction = "Solve this problem by writing Python code. Use the 'Thought -> Code -> Observation' approach."
-        self.max_iterations = 3
+        self.max_iterations = 5
         
         # Initialize LocalPythonExecutor with tools like smolagents
         if hasattr(self, 'python_env') and isinstance(self.python_env, (LocalPythonExecutor, AsyncPythonExecutor)):
