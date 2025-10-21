@@ -138,13 +138,13 @@ class CodeAgent(BaseAgent):
         # Initialize code executor based on use_async_executor flag (brain is now available)
         if self.use_async_executor:
             self.python_executor = AsyncPythonExecutor(
-                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv", "asyncio"],
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv", "asyncio","os"],
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
         else:
             self.python_executor = LocalPythonExecutor(
-                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv"],
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv","os"],
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
