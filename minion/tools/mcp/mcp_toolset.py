@@ -509,7 +509,7 @@ async def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None,
         # Convert all paths to absolute paths
         workspace_paths = [os.path.abspath(path) for path in workspace_paths]
     
-    toolset = MCPToolset(
+    toolset = await MCPToolset.create(
         connection_params=StdioServerParameters(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem"] + workspace_paths
@@ -517,7 +517,6 @@ async def create_filesystem_toolset(workspace_paths: Optional[List[str]] = None,
         name=name or "filesystem_toolset",
         structured_output=structured_output
     )
-    await toolset.setup()
     return toolset
 
 
@@ -532,7 +531,7 @@ async def create_brave_search_toolset(api_key: str, name: Optional[str] = None, 
     Returns:
         MCPToolset configured for Brave Search
     """
-    toolset = MCPToolset(
+    toolset = await MCPToolset.create(
         connection_params=StdioServerParameters(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-brave-search"],
@@ -541,7 +540,6 @@ async def create_brave_search_toolset(api_key: str, name: Optional[str] = None, 
         name=name or "brave_search_toolset",
         structured_output=structured_output
     )
-    await toolset.setup()
     return toolset
 
 
@@ -571,7 +569,7 @@ async def create_streamable_http_toolset(
     Returns:
         MCPToolset configured for StreamableHTTP connection
     """
-    toolset = MCPToolset(
+    toolset = await MCPToolset.create(
         connection_params=StreamableHTTPServerParameters(
             url=url,
             headers=headers,
@@ -583,5 +581,4 @@ async def create_streamable_http_toolset(
         name=name or "streamable_http_toolset",
         structured_output=structured_output
     )
-    await toolset.setup()
     return toolset
