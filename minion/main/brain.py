@@ -294,6 +294,7 @@ Supporting navigation and spatial memory""",
             # Tools are only set when starting a new session with new tools
 
     async def choose_mind(self, input):
+        return "left_mind" #don't choose mind for now
         mind_template = Template(
             """
 I have minds:
