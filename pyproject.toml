@@ -54,6 +54,7 @@ google = ["google-adk", "litellm"]
 browser = ["browser-use>=0.1.0"]
 gradio = ["gradio>=4.0.0"]
 utcp = ["utcp", "utcp-http", "utcp-cli","utcp-text","utcp-mcp"]
+bedrock = ["boto3"]
 all = ["minionx[dev,google,browser,gradio,utcp,bedrock]"]
 
 [tool.hatch.build.targets.wheel]
