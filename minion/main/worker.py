@@ -102,12 +102,19 @@ class RawMinion(WorkerMinion):
             response = await node.execute(messages, tools=tools, stream=False)
         else:
             query = self.input.query
-            # Support both string and multimodal queries
+            # Support string, content blocks, and full messages format
             if isinstance(query, list):
-                # For multimodal queries, construct proper message format
-                # Create a temporary object with query and system_prompt
-                temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
-                messages = construct_simple_message(temp_input)
+                # Check if it's already in OpenAI messages format
+                if query and isinstance(query[0], dict) and "role" in query[0]:
+                    # Already in messages format, use directly
+                    messages = query
+                    # Add system prompt if provided and not already present
+                    if self.input.system_prompt and (not messages or messages[0].get("role") != "system"):
+                        messages = [{"role": "system", "content": self.input.system_prompt}] + messages
+                else:
+                    # Content blocks format, convert to messages
+                    temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
+                    messages = construct_simple_message(temp_input)
                 response = await node.execute(messages, tools=tools, stream=False)
             else:
                 # For simple string queries, use traditional approach
@@ -141,11 +148,19 @@ class RawMinion(WorkerMinion):
             stream_generator = await node.execute(messages, tools=tools, stream=True)
         else:
             query = self.input.query
-            # Support both string and multimodal queries
+            # Support string, content blocks, and full messages format
             if isinstance(query, list):
-                # For multimodal queries, construct proper message format
-                temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
-                messages = construct_simple_message(temp_input)
+                # Check if it's already in OpenAI messages format
+                if query and isinstance(query[0], dict) and "role" in query[0]:
+                    # Already in messages format, use directly
+                    messages = query
+                    # Add system prompt if provided and not already present
+                    if self.input.system_prompt and (not messages or messages[0].get("role") != "system"):
+                        messages = [{"role": "system", "content": self.input.system_prompt}] + messages
+                else:
+                    # Content blocks format, convert to messages
+                    temp_input = type('obj', (object,), {'query': query, 'system_prompt': self.input.system_prompt})()
+                    messages = construct_simple_message(temp_input)
                 stream_generator = await node.execute(messages, tools=tools, stream=True)
             else:
                 # For simple string queries, use traditional approach
@@ -221,17 +236,28 @@ class NativeMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        if self.task:
-            # Task mode: use TASK_INPUT template
-            template_str = WORKER_PROMPT + TASK_INPUT
-            messages = construct_messages_from_template(
-                template_str, self.input, task=self.task
-            )
+        query = self.input.query
+        
+        # Support string, content blocks, and full messages format
+        if isinstance(query, list) and query and isinstance(query[0], dict) and "role" in query[0]:
+            # Already in messages format, use directly
+            messages = query
+            # Add system prompt if provided and not already present
+            if self.input.system_prompt and (not messages or messages[0].get("role") != "system"):
+                messages = [{"role": "system", "content": self.input.system_prompt}] + messages
         else:
-            # Normal mode: use original WORKER_PROMPT
-            messages = construct_messages_from_template(
-                WORKER_PROMPT, self.input
-            )
+            # Use template-based approach for other formats
+            if self.task:
+                # Task mode: use TASK_INPUT template
+                template_str = WORKER_PROMPT + TASK_INPUT
+                messages = construct_messages_from_template(
+                    template_str, self.input, task=self.task
+                )
+            else:
+                # Normal mode: use original WORKER_PROMPT
+                messages = construct_messages_from_template(
+                    WORKER_PROMPT, self.input
+                )
         
         node = LmpActionNode(self.brain.llm)
         tools = (self.input.tools or []) + (self.brain.tools or [])
@@ -1043,7 +1069,7 @@ class CodeMinion(PythonMinion):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.input.instruction = "Solve this problem by writing Python code. Use the 'Thought -> Code -> Observation' approach."
-        self.max_iterations = 3
+        self.max_iterations = 5
         
         # Initialize LocalPythonExecutor with tools like smolagents
         if hasattr(self, 'python_env') and isinstance(self.python_env, (LocalPythonExecutor, AsyncPythonExecutor)):
@@ -1071,18 +1097,21 @@ class CodeMinion(PythonMinion):
             
             self.python_env.send_tools(all_tools)
         
-    def construct_prompt(self, query,tools = [], task=None, error=""):
-        """Construct smolagents-style prompt with <end_code> support
+    def construct_current_turn_messages(self, query, tools=[], task=None, error="", current_turn_attempts=[]):
+        """Construct OpenAI messages format for current turn execution
         
         Args:
-            query: Can be string or messages list
+            query: Can be string, content blocks, or full messages list
+            tools: Available tools list
             task: Task information
-            error: Error information
+            error: Error information from previous attempts within current turn
+            current_turn_attempts: current_turn_attempts
+
+        Returns:
+            List[Dict]: OpenAI messages format for current turn
         """
-        
         # Get available tools description
         available_tools = []
-
         for tool in tools:
             if hasattr(tool, 'name') and hasattr(tool, 'description'):
                 tool_desc = f"- {tool.name}: {tool.description}"
@@ -1092,7 +1121,6 @@ class CodeMinion(PythonMinion):
                     tool_desc += " [READONLY - This tool only reads data and does not modify system state]"
 
                 # Add parameter information and usage example for tools
-                # Check for both 'parameters' (MCP tools) and 'inputs' (BaseTool/AsyncBaseTool)
                 tool_params = None
                 if hasattr(tool, 'parameters') and tool.parameters:
                     if 'properties' in tool.parameters:
@@ -1108,61 +1136,12 @@ class CodeMinion(PythonMinion):
                         param_desc = param_info.get('description', '')
                         param_list.append(f"{param_name} ({param_type}): {param_desc}")
 
-                        if param_list:
-                            tool_desc += f"\n  Parameters: {', '.join(param_list)}"
-
-                            # Add usage example with keyword arguments
-                            example_params = []
-                            for param_name, param_info in params.items():
-                                param_type = param_info.get('type', 'str')
-                                if param_type == 'string':
-                                    example_params.append(f'{param_name}="example_value"')
-                                elif param_type == 'integer':
-                                    example_params.append(f'{param_name}=123')
-                                elif param_type == 'boolean':
-                                    example_params.append(f'{param_name}=True')
-                                else:
-                                    example_params.append(f'{param_name}="value"')
-
-                            if example_params:
-                                tool_desc += f"\n  Usage: await {tool.name}({', '.join(example_params)})"
-
+                tool_desc += f"\n  Parameters: {', '.join(param_list)}"
                 available_tools.append(tool_desc)
         
         tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"
         
-        # Extract query content (handle both string and messages format)
-        query_text = self._extract_query_text(query)
-        
-        # Construct the main query content
-        if task:
-            query_content = f"""
-**Task:** {task.get('instruction', query_text)}
-**Description:** {task.get('task_description', '')}
-"""
-            # Add dependent outputs if available
-            if task.get("dependent"):
-                dependent_info = "\n**Dependent outputs:**\n"
-                for dependent in task["dependent"]:
-                    dependent_key = dependent.get("dependent_key")
-                    if dependent_key in self.input.symbols:
-                        symbol = self.input.symbols[dependent_key]
-                        dependent_info += f"- {dependent_key}: {symbol.output}\n"
-                query_content += dependent_info
-        else:
-            query_content = f"**Problem:** {query_text}"
-        
-        # Add error information if available
-        error_info = ""
-        if error:
-            error_info = f"""
-**Previous Error:** 
-{error}
-
-Please fix the error and try again.
-"""
-        
-        # Construct the complete prompt
+        # Construct system message
         prompt = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
 To do so, you have been given access to a list of tools. Each tool is actually a Python function which you can call by writing Python code. You can use the tool by writing Python code that calls the function.
 
@@ -1192,22 +1171,117 @@ Here is the format you should follow:
 
 **Observation:** [This will be filled automatically with the execution result]
 
-Continue this Thought/Code/Observation cycle until you solve the task completely.
+Continue this Thought/Code/Observation cycle until you solve the task completely."""
 
-{query_content}
-
-{error_info}
-
-Let's start! Remember to end your code blocks with <end_code>.
-"""
+        messages = [{"role": "user", "content": prompt}]
         
-        return prompt
-    
+        # Construct user message content
+        user_content_parts = []
+        
+        # Add task or problem description
+        if task:
+            task_text = f"""**Task:** {task.get('instruction', '')}
+**Description:** {task.get('task_description', '')}"""
+            
+            # Add dependent outputs if available
+            if task.get("dependent"):
+                dependent_info = "\n**Dependent outputs:**\n"
+                for dependent in task["dependent"]:
+                    dependent_key = dependent.get("dependent_key")
+                    if dependent_key in self.input.symbols:
+                        symbol = self.input.symbols[dependent_key]
+                        dependent_info += f"- {dependent_key}: {symbol.output}\n"
+                task_text += dependent_info
+            
+            user_content_parts.append({"type": "text", "text": task_text})
+        else:
+            # Handle different query formats
+            if isinstance(query, str):
+                user_content_parts.append({"type": "text", "text": f"**Problem:** {query}"})
+            elif isinstance(query, list):
+                # Add problem header
+                user_content_parts.append({"type": "text", "text": "**Problem:**"})
+                # Add multimodal content
+                for item in query:
+                    if isinstance(item, dict):
+                        # Already formatted content block
+                        user_content_parts.append(item)
+                    elif isinstance(item, str):
+                        # Plain text
+                        user_content_parts.append({"type": "text", "text": item})
+                    else:
+                        # Convert other types to text
+                        user_content_parts.append({"type": "text", "text": str(item)})
+        
+        # Add error information if available
+        if error:
+            error_text = f"""
+
+**Previous Error:** 
+{error}
+
+Please fix the error and try again."""
+            user_content_parts.append({"type": "text", "text": error_text})
+        
+        # Add conversation history if available
+        if current_turn_attempts:
+            history_text = "\n\n**Previous attempts:**\n" + "\n".join(current_turn_attempts)
+            user_content_parts.append({"type": "text", "text": history_text})
+        
+        # Add final instruction
+        user_content_parts.append({"type": "text", "text": "\n\nLet's start! Remember to end your code blocks with <end_code>."})
+        
+        # Add user message
+        messages.append({
+            "role": "user", 
+            "content": user_content_parts
+        })
+        
+        return messages
+
+    def construct_messages_with_history(self, query, tools=[], task=None, error="", previous_turns_history=None):
+        """Construct messages including previous turns history
+        
+        Args:
+            query: Can be string, content blocks, or full messages list
+            tools: Available tools list
+            task: Task information
+            error: Error information from previous attempts within current turn
+            previous_turns_history: ConversationHistory object containing previous turns (from agent.state.history)
+            
+        Returns:
+            List[Dict]: OpenAI messages format including previous turns history
+        """
+        # Construct current turn messages (includes error handling for current turn attempts)
+        current_turn_messages = self.construct_current_turn_messages(query, tools, task, error, self.current_turn_attempts)
+        
+        # Simple logic: previous_turns_history + current_turn_messages
+        if previous_turns_history and len(previous_turns_history) > 0:
+            # Convert ConversationHistory to list of dicts
+            history_messages = previous_turns_history.to_list()
+            
+            # Find system message if exists in current turn
+            system_messages = []
+            non_system_messages = []
+            
+            for msg in current_turn_messages:
+                if msg.get("role") == "system":
+                    system_messages.append(msg)
+                else:
+                    non_system_messages.append(msg)
+            
+            # Construct final order: system + previous_turns_history + current_turn_messages
+            messages = system_messages + history_messages + non_system_messages
+        else:
+            messages = current_turn_messages
+        
+        return messages
+
     def _extract_query_text(self, query):
         """Extract text content from query (handle both string and messages format)
         
         Args:
-            query: Can be string or messages list
+            query: Can be string or messages list (supports both OpenAI messages format and content blocks format)
             
         Returns:
             str: Extracted text content
@@ -1215,44 +1289,63 @@ Let's start! Remember to end your code blocks with <end_code>.
         if isinstance(query, str):
             return query
         elif isinstance(query, list):
-            # Handle messages format
             text_parts = []
             for msg in query:
-                if isinstance(msg, dict) and "content" in msg:
-                    content = msg["content"]
-                    if isinstance(content, str):
-                        text_parts.append(f"{msg.get('role', 'user')}: {content}")
-                    elif isinstance(content, list):
-                        # Extract text from content list
-                        for item in content:
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                text_parts.append(f"{msg.get('role', 'user')}: {item.get('text', '')}")
+                if isinstance(msg, dict):
+                    # Check if it's a content block format: {"type": "text", "content": "..."}
+                    if msg.get("type") == "text" and "content" in msg:
+                        text_parts.append(msg.get("content", ""))
+                    # Check if it's a content block format with "text" field: {"type": "text", "text": "..."}
+                    elif msg.get("type") == "text" and "text" in msg:
+                        text_parts.append(msg.get("text", ""))
+                    # Check if it's OpenAI messages format: {"role": "user", "content": "..."}
+                    elif "role" in msg and "content" in msg:
+                        content = msg["content"]
+                        if isinstance(content, str):
+                            text_parts.append(f"{msg.get('role', 'user')}: {content}")
+                        elif isinstance(content, list):
+                            # Extract text from nested content list
+                            for item in content:
+                                if isinstance(item, dict) and item.get("type") == "text":
+                                    # Handle both "text" and "content" fields in nested items
+                                    text_content = item.get("text") or item.get("content", "")
+                                    if text_content:
+                                        text_parts.append(f"{msg.get('role', 'user')}: {text_content}")
+                    # Handle plain string items in the list
+                elif isinstance(msg, str):
+                    text_parts.append(msg)
             return "\n".join(text_parts) if text_parts else str(query)
         else:
             return str(query)
     
-    def _get_conversation_history(self):
-        """Get conversation history from brain.state if available"""
+    def _get_history(self):
+        """Get previous turns history from brain.state if available
+        
+        Returns:
+            ConversationHistory: Previous conversation turns (from agent.state.history)
+        """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
-            # Extract conversation from agent state history
-            conversation = []
-            for item in self.brain.state.history:
-                if isinstance(item, str):
-                    conversation.append(item)
-                elif hasattr(item, 'raw_response'):
-                    conversation.append(item.raw_response)
-                elif isinstance(item, tuple) and len(item) > 0:
-                    conversation.append(str(item[0]))
-                else:
-                    conversation.append(str(item))
-            return conversation
-        return []
+            # Return the history (ConversationHistory object)
+            return self.brain.state.history
+        
+        # Import here to avoid circular imports
+        from minion.types.history import History
+        return History()
     
-    def _update_conversation_history(self, attempt_info):
-        """Update conversation history in brain.state if available"""
+    def _append_history(self, messages):
+        """Append new messages to conversation history in brain.state if available
+        
+        Args:
+            messages: List of OpenAI message format dicts or single message dict
+        """
         if hasattr(self.brain, 'state') and self.brain.state and hasattr(self.brain.state, 'history'):
-            # Add to agent state history
-            self.brain.state.history.append(attempt_info)
+            # Add to agent state history (ConversationHistory object)
+            if isinstance(messages, list):
+                # Extend with multiple messages
+                self.brain.state.history.extend(messages)
+            else:
+                # Append single message
+                self.brain.state.history.append(messages)
     
     async def execute(self):
         """Execute with smolagents-style Thought -> Code -> Observation cycle"""
@@ -1262,28 +1355,35 @@ Let's start! Remember to end your code blocks with <end_code>.
             query = self.task.get("instruction", "") or self.task.get("task_description", "")
         else:
             query = self.input.query
+
+        self.current_turn_attempts = []
         
         error = ""
-        full_conversation = self._get_conversation_history()
+        previous_turns_history = self._get_history()  # From agent.state.history (previous turns)
         tools = self.brain.tools + self.input.tools
+        
         for iteration in range(self.max_iterations):
-            # Construct the prompt
-            prompt = self.construct_prompt(query, tools,self.task, error)
-            
-            # Add previous conversation context
-            if full_conversation:
-                prompt += "\n\n**Previous attempts:**\n" + "\n".join(full_conversation)
+            # Construct messages for this iteration including previous turns history
+            messages = self.construct_messages_with_history(query, tools, self.task, error, previous_turns_history)
             
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
             tools = (self.input.tools or []) + (self.brain.tools or [])
+            
+            # Add stop sequences for code execution
+            stop_sequences = ["<end_code>"]
+            
             try:
-                response = await node.execute(prompt, tools=tools)
+                response = await node.execute(messages, tools=tools, stop=stop_sequences)
+                if response and not response.strip().endswith("<end_code>"):
+                    response += "<end_code>"
             except FinalAnswerException as e:
                 # 收到 final_answer 工具调用，直接返回结果
                 final_answer = e.answer
                 self.answer = self.input.answer = final_answer
                 print(f"Final answer exception detected: {final_answer}")
+
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
                 # 返回 AgentResponse并标记为终止
                 return AgentResponse(
                     raw_response=final_answer,  # raw_response是正确的属性名
@@ -1294,12 +1394,15 @@ Let's start! Remember to end your code blocks with <end_code>.
                     truncated=False,
                     info={'final_answer_exception': True}
                 )
-            
+
             # Extract and execute code
             code_blocks = self.extract_code_blocks(response)
-            
+            self.current_turn_attempts.append(f"**Assistant Response {iteration + 1}:** {response}")
             if not code_blocks:
-                # No code found, return the response as-is
+                # No code found, add LLM response to current turn and return
+
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                
                 self.answer = self.input.answer = response
                 # Return AgentResponse for non-code response
                 return AgentResponse(
@@ -1307,10 +1410,11 @@ Let's start! Remember to end your code blocks with <end_code>.
                     answer=self.answer,
                     score=0.5,
                     terminated=True,
+                    is_final_answer=True,
                     truncated=False,
                     info={'no_code_found': True}
                 )
-            
+
             # Execute the first code block
             code = code_blocks[0]
             print(f"Executing code:\n{code}")
@@ -1330,16 +1434,7 @@ Let's start! Remember to end your code blocks with <end_code>.
                     error = str(output)
                     logger.error(f"Code execution error: {error}")
                     observation = f"**Observation:** Error occurred:\n{error}"
-                    
-                    # Add to conversation history
-                    attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
-                    full_conversation.append(f"**Attempt {iteration + 1}:**")
-                    full_conversation.append(response)
-                    full_conversation.append(observation)
-                    
-                    # Update brain.state history
-                    self._update_conversation_history(attempt_info)
-                    
+                    self.current_turn_attempts.append(observation)
                     # Try again with error feedback
                     continue
                 else:
@@ -1352,11 +1447,15 @@ Let's start! Remember to end your code blocks with <end_code>.
                         observation_parts.append(f"Output: {output}")
                     
                     observation = f"**Observation:** Code executed successfully:\n" + "\n".join(observation_parts)
+                    self.current_turn_attempts.append(observation)
                     
                     # Use the final answer from LocalPythonExecutor if available
                     if is_final_answer:
                         self.answer = self.input.answer = output
                         print(f"Final answer detected: {self.answer}")
+
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
+                                                                                  self.current_turn_attempts))
                         # Return AgentResponse with final answer flag
                         return AgentResponse(
                             raw_response=output,
@@ -1373,6 +1472,9 @@ Let's start! Remember to end your code blocks with <end_code>.
                     if self.is_final_answer(result_text):
                         self.answer = self.input.answer = result_text
                         print(f"Final answer: {self.answer}")
+
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
+                                                                                  self.current_turn_attempts))
                         # Return AgentResponse with final answer flag
                         return AgentResponse(
                             raw_response=result_text,
@@ -1384,36 +1486,35 @@ Let's start! Remember to end your code blocks with <end_code>.
                             info={'final_answer_heuristic': True}
                         )
                     
-                    # Add to conversation and continue
-                    attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
-                    full_conversation.append(f"**Attempt {iteration + 1}:**")
-                    full_conversation.append(response)
-                    full_conversation.append(observation)
-                    
-                    # Update brain.state history
-                    self._update_conversation_history(attempt_info)
-                    
                     # If we have a good result, we can return it
                     if iteration == self.max_iterations - 1:
                         self.answer = self.input.answer = result_text
+
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
+                                                                                  self.current_turn_attempts))
                         # Return AgentResponse for final iteration
                         return AgentResponse(
                             raw_response=self.answer,
                             answer=self.answer,
                             score=0.8,
                             terminated=False,
+                            is_final_answer=False,
                             truncated=True,
                             info={'max_iterations_reached': True}
                         )
                     
                     # Continue for more iterations if needed
                     error = ""
+
                     
             except FinalAnswerException as e:
                 # 特殊处理 FinalAnswerException
                 final_answer = e.answer
                 self.answer = self.input.answer = final_answer
                 print(f"Final answer exception detected: {final_answer}")
+
+                self._append_history(
+                    self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
                 # 返回 AgentResponse并标记为终止
                 return AgentResponse(
                     raw_response=final_answer,  # raw_response是正确的属性名
@@ -1428,25 +1529,19 @@ Let's start! Remember to end your code blocks with <end_code>.
                 error = str(e)
                 logger.error(f"Execution error: {error}")
                 observation = f"**Observation:** Execution failed:\n{error}"
-                
-                attempt_info = f"**Attempt {iteration + 1}:**\n{response}\n{observation}"
-                full_conversation.append(f"**Attempt {iteration + 1}:**")
-                full_conversation.append(response)
-                full_conversation.append(observation)
-                
-                # Update brain.state history
-                self._update_conversation_history(attempt_info)
-                
+                self.current_turn_attempts.append(observation)
                 continue
         
         # If we've exhausted all iterations, return the last response
         self.answer = self.input.answer = response
         # Return AgentResponse for exhausted iterations
+        self._append_history(self.construct_current_turn_messages(query,tools,self.task,error,self.current_turn_attempts))
         return AgentResponse(
             raw_response=self.answer,
             answer=self.answer,
             score=0.3,
             terminated=False,
+            is_final_answer=False,
             truncated=True,
             info={'all_iterations_failed': True}
         )

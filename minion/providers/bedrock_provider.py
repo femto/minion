@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError, BotoCoreError
 from openai.types.chat import ChatCompletion
 
 from minion.configs.config import ContentType, ImageDetail
-from minion.logs import logger
+from minion.logs import logger, log_llm_stream
 from minion.schema.message_types import Message, MessageContent, ImageContent
 from minion.providers.base_provider import BaseProvider
 from minion.providers.llm_provider_registry import llm_registry
@@ -261,6 +261,13 @@ class BedrockProvider(BaseProvider):
         if "top_k" in kwargs:
             request_body["top_k"] = kwargs["top_k"]
         
+        # 处理stop参数 - Bedrock使用stop_sequences
+        if "stop" in kwargs and kwargs["stop"]:
+            stop_sequences = kwargs["stop"]
+            if isinstance(stop_sequences, str):
+                stop_sequences = [stop_sequences]
+            request_body["stop_sequences"] = stop_sequences
+        
         return request_body
     
     def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
@@ -340,6 +347,7 @@ class BedrockProvider(BaseProvider):
                         if delta.get('type') == 'text_delta':
                             text = delta.get('text', '')
                             full_content += text
+                            log_llm_stream(text)
                     
                     elif chunk.get('type') == 'message_stop':
                         # 记录token使用情况

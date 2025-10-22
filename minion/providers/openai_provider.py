@@ -102,6 +102,11 @@ class OpenAIProvider(BaseProvider):
                 if 'tool_choice' not in kwargs:
                     kwargs['tool_choice'] = "auto"
 
+        # 处理stop参数
+        if 'stop' in kwargs and kwargs['stop']:
+            # OpenAI API支持stop参数
+            pass  # 直接传递给API
+
         response = self.client_sync.chat.completions.create(
             model=model,
             messages=prepared_messages,
@@ -163,6 +168,11 @@ class OpenAIProvider(BaseProvider):
                 # 如果有工具但没有指定tool_choice，默认为"auto"
                 if 'tool_choice' not in kwargs:
                     kwargs['tool_choice'] = "auto"
+
+        # 处理stop参数
+        if 'stop' in kwargs and kwargs['stop']:
+            # OpenAI API支持stop参数
+            pass  # 直接传递给API
 
         response = await self.client.chat.completions.create(
             model=model,
@@ -227,6 +237,11 @@ class OpenAIProvider(BaseProvider):
                 # 如果有工具但没有指定tool_choice，默认为"auto"
                 if 'tool_choice' not in kwargs:
                     kwargs['tool_choice'] = "auto"
+
+        # 处理stop参数
+        if 'stop' in kwargs and kwargs['stop']:
+            # OpenAI API支持stop参数
+            pass  # 直接传递给API
 
         # 移除不被OpenAI API支持的参数
         kwargs.pop('system_prompt', None)  # system_prompt应该已经在messages中处理了
@@ -365,7 +380,7 @@ class OpenAIProvider(BaseProvider):
         has_tool_calls = False
         finish_reason = None
         role = "assistant"
-
+        kwargs["stream_options"] = { "include_usage": True }
         async for chunk in self.generate_stream_chunk(messages, temperature, **kwargs):
             if hasattr(chunk, 'choices') and chunk.choices:
                 delta = chunk.choices[0].delta
@@ -401,7 +416,7 @@ class OpenAIProvider(BaseProvider):
                     content = delta.content
                     full_content += content
                     # 调用log_llm_stream实时显示流式内容
-                    #log_llm_stream(content)
+                    log_llm_stream(content)
                 # Track finish_reason and role if present
                 if hasattr(chunk.choices[0], 'finish_reason') and chunk.choices[0].finish_reason:
                     finish_reason = chunk.choices[0].finish_reason

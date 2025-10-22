@@ -154,6 +154,9 @@ Supporting navigation and spatial memory""",
         self.python_env = python_env or AsyncPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
         self.stats_storer = stats_storer
+        if state is None:
+            from minion.types.history import History
+            state = AgentState(history=History()) #when brain is used standalone, create a AgentState to bind to it, it's like a simple agent
         self.state = state
 
     def add_tool(self, tool):
@@ -178,8 +181,8 @@ Supporting navigation and spatial memory""",
 
     async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
         # 处理不同类型的state参数
-        if state is None:
-            state = AgentState()
+        # if state is None: #we don't handle this since this means input.query is None
+        #     state = AgentState()
             
         # 根据state类型提取参数
         if isinstance(state, Input):
@@ -197,6 +200,13 @@ Supporting navigation and spatial memory""",
             current_tools = config_kwargs.get("tools", [])
         else:
             raise ValueError(f"Unsupported state type: {type(state)}")
+
+        # 注意：不在这里设置 self.state，因为：
+        # 1. Brain 构造时已经通过 Brain(state=agent.state) 建立了引用关系
+        # 2. agent.state 的任何修改都会自动反映到 brain.state
+        # 3. 重新赋值会破坏引用关系，导致状态不同步
+        # 4. 如果 brain.step() 被直接调用（不通过 agent），self.state 可能为 None，这是正常的
+        self.state.input = input #now set input back to state, make sure state.input is this.
 
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
@@ -221,6 +231,7 @@ Supporting navigation and spatial memory""",
             
             # 如果有messages，优先使用messages创建Input
             if messages is not None:
+                # 支持标准 OpenAI messages 格式
                 input = Input(query=messages, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
             else:
                 # 否则使用query创建Input
@@ -248,9 +259,9 @@ Supporting navigation and spatial memory""",
         # 选择心智
         mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
-            self.llm.config.temperature = 1
+            self.llm.config.temperature = 0.1
         elif mind_id == "right_mind":
-            self.llm.config.temperature = 1
+            self.llm.config.temperature = 0.7
         mind = self.minds[mind_id]
         
         # 检查是否需要流式输出
@@ -283,6 +294,7 @@ Supporting navigation and spatial memory""",
             # Tools are only set when starting a new session with new tools
 
     async def choose_mind(self, input):
+        return "left_mind" #don't choose mind for now
         mind_template = Template(
             """
 I have minds:
