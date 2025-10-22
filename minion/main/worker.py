@@ -1375,6 +1375,8 @@ Please fix the error and try again."""
             
             try:
                 response = await node.execute(messages, tools=tools, stop=stop_sequences)
+                if response and not response.strip().endswith("<end_code>"):
+                    response += "<end_code>"
             except FinalAnswerException as e:
                 # 收到 final_answer 工具调用，直接返回结果
                 final_answer = e.answer
@@ -1392,13 +1394,13 @@ Please fix the error and try again."""
                     truncated=False,
                     info={'final_answer_exception': True}
                 )
-            
+
             # Extract and execute code
             code_blocks = self.extract_code_blocks(response)
-            
+            self.current_turn_attempts.append(f"**Assistant Response {iteration + 1}:** {response}")
             if not code_blocks:
                 # No code found, add LLM response to current turn and return
-                self.current_turn_attempts.append(f"**Assistant Response {iteration+1}:** {response}")
+
                 self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
                 
                 self.answer = self.input.answer = response
@@ -1412,10 +1414,7 @@ Please fix the error and try again."""
                     truncated=False,
                     info={'no_code_found': True}
                 )
-            
-            # Add LLM response to current turn attempts (before execution)
-            self.current_turn_attempts.append(f"**Assistant Response {iteration+1}:** {response}")
-            
+
             # Execute the first code block
             code = code_blocks[0]
             print(f"Executing code:\n{code}")
