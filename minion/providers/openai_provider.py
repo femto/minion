@@ -365,7 +365,7 @@ class OpenAIProvider(BaseProvider):
         has_tool_calls = False
         finish_reason = None
         role = "assistant"
-
+        kwargs["stream_options"] = { "include_usage": True }
         async for chunk in self.generate_stream_chunk(messages, temperature, **kwargs):
             if hasattr(chunk, 'choices') and chunk.choices:
                 delta = chunk.choices[0].delta
