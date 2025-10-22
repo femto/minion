@@ -261,6 +261,13 @@ class BedrockProvider(BaseProvider):
         if "top_k" in kwargs:
             request_body["top_k"] = kwargs["top_k"]
         
+        # 处理stop参数 - Bedrock使用stop_sequences
+        if "stop" in kwargs and kwargs["stop"]:
+            stop_sequences = kwargs["stop"]
+            if isinstance(stop_sequences, str):
+                stop_sequences = [stop_sequences]
+            request_body["stop_sequences"] = stop_sequences
+        
         return request_body
     
     def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:

@@ -28,7 +28,7 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, tool_choice="auto", stream=False, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, tool_choice="auto", stream=False, stop=None, **kwargs) -> Any:
         # 处理 system_prompt 参数
         system_prompt = kwargs.pop('system_prompt', None)
         
@@ -81,6 +81,10 @@ class LmpActionNode(LLMActionNode):
                 "model": self.llm.config.model,
             }
 
+        # 处理stop参数
+        if stop is not None:
+            api_params['stop'] = stop
+        
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
         api_params.update(kwargs)
         
@@ -213,6 +217,10 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         
         # 创建 LLM API 参数（移除内部参数）
         llm_api_params = {k: v for k, v in api_params.items() if k != 'original_tools'}
+        
+        # 确保stop参数被传递
+        if 'stop' in api_params:
+            llm_api_params['stop'] = api_params['stop']
         
         async for chunk in self.llm.generate_stream(messages, **llm_api_params):
             # 处理 StreamChunk 对象

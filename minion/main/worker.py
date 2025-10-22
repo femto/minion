@@ -1369,8 +1369,12 @@ Please fix the error and try again."""
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
             tools = (self.input.tools or []) + (self.brain.tools or [])
+            
+            # Add stop sequences for code execution
+            stop_sequences = ["<end_code>"]
+            
             try:
-                response = await node.execute(messages, tools=tools)
+                response = await node.execute(messages, tools=tools, stop=stop_sequences)
             except FinalAnswerException as e:
                 # 收到 final_answer 工具调用，直接返回结果
                 final_answer = e.answer

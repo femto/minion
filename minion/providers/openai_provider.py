@@ -102,6 +102,11 @@ class OpenAIProvider(BaseProvider):
                 if 'tool_choice' not in kwargs:
                     kwargs['tool_choice'] = "auto"
 
+        # 处理stop参数
+        if 'stop' in kwargs and kwargs['stop']:
+            # OpenAI API支持stop参数
+            pass  # 直接传递给API
+
         response = self.client_sync.chat.completions.create(
             model=model,
             messages=prepared_messages,
@@ -163,6 +168,11 @@ class OpenAIProvider(BaseProvider):
                 # 如果有工具但没有指定tool_choice，默认为"auto"
                 if 'tool_choice' not in kwargs:
                     kwargs['tool_choice'] = "auto"
+
+        # 处理stop参数
+        if 'stop' in kwargs and kwargs['stop']:
+            # OpenAI API支持stop参数
+            pass  # 直接传递给API
 
         response = await self.client.chat.completions.create(
             model=model,
@@ -227,6 +237,11 @@ class OpenAIProvider(BaseProvider):
                 # 如果有工具但没有指定tool_choice，默认为"auto"
                 if 'tool_choice' not in kwargs:
                     kwargs['tool_choice'] = "auto"
+
+        # 处理stop参数
+        if 'stop' in kwargs and kwargs['stop']:
+            # OpenAI API支持stop参数
+            pass  # 直接传递给API
 
         # 移除不被OpenAI API支持的参数
         kwargs.pop('system_prompt', None)  # system_prompt应该已经在messages中处理了
