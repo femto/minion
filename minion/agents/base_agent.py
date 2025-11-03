@@ -406,9 +406,13 @@ class BaseAgent:
         
         while step_count < max_steps:
             # 开始新的步骤
+            input_query = ""
+            if state.input and hasattr(state.input, 'query'):
+                input_query = str(state.input.query) if state.input.query else ""
+            
             action_step = self._streaming_manager.start_step(
                 step_type="reasoning",
-                input_query=state.get("input", {}).get("query", "") if isinstance(state.get("input"), dict) else str(state.get("input", ""))
+                input_query=input_query
             )
             
             # yield 步骤开始信息
