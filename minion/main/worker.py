@@ -1602,21 +1602,6 @@ Please fix the error and try again."""
                 chunk_type="agent_response" if hasattr(result, 'answer') else "text"
             )
 
-@register_worker_minion
-class MathMinion(PythonMinion):
-    "This is a problem involve math, you need to use math tool to solve it"
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.input.query_type = "calculate"
-        self.input.instruction = "This is a math problem, write python code to solve it"
-    
-    async def execute_stream(self):
-        """流式执行方法 - MathMinion 继承 PythonMinion 的流式执行"""
-        async for chunk in super().execute_stream():
-            yield chunk
-
-
 #do we need this minion?
 class CodeProblemMinion(PlanMinion):
     "This is a coding problem which requires stragety thinking to solve it, you will first explore the stragety space then solve it"

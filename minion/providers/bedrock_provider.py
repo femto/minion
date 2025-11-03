@@ -229,7 +229,7 @@ class BedrockProvider(BaseProvider):
         return None
     
     def _create_request_body(self, messages: List[Message], temperature: Optional[float] = None, 
-                           max_tokens: int = 4096, **kwargs) -> Dict:
+                           max_tokens: int = 65_536, **kwargs) -> Dict:
         """Create request body for Bedrock Claude API"""
         bedrock_messages = self._prepare_messages(messages)
         system_message = self._extract_system_message(messages)

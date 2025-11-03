@@ -406,17 +406,21 @@ class BaseAgent:
         
         while step_count < max_steps:
             # 开始新的步骤
+            input_query = ""
+            if state.input and hasattr(state.input, 'query'):
+                input_query = str(state.input.query) if state.input.query else ""
+            
             action_step = self._streaming_manager.start_step(
                 step_type="reasoning",
-                input_query=state.get("input", {}).get("query", "") if isinstance(state.get("input"), dict) else str(state.get("input", ""))
+                input_query=input_query
             )
-            
-            # yield 步骤开始信息
-            yield StreamChunk(
-                content=f"[STEP {step_count + 1}] Starting reasoning...\n",
-                chunk_type="step_start",
-                metadata={"step_number": step_count + 1, "step_id": action_step.step_id}
-            )
+            #
+            # # yield 步骤开始信息
+            # yield StreamChunk(
+            #     content=f"[STEP {step_count + 1}] Starting reasoning...\n",
+            #     chunk_type="step_start",
+            #     metadata={"step_number": step_count + 1, "step_id": action_step.step_id}
+            # )
             
             # 执行步骤并流式输出
             async for chunk in self._execute_step_stream(state, **kwargs):
@@ -433,11 +437,11 @@ class BaseAgent:
                 action_step.is_final_answer = True
                 self._streaming_manager.complete_current_step(is_final_answer=True)
                 
-                yield StreamChunk(
-                    content=f"[FINAL] Task completed!\n",
-                    chunk_type="completion", #interesting, yield completion type
-                    metadata={"final_answer": True}
-                )
+                # yield StreamChunk(
+                #     content=f"[FINAL] Task completed!\n",
+                #     chunk_type="completion", #interesting, yield completion type
+                #     metadata={"final_answer": True}
+                # )
                 break
             
             # 更新状态，继续下一步
@@ -445,18 +449,18 @@ class BaseAgent:
             state = self.update_state(state, result)
             step_count += 1
             
-            yield StreamChunk(
-                content=f"\n[STEP {step_count}] Completed. Moving to next step...\n",
-                chunk_type="step_end",
-                metadata={"step_number": step_count}
-            )
+            # yield StreamChunk(
+            #     content=f"\n[STEP {step_count}] Completed. Moving to next step...\n",
+            #     chunk_type="step_end",
+            #     metadata={"step_number": step_count}
+            # )
             
         # 达到最大步数
         if step_count >= max_steps:
-            yield StreamChunk(
-                content=f"\n[WARNING] Reached maximum steps ({max_steps}). Providing best available answer...\n",
-                chunk_type="warning"
-            )
+            # yield StreamChunk(
+            #     content=f"\n[WARNING] Reached maximum steps ({max_steps}). Providing best available answer...\n",
+            #     chunk_type="warning"
+            # )
             
             try:
                 final_answer = await self.provide_final_answer(state)
