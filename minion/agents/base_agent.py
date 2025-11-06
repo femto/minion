@@ -512,10 +512,7 @@ class BaseAgent:
                 )
             except Exception as e:
                 logger.error(f"Failed to provide final answer: {e}")
-                yield StreamChunk(
-                    content=f"[ERROR] Could not provide final answer: {e}\n",
-                    chunk_type="error"
-                )
+                raise
     
     async def _execute_step_stream(self, state, **kwargs):
         """执行单个步骤的流式输出"""
