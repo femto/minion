@@ -32,6 +32,10 @@ class LmpActionNode(LLMActionNode):
         # 处理 system_prompt 参数
         system_prompt = kwargs.pop('system_prompt', None)
         
+        # 处理可选的 llm 参数
+        selected_llm = kwargs.pop('llm', None)
+        current_llm = selected_llm if selected_llm is not None else self.llm
+        
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
@@ -62,23 +66,23 @@ class LmpActionNode(LLMActionNode):
             tools_formatted = self._format_tools_for_api(tools)
             if tools_formatted:
                 api_params = {
-                    "temperature": self.llm.config.temperature,
-                    "model": self.llm.config.model,
+                    "temperature": current_llm.config.temperature,
+                    "model": current_llm.config.model,
                     "tools": tools_formatted,
                     "tool_choice": tool_choice,
                     "original_tools": tools  # 保存原始工具对象
                 }
             else:
                 api_params = {
-                    "temperature": self.llm.config.temperature,
-                    "model": self.llm.config.model,
+                    "temperature": current_llm.config.temperature,
+                    "model": current_llm.config.model,
                     "original_tools": tools  # 保存原始工具对象
                 }
         else:
             # 从 llm.config 获取配置
             api_params = {
-                "temperature": self.llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
-                "model": self.llm.config.model,
+                "temperature": current_llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
+                "model": current_llm.config.model,
             }
 
         # 处理stop参数
@@ -138,7 +142,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         # 根据是否流式调用不同的方法
         if stream:
             # 流式模式：返回异步生成器（工具调用在生成器内部处理）
-            return self._execute_stream_generator(messages, **api_params)
+            return self._execute_stream_generator(messages, selected_llm=selected_llm, **api_params)
         
         # 非流式模式
         # 提取工具参数（使用原始工具对象）
@@ -147,7 +151,16 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         # 创建 LLM API 参数（移除内部参数）
         llm_api_params = {k: v for k, v in api_params.items() if k != 'original_tools'}
         
-        response = await super().execute(messages, **llm_api_params)
+        # 如果有选定的LLM，临时替换self.llm
+        original_llm = self.llm
+        if selected_llm is not None:
+            self.llm = selected_llm
+        
+        try:
+            response = await super().execute(messages, **llm_api_params)
+        finally:
+            # 恢复原始LLM
+            self.llm = original_llm
         
         # 从 ChatCompletion 对象中提取字符串内容
         if hasattr(response, 'choices') and hasattr(response.choices[0], 'message'):
@@ -192,8 +205,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             response_text = self.output_parser(response_text)
         return response_text
     
-    async def _execute_stream_generator(self, messages, **api_params):
+    async def _execute_stream_generator(self, messages, selected_llm=None, **api_params):
         """流式执行生成器，支持工具调用"""
+        # 处理可选的 llm 参数
+        current_llm = selected_llm if selected_llm is not None else self.llm
+        
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
@@ -222,7 +238,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         if 'stop' in api_params:
             llm_api_params['stop'] = api_params['stop']
         
-        async for chunk in self.llm.generate_stream(messages, **llm_api_params):
+        async for chunk in current_llm.generate_stream(messages, **llm_api_params):
             # 处理 StreamChunk 对象
             if hasattr(chunk, 'content'):
                 if chunk.chunk_type == "text":

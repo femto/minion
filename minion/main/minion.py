@@ -90,7 +90,7 @@ def register_result_strategy(cls=None, *, name=None):
     return decorator(cls)
 
 class Minion(metaclass=SubclassHookMeta):
-    def __init__(self, input=None, brain=None, id=None, score_func=None, worker_config=None, task=None, **kwargs):
+    def __init__(self, input=None, brain=None, id=None, score_func=None, worker_config=None, task=None, selected_llm=None, **kwargs):
         if brain is None:
             raise ValueError("The 'brain' parameter cannot be None.")
 
@@ -103,6 +103,11 @@ class Minion(metaclass=SubclassHookMeta):
 
         self.worker_config = worker_config
         self.task = task
+        self.selected_llm = selected_llm  # 可选的LLM BaseProvider实例
+    
+    def get_llm(self):
+        """获取要使用的LLM，优先使用selected_llm，否则使用brain.llm"""
+        return self.selected_llm if self.selected_llm else self.brain.llm
 
     def propagate_information(self, other):
         other.input = self.input
@@ -186,7 +191,7 @@ class Minion(metaclass=SubclassHookMeta):
 
     async def execute(self):
         from jinja2 import Template
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         template = Template(ASK_PROMPT_JINJA)
         prompt = template.render(input=self.input)
         tools = (self.input.tools or []) + (self.brain.tools or [])

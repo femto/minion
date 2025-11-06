@@ -86,7 +86,7 @@ class RawMinion(WorkerMinion):
         self.input.instruction = ""
 
     async def execute(self):
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         # 检查是否需要流式输出
@@ -172,7 +172,7 @@ class RawMinion(WorkerMinion):
     
     async def execute_stream(self):
         """公共流式执行接口"""
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         async for chunk in self._execute_stream(node, tools):
@@ -259,7 +259,7 @@ class NativeMinion(WorkerMinion):
                     WORKER_PROMPT, self.input
                 )
         
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         response = await node.execute(messages, tools=tools)
         
@@ -295,7 +295,7 @@ class NativeMinion(WorkerMinion):
                 WORKER_PROMPT, self.input
             )
         
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         full_response = ""
@@ -339,7 +339,9 @@ class CotMinion(WorkerMinion):
                 COT_PROBLEM_INSTRUCTION + WORKER_PROMPT, self.input
             )
 
-        node = LmpActionNode(self.brain.llm)
+        # 优先使用selected_llm，如果没有则使用brain.llm
+        llm_to_use = self.selected_llm if self.selected_llm else self.brain.llm
+        node = LmpActionNode(llm_to_use)
         tools = (self.input.tools or []) + (self.brain.tools or [])
         response = await node.execute(messages, tools=tools)
         self.answer_node = node
@@ -388,7 +390,7 @@ class CotMinion(WorkerMinion):
                 COT_PROBLEM_INSTRUCTION + WORKER_PROMPT, self.input
             )
 
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         full_response = ""
@@ -470,7 +472,7 @@ class DcotMinion(WorkerMinion):
                 DCOT_PROMPT, self.input
             )
         
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         #tools = (self.input.tools or []) + (self.brain.tools or [])
         response = await node.execute(messages, tools=None)
         
@@ -501,7 +503,7 @@ class DcotMinion(WorkerMinion):
                 DCOT_PROMPT, self.input
             )
         
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         
         full_response = ""
         async for chunk in self.stream_node_execution(node, messages, tools=None):
@@ -1654,7 +1656,7 @@ class ModeratorMinion(Minion):
     async def invoke_minion(self, minion_name, worker_config=None):
         self.input.run_id = uuid.uuid4()  # a new run id for each run
         self.input.route = minion_name
-        worker = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config)
+        worker = RouteMinion(input=self.input, brain=self.brain, worker_config=worker_config, selected_llm=self.selected_llm)
         agent_response = await worker.execute()
 
         # Apply post-processing if specified
@@ -1826,7 +1828,7 @@ class IdentifyMinion(Minion):
         prompt = Template(IDENTIFY_PROMPT)
         prompt = prompt.render(input=self.input)
 
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         #tools = (self.input.tools or []) + (self.brain.tools or [])
         identification = await node.execute(prompt, response_format=Identification, tools=None)
         
@@ -1849,7 +1851,7 @@ class QaMinion(Minion):
             prompt = Template(QA_PROMPT_JINJA)
             prompt = prompt.render(question=f"what's {self.input.dataset}")
 
-            node = LmpActionNode(self.brain.llm)
+            node = LmpActionNode(self.get_llm())
             #tools = (self.input.tools or []) + (self.brain.tools or [])
             answer = await node.execute_answer(prompt, tools=None)
             
@@ -1917,9 +1919,11 @@ class RouteMinion(Minion):
                 # 如果所有route LLM都失败了，记录错误
                 logger.error("All route LLMs failed to recommend a route, fallback to using self.brain.llm to recommend a route")
             
-            # 如果没有route配置或所有route LLM都失败，使用默认的brain.llm
+            # 如果没有route配置或所有route LLM都失败，使用默认的brain.llm或selected_llm
             try:
-                node = LmpActionNode(self.brain.llm)
+                # 优先使用selected_llm，如果没有则使用brain.llm
+                llm_to_use = self.selected_llm if self.selected_llm else self.brain.llm
+                node = LmpActionNode(llm_to_use)
                 #tools = (self.input.tools or []) + (self.brain.tools or [])
                 meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=None)
                 
@@ -1965,7 +1969,7 @@ class RouteMinion(Minion):
             chosen_minion=klass.__name__
         )
 
-        self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config)
+        self.current_minion = klass(input=self.input, brain=self.brain, worker_config=self.worker_config, selected_llm=self.selected_llm)
         self.add_followers(self.current_minion)
         if improve:
             minion_result = await self.current_minion.improve()

@@ -12,6 +12,7 @@ from ..main.input import Input
 from ..main.action_step import ActionStep, StreamChunk, StreamingActionManager
 from minion.types.agent_response import AgentResponse
 from minion.types.agent_state import AgentState
+from minion.types.llm_types import ModelType, create_llm_from_model
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,11 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
-    llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
+    
+    # LLM configuration with strong typing support
+    llm: Optional[Union[BaseProvider, str, ModelType]] = None  # Primary LLM provider, model name, or ModelType
+    llms: Optional[Dict[str, Union[BaseProvider, str, ModelType]]] = None  # Multiple LLMs keyed by string
+    
     system_prompt: Optional[str] = None  # 系统提示
 
     state: AgentState = field(default_factory=AgentState)
@@ -45,12 +50,30 @@ class BaseAgent:
         if self.state and not self.state.agent:
             self.state.agent = self
             
+        # Convert LLM configurations to BaseProvider instances
+        self._convert_llm_configs()
+            
         # Automatically handle toolset objects in tools parameter
         # not quite useful
         # current just for setting self._toolsets
         # and ensure await self._toolsets.ensure_setup() in setup()
         self._extract_toolsets_from_tools()
 
+    def _convert_llm_configs(self):
+        """Convert string/ModelType LLM configurations to BaseProvider instances"""
+        # Convert primary LLM
+        if self.llm is not None and not isinstance(self.llm, BaseProvider):
+            self.llm = create_llm_from_model(self.llm)
+            
+        # Convert multiple LLMs
+        if self.llms is not None:
+            converted_llms = {}
+            for key, model in self.llms.items():
+                if isinstance(model, BaseProvider):
+                    converted_llms[key] = model
+                else:
+                    converted_llms[key] = create_llm_from_model(model)
+            self.llms = converted_llms
 
     @classmethod
     async def create(cls, *args, **kwargs) :
@@ -138,10 +161,15 @@ class BaseAgent:
             #we don't pass tools to brain, instead we
             #pass agent.tools when run/run_sync to brain.step
             #this way we can easily refresh tools on agent
-            brain_kwargs = {'tools': []}
+            brain_kwargs = {'tools': [], 'state': self.state}
+            
+            # Handle LLMs (already converted to BaseProvider in __post_init__)
             if self.llm is not None:
                 brain_kwargs['llm'] = self.llm
-                brain_kwargs['state'] = self.state
+                
+            if self.llms is not None:
+                brain_kwargs['llms'] = self.llms
+                    
             self.brain = Brain(**brain_kwargs)
         
         # Mark agent as setup
@@ -300,6 +328,7 @@ class BaseAgent:
            state: Optional[AgentState] = None, 
            max_steps: Optional[int] = None,
            reset: bool = False,
+           llm: Optional[str] = None,
            **kwargs) -> Any:
         """
         Synchronous interface for running the agent.
@@ -309,13 +338,14 @@ class BaseAgent:
             state: Existing state for resuming interrupted execution
             max_steps: Maximum number of steps
             reset: If True, reset the agent state before execution
+            llm: 可选的LLM名称，如 "code", "math", "creative" 等
             **kwargs: Additional parameters
             
         Returns:
             Final task result
         """
         import asyncio
-        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, reset=reset, stream=False, **kwargs))
+        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, reset=reset, stream=False, llm=llm, **kwargs))
 
     async def run_async(self, 
                        task: Optional[Union[str, Input]] = None,
@@ -323,6 +353,7 @@ class BaseAgent:
                        max_steps: Optional[int] = None,
                        reset: bool = False,
                        stream: bool = False,
+                       llm: Optional[str] = None,
                        **kwargs) -> Any:
         """
         运行完整任务，自动多步执行直到完成，支持从中断状态恢复
@@ -333,6 +364,7 @@ class BaseAgent:
             max_steps: 最大步数
             reset: If True, reset the agent state before execution
             stream: 若为True则使用异步迭代器返回中间结果
+            llm: 可选的LLM名称，如 "code", "math", "creative" 等，会使用对应的专用LLM
             **kwargs: 附加参数，可包含:
                 - tools: 临时工具覆盖
                 - 其他参数会传递给brain.step
@@ -344,6 +376,13 @@ class BaseAgent:
         
         # 处理参数
         streaming = stream
+        
+        # 解析可选的LLM参数
+        selected_llm_provider = None
+        if llm is not None:
+            selected_llm_provider = self._resolve_llm(llm)
+            if selected_llm_provider is None:
+                raise ValueError(f"LLM '{llm}' not found. Available LLMs: {list(self.list_available_llms().keys())}")
         
         # 处理状态初始化或恢复
         if state is None:
@@ -373,12 +412,12 @@ class BaseAgent:
             # 设置 stream_outputs 属性，供 UI 使用
             self.stream_outputs = True
             # 返回异步迭代器
-            return self._run_stream(state, max_steps, kwargs)
+            return self._run_stream(state, max_steps, kwargs, selected_llm_provider)
         else:
             # 清除 stream_outputs 属性
             self.stream_outputs = False
             # 一次性执行完成返回最终结果
-            return await self._run_complete(state, max_steps, kwargs)
+            return await self._run_complete(state, max_steps, kwargs, selected_llm_provider)
 
     async def run_stream(self, 
                         task: Optional[Union[str, Input]] = None,
@@ -400,7 +439,7 @@ class BaseAgent:
         # Force stream=True for this method
         return await self.run_async(task=task, state=state, max_steps=max_steps, stream=True, **kwargs)
             
-    async def _run_stream(self, state, max_steps, kwargs):
+    async def _run_stream(self, state, max_steps, kwargs, selected_llm_provider=None):
         """返回一个异步迭代器，逐步执行并返回中间结果"""
         step_count = 0
         
@@ -423,7 +462,10 @@ class BaseAgent:
             # )
             
             # 执行步骤并流式输出
-            async for chunk in self._execute_step_stream(state, **kwargs):
+            step_kwargs = kwargs.copy()
+            if selected_llm_provider is not None:
+                step_kwargs['llm'] = selected_llm_provider
+            async for chunk in self._execute_step_stream(state, **step_kwargs):
                 action_step.add_chunk(chunk)
                 yield chunk
                 if hasattr(chunk,'is_final_answer') and chunk.is_final_answer:
@@ -470,10 +512,7 @@ class BaseAgent:
                 )
             except Exception as e:
                 logger.error(f"Failed to provide final answer: {e}")
-                yield StreamChunk(
-                    content=f"[ERROR] Could not provide final answer: {e}\n",
-                    chunk_type="error"
-                )
+                raise
     
     async def _execute_step_stream(self, state, **kwargs):
         """执行单个步骤的流式输出"""
@@ -497,18 +536,19 @@ class BaseAgent:
                 
         except Exception as e:
             logger.error(f"Error in step execution: {e}")
-            yield StreamChunk(
-                content=f"[ERROR] Step execution failed: {e}\n",
-                chunk_type="error"
-            )
+            raise
             
-    async def _run_complete(self, state, max_steps, kwargs):
+    async def _run_complete(self, state, max_steps, kwargs, selected_llm_provider=None):
         """一次性执行所有步骤直到完成，返回最终结果"""
         step_count = 0
         final_result = None
         
         while step_count < max_steps:
-            result = await self.step(state, stream=kwargs.get('stream', False), **kwargs)
+            # 传递selected_llm_provider给step方法
+            step_kwargs = kwargs.copy()
+            if selected_llm_provider is not None:
+                step_kwargs['llm'] = selected_llm_provider
+            result = await self.step(state, stream=kwargs.get('stream', False), **step_kwargs)
             
             # 检查是否完成
             if self.is_done(result, state):
@@ -530,11 +570,12 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, state: AgentState, stream: bool = False, **kwargs) -> AgentResponse:
+    async def step(self, state: AgentState, stream: bool = False, llm: Optional[str] = None, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
             state: 强类型状态对象，包含 input 等必要信息
+            llm: 可选的LLM名称，如 "code", "math", "creative" 等
             **kwargs: 其他参数，直接传递给brain
         Returns:
             AgentResponse: 结构化的响应对象
@@ -550,6 +591,13 @@ class BaseAgent:
             
         # 预处理输入
         input_obj, kwargs = await self.pre_step(input_obj, kwargs)
+        
+        # 解析可选的LLM参数
+        if llm is not None:
+            selected_llm_provider = self._resolve_llm(llm)
+            if selected_llm_provider is None:
+                raise ValueError(f"LLM '{llm}' not found. Available LLMs: {list(self.list_available_llms().keys())}")
+            kwargs['llm'] = selected_llm_provider
             
         # 执行主要步骤
         result = await self.execute_step(state, stream=stream, **kwargs)
@@ -873,6 +921,63 @@ Please provide the answer directly, without explaining why you couldn't complete
         # 同时向brain添加工具
         if hasattr(self.brain, 'add_tool'):
             self.brain.add_tool(tool)
+    
+    def set_primary_llm(self, model: Union[ModelType, str, BaseProvider]) -> None:
+        """
+        Set the primary LLM for the agent
+        
+        Args:
+            model: Model type, string identifier, or provider instance
+        """
+        # Convert to BaseProvider if needed
+        if isinstance(model, BaseProvider):
+            self.llm = model
+        else:
+            self.llm = create_llm_from_model(model)
+            
+        # Update brain if already setup
+        if self._is_setup and self.brain:
+            self.brain.llm = self.llm
+    
+    def add_specialized_llm(self, name: str, model: Union[ModelType, str, BaseProvider]) -> None:
+        """
+        Add a specialized LLM for specific tasks
+        
+        Args:
+            name: Name/key for the specialized LLM
+            model: Model type, string identifier, or provider instance
+        """
+        if self.llms is None:
+            self.llms = {}
+            
+        # Convert to BaseProvider if needed
+        if isinstance(model, BaseProvider):
+            self.llms[name] = model
+        else:
+            self.llms[name] = create_llm_from_model(model)
+        
+        # Update brain if already setup
+        if self._is_setup and self.brain:
+            if not hasattr(self.brain, 'llms') or self.brain.llms is None:
+                self.brain.llms = {}
+            self.brain.llms[name] = self.llms[name]
+    
+    def _resolve_llm(self, llm_name: str) -> Optional[BaseProvider]:
+        """
+        Resolve LLM name to BaseProvider instance
+        
+        Args:
+            llm_name: Name of the LLM ("primary", "code", "math", etc.)
+            
+        Returns:
+            BaseProvider instance or None if not found
+        """
+        if llm_name == "primary":
+            return self.llm
+        elif self.llms and llm_name in self.llms:
+            return self.llms[llm_name]
+        else:
+            return None
     
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """

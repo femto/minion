@@ -32,8 +32,8 @@ class Mind(BaseModel):
     description: str = ""
     brain: Any = None  # Brain
 
-    def step(self, input):
-        moderator = ModeratorMinion(input=input, brain=self.brain)
+    def step(self, input, selected_llm=None):
+        moderator = ModeratorMinion(input=input, brain=self.brain, selected_llm=selected_llm)
         
         # 检查是否需要流式输出
         if hasattr(input, 'stream') and input.stream:
@@ -214,6 +214,7 @@ Supporting navigation and spatial memory""",
         system_prompt = config_kwargs.get("system_prompt")
         messages = config_kwargs.get("messages")
         stream = config_kwargs.get("stream", False)
+        selected_llm = config_kwargs.get("llm")  # 可选的LLM BaseProvider实例
         
         # 验证必须有input或者有query/messages
         if input is None:
@@ -228,6 +229,7 @@ Supporting navigation and spatial memory""",
             input_kwargs.pop('tools', None)
             input_kwargs.pop('messages', None)
             input_kwargs.pop('stream', None)
+            input_kwargs.pop('llm', None)
             
             # 如果有messages，优先使用messages创建Input
             if messages is not None:
@@ -269,12 +271,12 @@ Supporting navigation and spatial memory""",
             # 设置 stream_outputs 属性，供 UI 使用
             self.stream_outputs = True
             # 流式输出：直接返回异步生成器
-            return mind.step(input)
+            return mind.step(input, selected_llm=selected_llm)
         else:
             # 清除 stream_outputs 属性
             self.stream_outputs = False
             # 普通执行：await 结果并确保返回AgentResponse
-            result = await mind.step(input)
+            result = await mind.step(input, selected_llm=selected_llm)
             
             # 确保结果是AgentResponse格式
             if not isinstance(result, AgentResponse):
