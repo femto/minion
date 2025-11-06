@@ -6,7 +6,7 @@ from ..types.llm_types import ModelType, AgentLLMConfig, create_llm_from_model
 from ..providers.base_provider import BaseProvider
 
 #some hint about using different llms for different tasks.
-#AgentLLMConfig currently not implemented
+#AgentLLMConfig is now implemented in minion.types.llm_types
 
 def create_agent_llm_config(
         primary: Union[ModelType, str] = ModelType.GPT_4O,
