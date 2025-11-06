@@ -90,7 +90,7 @@ def register_result_strategy(cls=None, *, name=None):
     return decorator(cls)
 
 class Minion(metaclass=SubclassHookMeta):
-    def __init__(self, input=None, brain=None, id=None, score_func=None, worker_config=None, task=None, **kwargs):
+    def __init__(self, input=None, brain=None, id=None, score_func=None, worker_config=None, task=None, selected_llm=None, **kwargs):
         if brain is None:
             raise ValueError("The 'brain' parameter cannot be None.")
 
@@ -103,6 +103,7 @@ class Minion(metaclass=SubclassHookMeta):
 
         self.worker_config = worker_config
         self.task = task
+        self.selected_llm = selected_llm  # 可选的LLM BaseProvider实例
 
     def propagate_information(self, other):
         other.input = self.input
