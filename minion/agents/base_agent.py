@@ -12,6 +12,7 @@ from ..main.input import Input
 from ..main.action_step import ActionStep, StreamChunk, StreamingActionManager
 from minion.types.agent_response import AgentResponse
 from minion.types.agent_state import AgentState
+from minion.types.llm_types import ModelType, create_llm_from_model
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,11 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
-    llm: Optional[Union[BaseProvider, str]] = None  # LLM provider or model name to pass to Brain
+    
+    # LLM configuration with strong typing support
+    llm: Optional[Union[BaseProvider, str, ModelType]] = None  # Primary LLM provider, model name, or ModelType
+    llms: Optional[Dict[str, Union[BaseProvider, str, ModelType]]] = None  # Multiple LLMs keyed by string
+    
     system_prompt: Optional[str] = None  # 系统提示
 
     state: AgentState = field(default_factory=AgentState)
@@ -45,12 +50,30 @@ class BaseAgent:
         if self.state and not self.state.agent:
             self.state.agent = self
             
+        # Convert LLM configurations to BaseProvider instances
+        self._convert_llm_configs()
+            
         # Automatically handle toolset objects in tools parameter
         # not quite useful
         # current just for setting self._toolsets
         # and ensure await self._toolsets.ensure_setup() in setup()
         self._extract_toolsets_from_tools()
 
+    def _convert_llm_configs(self):
+        """Convert string/ModelType LLM configurations to BaseProvider instances"""
+        # Convert primary LLM
+        if self.llm is not None and not isinstance(self.llm, BaseProvider):
+            self.llm = create_llm_from_model(self.llm)
+            
+        # Convert multiple LLMs
+        if self.llms is not None:
+            converted_llms = {}
+            for key, model in self.llms.items():
+                if isinstance(model, BaseProvider):
+                    converted_llms[key] = model
+                else:
+                    converted_llms[key] = create_llm_from_model(model)
+            self.llms = converted_llms
 
     @classmethod
     async def create(cls, *args, **kwargs) :
@@ -138,10 +161,15 @@ class BaseAgent:
             #we don't pass tools to brain, instead we
             #pass agent.tools when run/run_sync to brain.step
             #this way we can easily refresh tools on agent
-            brain_kwargs = {'tools': []}
+            brain_kwargs = {'tools': [], 'state': self.state}
+            
+            # Handle LLMs (already converted to BaseProvider in __post_init__)
             if self.llm is not None:
                 brain_kwargs['llm'] = self.llm
-                brain_kwargs['state'] = self.state
+                
+            if self.llms is not None:
+                brain_kwargs['llms'] = self.llms
+                    
             self.brain = Brain(**brain_kwargs)
         
         # Mark agent as setup
@@ -497,10 +525,7 @@ class BaseAgent:
                 
         except Exception as e:
             logger.error(f"Error in step execution: {e}")
-            yield StreamChunk(
-                content=f"[ERROR] Step execution failed: {e}\n",
-                chunk_type="error"
-            )
+            raise
             
     async def _run_complete(self, state, max_steps, kwargs):
         """一次性执行所有步骤直到完成，返回最终结果"""
@@ -873,6 +898,80 @@ Please provide the answer directly, without explaining why you couldn't complete
         # 同时向brain添加工具
         if hasattr(self.brain, 'add_tool'):
             self.brain.add_tool(tool)
+    
+    def set_primary_llm(self, model: Union[ModelType, str, BaseProvider]) -> None:
+        """
+        Set the primary LLM for the agent
+        
+        Args:
+            model: Model type, string identifier, or provider instance
+        """
+        # Convert to BaseProvider if needed
+        if isinstance(model, BaseProvider):
+            self.llm = model
+        else:
+            self.llm = create_llm_from_model(model)
+            
+        # Update brain if already setup
+        if self._is_setup and self.brain:
+            self.brain.llm = self.llm
+    
+    def add_specialized_llm(self, name: str, model: Union[ModelType, str, BaseProvider]) -> None:
+        """
+        Add a specialized LLM for specific tasks
+        
+        Args:
+            name: Name/key for the specialized LLM
+            model: Model type, string identifier, or provider instance
+        """
+        if self.llms is None:
+            self.llms = {}
+            
+        # Convert to BaseProvider if needed
+        if isinstance(model, BaseProvider):
+            self.llms[name] = model
+        else:
+            self.llms[name] = create_llm_from_model(model)
+        
+        # Update brain if already setup
+        if self._is_setup and self.brain:
+            if not hasattr(self.brain, 'llms') or self.brain.llms is None:
+                self.brain.llms = {}
+            self.brain.llms[name] = self.llms[name]
+    
+    def get_llm(self, name: Optional[str] = None) -> Optional[BaseProvider]:
+        """
+        Get LLM provider by name
+        
+        Args:
+            name: Name of the LLM. If None, returns primary LLM
+            
+        Returns:
+            BaseProvider instance or None if not found
+        """
+        if not self._is_setup or not self.brain:
+            return None
+            
+        if name is None:
+            return self.brain.llm
+        else:
+            return self.brain.llms.get(name) if hasattr(self.brain, 'llms') and self.brain.llms else None
+    
+    def list_available_llms(self) -> Dict[str, str]:
+        """
+        List all available LLMs in the agent
+        
+        Returns:
+            Dictionary mapping LLM names to their model identifiers
+        """
+        llms = {"primary": getattr(self.brain.llm, 'config', {}).get('model', 'unknown') if self.brain and self.brain.llm else 'none'}
+        
+        if self.brain and hasattr(self.brain, 'llms') and self.brain.llms:
+            for name, llm in self.brain.llms.items():
+                model_name = getattr(llm, 'config', {}).get('model', 'unknown') if hasattr(llm, 'config') else 'unknown'
+                llms[name] = model_name
+                
+        return llms
     
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """
