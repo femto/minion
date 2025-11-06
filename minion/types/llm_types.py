@@ -65,35 +65,3 @@ def create_llm_from_model(model: Union[ModelType, str, BaseProvider]) -> BasePro
     llm_config = get_model_config(model)
     return create_llm_provider(llm_config)
 
-
-@dataclass
-class AgentLLMConfig:
-    """Configuration for agent LLM setup with primary and specialized models"""
-    primary_model: Union[ModelType, str]
-    specialized_models: Optional[Dict[str, Union[ModelType, str]]] = None
-    
-    def get_model_for_task(self, task_type: str) -> Union[ModelType, str]:
-        """
-        Get the appropriate model for a specific task type
-        
-        Args:
-            task_type: Type of task (e.g., 'code', 'math', 'creative', 'fast')
-            
-        Returns:
-            Model to use for the task, falls back to primary_model if not found
-        """
-        if self.specialized_models and task_type in self.specialized_models:
-            return self.specialized_models[task_type]
-        return self.primary_model
-    
-    def get_all_models(self) -> Dict[str, Union[ModelType, str]]:
-        """
-        Get all models including primary and specialized
-        
-        Returns:
-            Dictionary with all models
-        """
-        models = {"primary": self.primary_model}
-        if self.specialized_models:
-            models.update(self.specialized_models)
-        return models
