@@ -939,40 +939,6 @@ Please provide the answer directly, without explaining why you couldn't complete
                 self.brain.llms = {}
             self.brain.llms[name] = self.llms[name]
     
-    def get_llm(self, name: Optional[str] = None) -> Optional[BaseProvider]:
-        """
-        Get LLM provider by name
-        
-        Args:
-            name: Name of the LLM. If None, returns primary LLM
-            
-        Returns:
-            BaseProvider instance or None if not found
-        """
-        if not self._is_setup or not self.brain:
-            return None
-            
-        if name is None:
-            return self.brain.llm
-        else:
-            return self.brain.llms.get(name) if hasattr(self.brain, 'llms') and self.brain.llms else None
-    
-    def list_available_llms(self) -> Dict[str, str]:
-        """
-        List all available LLMs in the agent
-        
-        Returns:
-            Dictionary mapping LLM names to their model identifiers
-        """
-        llms = {"primary": getattr(self.brain.llm, 'config', {}).get('model', 'unknown') if self.brain and self.brain.llm else 'none'}
-        
-        if self.brain and hasattr(self.brain, 'llms') and self.brain.llms:
-            for name, llm in self.brain.llms.items():
-                model_name = getattr(llm, 'config', {}).get('model', 'unknown') if hasattr(llm, 'config') else 'unknown'
-                llms[name] = model_name
-                
-        return llms
-    
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """
         获取指定名称的工具
