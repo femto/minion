@@ -564,6 +564,7 @@ Use Python code to:
            task: Optional[Union[str, Input]] = None,
            max_steps: Optional[int] = None,
            reset: bool = False,
+           route: Optional[str] = None,
            **kwargs) -> Any:
         """
         Synchronous interface for running the agent using internal state.
@@ -572,18 +573,20 @@ Use Python code to:
             task: Task description or Input object
             max_steps: Maximum number of steps
             reset: If True, reset the agent state before execution
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: Additional parameters
             
         Returns:
             Final task result
         """
         import asyncio
-        return asyncio.run(self.run_async(task=task, max_steps=max_steps, reset=reset, stream=False, **kwargs))
+        return asyncio.run(self.run_async(task=task, max_steps=max_steps, reset=reset, stream=False, route=route, **kwargs))
 
     async def run_async(self, task: Optional[Union[str, Input]] = None,
                        max_steps: Optional[int] = None,
                        reset: bool = False,
                        stream: bool = False,
+                       route: Optional[str] = None,
                        **kwargs) -> Any:
         """
         Run the CodeAgent with code-thinking capabilities using internal state.
@@ -593,13 +596,14 @@ Use Python code to:
             max_steps: Maximum steps to execute
             reset: If True, reset the agent state before execution
             stream: If True, return streaming generator
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: Additional parameters
             
         Returns:
             Agent response or async generator for streaming
         """
         # Prepare input and internal state
-        enhanced_input = self._prepare_input(task)
+        enhanced_input = self._prepare_input(task, route=route)
         self._prepare_internal_state(task, reset)
         
         # Record input in state for interaction tracking
@@ -612,6 +616,7 @@ Use Python code to:
                 state=self.state, 
                 max_steps=max_steps, 
                 stream=stream, 
+                route=route,
                 **kwargs
             )
             
@@ -629,23 +634,28 @@ Use Python code to:
                 await self._record_interaction(enhanced_input, f"Error: {e}", reset)
             raise
     
-    def _prepare_input(self, task: Optional[Union[str, Input]]) -> Input:
+    def _prepare_input(self, task: Optional[Union[str, Input]], route: Optional[str] = None) -> Input:
         """
         Prepare input data for execution.
         
         Args:
             task: Task description or Input object
+            route: 可选的route名称，如果提供则覆盖默认的'code' route
             
         Returns:
             Input: Prepared Input object with enhanced query
         """
         # Convert string task to Input if needed
         if isinstance(task, str):
-            input_data = Input(query=task, route='code')  # Key difference: prefer code route
+            # Use provided route or default to 'code'
+            default_route = route if route is not None else 'code'
+            input_data = Input(query=task, route=default_route)
         elif isinstance(task, Input):
             input_data = task
-            # Ensure we use code route if not explicitly set
-            if not input_data.route:
+            # Set route based on priority: explicit route param > existing route > default 'code'
+            if route is not None:
+                input_data.route = route
+            elif not input_data.route:
                 input_data.route = 'code'
         else:
             raise ValueError(f"Task must be string or Input object, got {type(task)}")
