@@ -328,7 +328,8 @@ class BaseAgent:
            state: Optional[AgentState] = None, 
            max_steps: Optional[int] = None,
            reset: bool = False,
-           llm: Optional[str] = None,
+           llm: Optional[Union[str, BaseProvider]] = None,
+           route: Optional[str] = None,
            **kwargs) -> Any:
         """
         Synchronous interface for running the agent.
@@ -338,14 +339,15 @@ class BaseAgent:
             state: Existing state for resuming interrupted execution
             max_steps: Maximum number of steps
             reset: If True, reset the agent state before execution
-            llm: 可选的LLM名称，如 "code", "math", "creative" 等
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: Additional parameters
             
         Returns:
             Final task result
         """
         import asyncio
-        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, reset=reset, stream=False, llm=llm, **kwargs))
+        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, reset=reset, stream=False, llm=llm, route=route, **kwargs))
 
     async def run_async(self, 
                        task: Optional[Union[str, Input]] = None,
@@ -353,7 +355,8 @@ class BaseAgent:
                        max_steps: Optional[int] = None,
                        reset: bool = False,
                        stream: bool = False,
-                       llm: Optional[str] = None,
+                       llm: Optional[Union[str, BaseProvider]] = None,
+                       route: Optional[str] = None,
                        **kwargs) -> Any:
         """
         运行完整任务，自动多步执行直到完成，支持从中断状态恢复
@@ -364,7 +367,8 @@ class BaseAgent:
             max_steps: 最大步数
             reset: If True, reset the agent state before execution
             stream: 若为True则使用异步迭代器返回中间结果
-            llm: 可选的LLM名称，如 "code", "math", "creative" 等，会使用对应的专用LLM
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: 附加参数，可包含:
                 - tools: 临时工具覆盖
                 - 其他参数会传递给brain.step
@@ -389,7 +393,7 @@ class BaseAgent:
             if task is None:
                 raise ValueError("Either 'task' or 'state' must be provided")
             # 初始化新状态
-            self._init_state_from_task(task, **kwargs)
+            self._init_state_from_task(task, route=route, **kwargs)
         else:
             # 使用已有状态
             self.state = state
@@ -404,6 +408,10 @@ class BaseAgent:
                 else:
                     self.state.task = task.query
                     self.state.input = task
+            
+            # 设置route（如果提供）
+            if route is not None and self.state.input:
+                self.state.input.route = route
         
         # 确定最大步数
         max_steps = max_steps or self.max_steps
@@ -570,12 +578,12 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, state: AgentState, stream: bool = False, llm: Optional[str] = None, **kwargs) -> AgentResponse:
+    async def step(self, state: AgentState, stream: bool = False, llm: Optional[Union[str, BaseProvider]] = None, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
             state: 强类型状态对象，包含 input 等必要信息
-            llm: 可选的LLM名称，如 "code", "math", "creative" 等
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
             **kwargs: 其他参数，直接传递给brain
         Returns:
             AgentResponse: 结构化的响应对象
@@ -596,7 +604,7 @@ class BaseAgent:
         if llm is not None:
             selected_llm_provider = self._resolve_llm(llm)
             if selected_llm_provider is None:
-                raise ValueError(f"LLM '{llm}' not found. Available LLMs: {list(self.list_available_llms().keys())}")
+                raise ValueError(f"LLM '{llm}' not found.")
             kwargs['llm'] = selected_llm_provider
             
         # 执行主要步骤
@@ -710,11 +718,12 @@ Please provide the answer directly, without explaining why you couldn't complete
         # If there is no valid input object, return basic information
         return f"The task execution reached the maximum step limit and could not provide a valid final answer."
     
-    def _init_state_from_task(self, task: Union[str, Input], **kwargs) -> None:
+    def _init_state_from_task(self, task: Union[str, Input], route: Optional[str] = None, **kwargs) -> None:
         """
         从任务初始化内部状态
         Args:
             task: 任务描述或Input对象
+            route: 可选的route名称，指定使用哪个minion
             **kwargs: 附加参数
         """
         # 将任务转换为Input对象
@@ -724,6 +733,10 @@ Please provide the answer directly, without explaining why you couldn't complete
         else:
             input_obj = task
             task_str = task.query
+        
+        # 设置route（如果提供）
+        if route is not None:
+            input_obj.route = route
             
         # 初始化强类型状态
         from minion.types.history import History
@@ -962,20 +975,25 @@ Please provide the answer directly, without explaining why you couldn't complete
                 self.brain.llms = {}
             self.brain.llms[name] = self.llms[name]
     
-    def _resolve_llm(self, llm_name: str) -> Optional[BaseProvider]:
+    def _resolve_llm(self, llm: Union[str, BaseProvider]) -> Optional[BaseProvider]:
         """
-        Resolve LLM name to BaseProvider instance
+        Resolve LLM name or provider to BaseProvider instance
         
         Args:
-            llm_name: Name of the LLM ("primary", "code", "math", etc.)
+            llm: LLM name ("primary", "code", "math", etc.) or BaseProvider instance
             
         Returns:
             BaseProvider instance or None if not found
         """
-        if llm_name == "primary":
+        # If already a BaseProvider instance, return it directly
+        if isinstance(llm, BaseProvider):
+            return llm
+        
+        # Otherwise treat as string name
+        if llm == "primary":
             return self.llm
-        elif self.llms and llm_name in self.llms:
-            return self.llms[llm_name]
+        elif self.llms and llm in self.llms:
+            return self.llms[llm]
         else:
             return None
     
