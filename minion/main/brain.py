@@ -216,6 +216,10 @@ Supporting navigation and spatial memory""",
         stream = config_kwargs.get("stream", False)
         selected_llm = config_kwargs.get("llm")  # 可选的LLM BaseProvider实例
         
+        # 如果selected_llm是字符串，转换为BaseProvider实例
+        if isinstance(selected_llm, str):
+            selected_llm = create_llm_provider(config.models.get(selected_llm))
+        
         # 验证必须有input或者有query/messages
         if input is None:
             if not query and messages is None:
