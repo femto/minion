@@ -1,12 +1,61 @@
 """
 Strong-typed LLM configuration for agents
 """
+from __future__ import annotations
 from enum import Enum
 from typing import Union, Optional, Dict
 from dataclasses import dataclass
 
 from ..configs.config import LLMConfig
 from ..providers.base_provider import BaseProvider
+
+
+@dataclass
+class AgentLLMConfig:
+    """
+    Configuration for agent LLM setup with primary and specialized models
+    """
+    primary_model: Union[ModelType, str]
+    specialized_models: Optional[Dict[str, Union[ModelType, str]]] = None
+    
+    def get_model_for_task(self, task_type: str) -> Union[ModelType, str]:
+        """
+        Get the appropriate model for a specific task type
+        
+        Args:
+            task_type: Type of task (e.g., "code", "math", "creative", "fast")
+            
+        Returns:
+            Model to use for the task, falls back to primary_model if not found
+        """
+        if self.specialized_models and task_type in self.specialized_models:
+            return self.specialized_models[task_type]
+        return self.primary_model
+    
+    def get_available_models(self) -> Dict[str, Union[ModelType, str]]:
+        """
+        Get all available models including primary and specialized
+        
+        Returns:
+            Dictionary mapping model names to model types
+        """
+        models = {"primary": self.primary_model}
+        if self.specialized_models:
+            models.update(self.specialized_models)
+        return models
+    
+    def create_llm_provider(self, task_type: Optional[str] = None) -> BaseProvider:
+        """
+        Create LLM provider for a specific task type
+        
+        Args:
+            task_type: Type of task, uses primary model if None
+            
+        Returns:
+            BaseProvider instance for the appropriate model
+        """
+        model = self.get_model_for_task(task_type) if task_type else self.primary_model
+        return create_llm_from_model(model)
 
 
 class ModelType(str, Enum):
