@@ -328,7 +328,7 @@ class BaseAgent:
            state: Optional[AgentState] = None, 
            max_steps: Optional[int] = None,
            reset: bool = False,
-           llm: Optional[str] = None,
+           llm: Optional[Union[str, BaseProvider]] = None,
            route: Optional[str] = None,
            **kwargs) -> Any:
         """
@@ -339,7 +339,7 @@ class BaseAgent:
             state: Existing state for resuming interrupted execution
             max_steps: Maximum number of steps
             reset: If True, reset the agent state before execution
-            llm: 可选的LLM名称，如 "code", "math", "creative" 等
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
             route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: Additional parameters
             
@@ -355,7 +355,7 @@ class BaseAgent:
                        max_steps: Optional[int] = None,
                        reset: bool = False,
                        stream: bool = False,
-                       llm: Optional[str] = None,
+                       llm: Optional[Union[str, BaseProvider]] = None,
                        route: Optional[str] = None,
                        **kwargs) -> Any:
         """
@@ -367,7 +367,7 @@ class BaseAgent:
             max_steps: 最大步数
             reset: If True, reset the agent state before execution
             stream: 若为True则使用异步迭代器返回中间结果
-            llm: 可选的LLM名称，如 "code", "math", "creative" 等，会使用对应的专用LLM
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
             route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: 附加参数，可包含:
                 - tools: 临时工具覆盖
@@ -578,12 +578,12 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, state: AgentState, stream: bool = False, llm: Optional[str] = None, **kwargs) -> AgentResponse:
+    async def step(self, state: AgentState, stream: bool = False, llm: Optional[Union[str, BaseProvider]] = None, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
             state: 强类型状态对象，包含 input 等必要信息
-            llm: 可选的LLM名称，如 "code", "math", "creative" 等
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
             **kwargs: 其他参数，直接传递给brain
         Returns:
             AgentResponse: 结构化的响应对象
@@ -975,20 +975,25 @@ Please provide the answer directly, without explaining why you couldn't complete
                 self.brain.llms = {}
             self.brain.llms[name] = self.llms[name]
     
-    def _resolve_llm(self, llm_name: str) -> Optional[BaseProvider]:
+    def _resolve_llm(self, llm: Union[str, BaseProvider]) -> Optional[BaseProvider]:
         """
-        Resolve LLM name to BaseProvider instance
+        Resolve LLM name or provider to BaseProvider instance
         
         Args:
-            llm_name: Name of the LLM ("primary", "code", "math", etc.)
+            llm: LLM name ("primary", "code", "math", etc.) or BaseProvider instance
             
         Returns:
             BaseProvider instance or None if not found
         """
-        if llm_name == "primary":
+        # If already a BaseProvider instance, return it directly
+        if isinstance(llm, BaseProvider):
+            return llm
+        
+        # Otherwise treat as string name
+        if llm == "primary":
             return self.llm
-        elif self.llms and llm_name in self.llms:
-            return self.llms[llm_name]
+        elif self.llms and llm in self.llms:
+            return self.llms[llm]
         else:
             return None
     
