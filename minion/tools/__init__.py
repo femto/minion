@@ -6,6 +6,14 @@
 from minion.tools.base_tool import BaseTool, ToolCollection, Toolset
 from minion.tools.async_base_tool import AsyncBaseTool
 from minion.tools.tool_decorator import tool
+from minion.tools.coding_tools import (
+    FileReadTool,
+    FileWriteTool,
+    FileEditTool,
+    GrepTool,
+    GlobTool,
+    BashCommandTool,
+)
 
 # Optional imports with fallbacks
 try:
@@ -59,17 +67,23 @@ except ImportError:
         raise ImportError("UTCP package is not available. Please install it to use create_utcp_toolset.")
 
 __all__ = [
-    "BaseTool", 
-    "tool", 
+    "BaseTool",
+    "tool",
     "ToolCollection",
     "Toolset",
-    "AsyncBaseTool", 
-    "async_tool", 
-    "SyncToAsyncToolAdapter", 
+    "AsyncBaseTool",
+    "async_tool",
+    "SyncToAsyncToolAdapter",
     "AsyncToolCollection",
     "BrowserTool",
     "HAS_BROWSER_TOOL",
     "UtcpManualToolset",
     "create_utcp_toolset",
-    "HAS_UTCP_TOOLSET"
+    "HAS_UTCP_TOOLSET",
+    "FileReadTool",
+    "FileWriteTool",
+    "FileEditTool",
+    "GrepTool",
+    "GlobTool",
+    "BashCommandTool",
 ]
