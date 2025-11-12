@@ -25,36 +25,20 @@ keywords = ["ai", "agent", "framework", "llm", "automation"]
 dependencies = [
     "loguru",
     "python-dotenv",
-    "litellm",
     "tenacity",
-    "rpyc",
     "aiofiles",
     "colorama",
     "tree_sitter",
     "tree_sitter_python",
     "jinja2",
-    "intercode-bench",
-    "mem0ai",
-    "ollama",
     "nltk",
     "matplotlib",
-    "SQLAlchemy",
-    "sqlmodel",
-    "aiosqlite",
-    "asyncpg",
-    "dill",
-    "antlr4-python3-runtime",
-    "ell-ai",
     "jsonlines>=3.1.0",
     "datasets",
     "astunparse",
-    "accelerate",
-    "astor",
-    "graphviz",
-    "astroid",
-    "pysnooper",
     "azure-identity",
-    "azure-ai-inference"
+    "azure-ai-inference",
+    "mcp"
 ]
 
 [project.urls]
