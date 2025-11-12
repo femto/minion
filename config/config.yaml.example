@@ -39,6 +39,56 @@ models:
    base_url: "YOUR_URL"
    model: "DeepSeek-R1"
    temperature: 0.1
+
+  # AWS Bedrock models (sync version)
+  "claude-3-5-sonnet-bedrock":
+    api_type: "bedrock"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    temperature: 0.7
+
+  "claude-3-5-haiku-bedrock":
+    api_type: "bedrock"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "anthropic.claude-3-5-haiku-20241022-v1:0"
+    temperature: 0.7
+
+  "claude-3-opus-bedrock":
+    api_type: "bedrock"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "anthropic.claude-3-opus-20240229-v1:0"
+    temperature: 0.7
+
+  # AWS Bedrock models (async version - better performance)
+  "claude-3-5-sonnet-bedrock-async":
+    api_type: "bedrock_async"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    temperature: 0.7
+
+  "claude-3-5-haiku-bedrock-async":
+    api_type: "bedrock_async"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "anthropic.claude-3-5-haiku-20241022-v1:0"
+    temperature: 0.7
+
+  "claude-3-opus-bedrock-async":
+    api_type: "bedrock_async"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "anthropic.claude-3-opus-20240229-v1:0"
+    temperature: 0.7
 ell:
   store: 'logs'
   autocommit:true

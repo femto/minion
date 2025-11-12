@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "content": "Implement AgentLLMConfig class in llm_types.py",
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": 2,
+    "content": "Add proper type hints and documentation",
+    "status": "pending",
+    "priority": "medium"
+  },
+  {
+    "id": 3,
+    "content": "Test the implementation works with existing code",
+    "status": "pending",
+    "priority": "medium"
+  }
+]

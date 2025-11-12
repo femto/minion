@@ -27,8 +27,13 @@ class LLMRegistry:
             # 尝试动态导入
             try:
                 importlib.import_module(f"minion.providers.{api_type}_provider")
-            except ImportError:
-                raise ValueError(f"Unknown API type: {api_type}")
+            except ImportError as e:
+                # 提供更详细的错误信息，帮助用户诊断问题
+                raise ValueError(
+                    f"Failed to load provider for API type '{api_type}'. "
+                    f"Import error: {e}. "
+                    f"Make sure the provider module exists and all dependencies are installed."
+                ) from e
 
         if api_type not in self.providers:
             raise ValueError(f"No provider found for API type: {api_type}")
