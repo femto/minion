@@ -665,20 +665,20 @@ class BaseAgent:
         # 默认实现不执行任何操作
         pass
         
-    async def provide_final_answer(self, state: Dict[str, Any]) -> Any:
+    async def provide_final_answer(self, state: AgentState) -> Any:
         """
         Attempt to provide a final answer when maximum steps are reached
         
         Args:
-            state: Current state dictionary
+            state: Current agent state
             
         Returns:
             Final answer result
         """
         # 获取任务和历史
-        task = state.get('task', '')
-        history = state.get('history', [])
-        input_obj = state.get('input')
+        task = state.task or ''
+        history = state.history or []
+        input_obj = state.input
         
         # 构建提示，要求LLM基于目前进展提供最终答案
         if isinstance(input_obj, Input):
