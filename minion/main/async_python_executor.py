@@ -792,7 +792,6 @@ class AsyncPythonExecutor:
         Handles meta tools (AgentStateAwareTool) specially - they are available in code but not exposed to LLM.
         """
         from ..tools.base_tool import BaseTool
-        from ..tools.agent_state_aware_tool import AgentStateAwareTool
         import sys
         import types
         
@@ -800,10 +799,7 @@ class AsyncPythonExecutor:
         meta_tools = {}  # 分离meta工具
         
         for name, tool in tools.items():
-            if isinstance(tool, AgentStateAwareTool):
-                # Meta工具特殊处理 - 不暴露给LLM
-                meta_tools[name] = tool
-            elif isinstance(tool, AsyncBaseTool):
+            if isinstance(tool, AsyncBaseTool):
                 # Already async, use directly
                 converted_tools[name] = tool
             elif hasattr(tool, 'forward') and isinstance(tool, BaseTool):  # BaseTool instance

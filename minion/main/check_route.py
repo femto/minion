@@ -127,7 +127,7 @@ class CheckRouterMinion(Minion):
 
             # If no specific LLMs configured or all failed, use default brain.llm
             try:
-                node = LmpActionNode(self.brain.llm)
+                node = LmpActionNode(self.get_llm())
                 tools = (self.input.tools or []) + (self.brain.tools or [])
                 meta_plan = await node.execute(filled_template, response_format=MetaPlan, tools=None)
                 checker_name = meta_plan.name

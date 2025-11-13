@@ -1,95 +1,182 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Agent状态感知的Meta工具基类
-"""
-import inspect
-from typing import Any, Dict, Optional
-from .async_base_tool import AsyncBaseTool
+Agent State Aware Tool Base Class
 
-class AgentStateAwareTool(AsyncBaseTool):
+This module provides a base class for tools that need access to agent state,
+input, brain, and other agent context information.
+"""
+
+from typing import Any, Dict, Optional, TYPE_CHECKING
+from .base_tool import BaseTool
+
+if TYPE_CHECKING:
+    from ..agents.base_agent import BaseAgent
+    from ..main.input import Input
+    from ..main.brain import Brain
+
+
+class AgentStateAwareTool(BaseTool):
     """
-    支持访问agent状态但对LLM透明的meta工具基类
+    Base class for tools that need access to agent state and context.
     
-    特点：
-    1. 能够通过调用栈发现agent上下文
-    2. 对LLM不可见（不出现在functions命名空间）
-    3. 可以访问Brain、state、Input等agent内部状态
+    This class provides convenient methods to access:
+    - Agent state (strongly typed AgentState object)
+    - Input object
+    - Brain instance
+    - Agent instance itself
+    
+    Tools inheriting from this class will automatically receive agent context
+    when used within an agent execution.
     """
+    
+    # Flag to indicate this tool needs state
+    needs_state = True
     
     def __init__(self):
         super().__init__()
         self._agent_context = None
-        self._is_meta_tool = True  # 标记为meta工具
-        
-    async def __call__(self, *args, **kwargs):
-        """调用前自动发现agent上下文"""
-        self._agent_context = self._discover_agent_context()
-        return await super().__call__(*args, **kwargs)
     
-    def _discover_agent_context(self) -> Optional[Dict[str, Any]]:
+    def get_agent_state(self) -> Optional[Dict[str, Any]]:
         """
-        通过调用栈发现agent状态
+        Get the current agent state.
         
         Returns:
-            Dict包含: brain, state, input, agent等引用
+            Dict containing agent state, or None if not available
         """
-        frame = inspect.currentframe()
-        context = {}
+        if hasattr(self, '_agent_context') and self._agent_context:
+            agent = self._agent_context
+            if hasattr(agent, 'state'):
+                # Convert AgentState to dict for backward compatibility
+                state = agent.state
+                if hasattr(state, 'model_dump'):
+                    # Pydantic model
+                    return state.model_dump()
+                elif hasattr(state, 'dict'):
+                    # Pydantic v1 model
+                    return state.dict()
+                elif isinstance(state, dict):
+                    return state
+                else:
+                    # Convert object attributes to dict
+                    return {
+                        key: getattr(state, key) 
+                        for key in dir(state) 
+                        if not key.startswith('_') and not callable(getattr(state, key))
+                    }
+        return None
+    
+    def get_agent(self) -> Optional['BaseAgent']:
+        """
+        Get the agent instance.
         
-        try:
-            # 向上遍历调用栈
-            while frame:
-                locals_vars = frame.f_locals
-                
-                # 查找Brain实例
-                if 'brain' in locals_vars:
-                    context['brain'] = locals_vars['brain']
-                
-                # 查找state字典
-                if 'state' in locals_vars and isinstance(locals_vars['state'], dict):
-                    context['state'] = locals_vars['state']
-                
-                # 查找Input对象
-                if 'input' in locals_vars:
-                    context['input'] = locals_vars['input']
-                
-                # 查找Agent实例（如果有）
-                if 'self' in locals_vars:
-                    obj = locals_vars['self']
-                    # 检查是否是Agent或Brain类的实例
-                    if hasattr(obj, 'brain') and hasattr(obj, 'run_async'):
-                        context['agent'] = obj
-                    elif hasattr(obj, 'step') and hasattr(obj, 'tools'):
-                        context['brain'] = obj
-                
-                frame = frame.f_back
-                
-        finally:
-            del frame  # 避免循环引用
+        Returns:
+            BaseAgent instance, or None if not available
+        """
+        if hasattr(self, '_agent_context') and self._agent_context:
+            return self._agent_context
+        return None
+    
+    def get_input(self) -> Optional['Input']:
+        """
+        Get the current input object.
         
-        return context if context else None
+        Returns:
+            Input object, or None if not available
+        """
+        agent = self.get_agent()
+        if agent and hasattr(agent, 'state') and agent.state:
+            return getattr(agent.state, 'input', None)
+        return None
     
-    def get_agent_state(self) -> Dict[str, Any]:
-        """获取agent状态，安全访问"""
-        if not self._agent_context:
-            return {}
-        return self._agent_context.get('state', {})
+    def get_brain(self) -> Optional['Brain']:
+        """
+        Get the brain instance.
+        
+        Returns:
+            Brain instance, or None if not available
+        """
+        agent = self.get_agent()
+        if agent and hasattr(agent, 'brain'):
+            return agent.brain
+        return None
     
-    def get_brain(self):
-        """获取Brain实例"""
-        if not self._agent_context:
-            return None
-        return self._agent_context.get('brain')
+    def get_task(self) -> Optional[str]:
+        """
+        Get the current task description.
+        
+        Returns:
+            Task string, or None if not available
+        """
+        agent_state = self.get_agent_state()
+        if agent_state:
+            return agent_state.get('task')
+        return None
     
-    def get_input(self):
-        """获取当前Input对象"""
-        if not self._agent_context:
-            return None
-        return self._agent_context.get('input')
+    def get_step_count(self) -> int:
+        """
+        Get the current step count.
+        
+        Returns:
+            Step count, or 0 if not available
+        """
+        agent_state = self.get_agent_state()
+        if agent_state:
+            return agent_state.get('step_count', 0)
+        return 0
     
-    def get_agent(self):
-        """获取Agent实例（如果有）"""
-        if not self._agent_context:
-            return None
-        return self._agent_context.get('agent')
+    def get_history(self) -> list:
+        """
+        Get the execution history.
+        
+        Returns:
+            List of history items, or empty list if not available
+        """
+        agent_state = self.get_agent_state()
+        if agent_state:
+            return agent_state.get('history', [])
+        return []
+    
+    def is_final_answer(self) -> bool:
+        """
+        Check if the agent has reached a final answer.
+        
+        Returns:
+            True if final answer is reached, False otherwise
+        """
+        agent_state = self.get_agent_state()
+        if agent_state:
+            return agent_state.get('is_final_answer', False)
+        return False
+    
+    def get_metadata(self) -> Dict[str, Any]:
+        """
+        Get the agent state metadata.
+        
+        Returns:
+            Metadata dict, or empty dict if not available
+        """
+        agent_state = self.get_agent_state()
+        if agent_state:
+            return agent_state.get('metadata', {})
+        return {}
+    
+    def _discover_agent_context(self) -> Optional['BaseAgent']:
+        """
+        Discover agent context from the current execution environment.
+        This method attempts to find the agent instance that's currently executing.
+        
+        Returns:
+            BaseAgent instance if found, None otherwise
+        """
+        # The agent context should be set by the agent's tool wrapping mechanism
+        return getattr(self, '_agent_context', None)
+    
+    def _set_agent_context(self, agent: 'BaseAgent') -> None:
+        """
+        Set the agent context (used internally by the agent framework).
+        
+        Args:
+            agent: The BaseAgent instance to set as context
+        """
+        self._agent_context = agent

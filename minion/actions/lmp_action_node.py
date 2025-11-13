@@ -16,6 +16,8 @@ from minion.schema.messages import user
 from minion.providers import create_llm_provider
 from minion.models.schemas import Answer  # Import the Answer model
 from minion.exceptions import FinalAnswerException
+from minion.tools.tool_decorator import tool as decorate_tool
+
 
 # @ell.complex(model="gpt-4o-mini")
 # def ell_call(ret):
@@ -26,9 +28,13 @@ class LmpActionNode(LLMActionNode):
         super().__init__(llm, input_parser, output_parser)
         #ell.init(**config.ell, default_client=self.llm.client_sync)
 
-    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, tool_choice="auto", stream=False, **kwargs) -> Any:
+    async def execute(self, messages: Union[str, Message, List[Message], dict, List[dict]], response_format: Optional[Union[Type[BaseModel], dict]] = None, output_raw_parser=None, format="json", tools=None, tool_choice="auto", stream=False, stop=None, **kwargs) -> Any:
         # 处理 system_prompt 参数
         system_prompt = kwargs.pop('system_prompt', None)
+        
+        # 处理可选的 llm 参数
+        selected_llm = kwargs.pop('llm', None)
+        current_llm = selected_llm if selected_llm is not None else self.llm
         
         # 添加 input_parser 处理
         if self.input_parser:
@@ -60,25 +66,29 @@ class LmpActionNode(LLMActionNode):
             tools_formatted = self._format_tools_for_api(tools)
             if tools_formatted:
                 api_params = {
-                    "temperature": self.llm.config.temperature,
-                    "model": self.llm.config.model,
+                    "temperature": current_llm.config.temperature,
+                    "model": current_llm.config.model,
                     "tools": tools_formatted,
                     "tool_choice": tool_choice,
                     "original_tools": tools  # 保存原始工具对象
                 }
             else:
                 api_params = {
-                    "temperature": self.llm.config.temperature,
-                    "model": self.llm.config.model,
+                    "temperature": current_llm.config.temperature,
+                    "model": current_llm.config.model,
                     "original_tools": tools  # 保存原始工具对象
                 }
         else:
             # 从 llm.config 获取配置
             api_params = {
-                "temperature": self.llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
-                "model": self.llm.config.model,
+                "temperature": current_llm.config.temperature, #+ random.random() * 0.01, #add random to avoid prompt caching
+                "model": current_llm.config.model,
             }
 
+        # 处理stop参数
+        if stop is not None:
+            api_params['stop'] = stop
+        
         # 将 kwargs 合并到 api_params 中，允许覆盖默认值
         api_params.update(kwargs)
         
@@ -132,7 +142,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         # 根据是否流式调用不同的方法
         if stream:
             # 流式模式：返回异步生成器（工具调用在生成器内部处理）
-            return self._execute_stream_generator(messages, **api_params)
+            return self._execute_stream_generator(messages, selected_llm=selected_llm, **api_params)
         
         # 非流式模式
         # 提取工具参数（使用原始工具对象）
@@ -141,7 +151,16 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         # 创建 LLM API 参数（移除内部参数）
         llm_api_params = {k: v for k, v in api_params.items() if k != 'original_tools'}
         
-        response = await super().execute(messages, **llm_api_params)
+        # 如果有选定的LLM，临时替换self.llm
+        original_llm = self.llm
+        if selected_llm is not None:
+            self.llm = selected_llm
+        
+        try:
+            response = await super().execute(messages, **llm_api_params)
+        finally:
+            # 恢复原始LLM
+            self.llm = original_llm
         
         # 从 ChatCompletion 对象中提取字符串内容
         if hasattr(response, 'choices') and hasattr(response.choices[0], 'message'):
@@ -186,8 +205,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             response_text = self.output_parser(response_text)
         return response_text
     
-    async def _execute_stream_generator(self, messages, **api_params):
+    async def _execute_stream_generator(self, messages, selected_llm=None, **api_params):
         """流式执行生成器，支持工具调用"""
+        # 处理可选的 llm 参数
+        current_llm = selected_llm if selected_llm is not None else self.llm
+        
         # 添加 input_parser 处理
         if self.input_parser:
             messages = self.input_parser(messages)
@@ -212,7 +234,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
         # 创建 LLM API 参数（移除内部参数）
         llm_api_params = {k: v for k, v in api_params.items() if k != 'original_tools'}
         
-        async for chunk in self.llm.generate_stream(messages, **llm_api_params):
+        # 确保stop参数被传递
+        if 'stop' in api_params:
+            llm_api_params['stop'] = api_params['stop']
+        
+        async for chunk in current_llm.generate_stream(messages, **llm_api_params):
             # 处理 StreamChunk 对象
             if hasattr(chunk, 'content'):
                 if chunk.chunk_type == "text":
@@ -547,6 +573,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                     }
                 }
                 formatted_tools.append(tool_def)
+            elif hasattr(tool, 'to_function_spec'):
+                # 支持 MCP 工具的 to_function_spec 方法
+                spec = tool.to_function_spec()
+                if isinstance(spec, dict):
+                    formatted_tools.append(spec)
             elif hasattr(tool, 'get_schema'):
                 # 支持有 get_schema 方法的工具
                 schema = tool.get_schema()
@@ -557,57 +588,24 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             elif isinstance(tool, dict) and "function" in tool:
                 # 如果已经是正确格式的工具定义
                 formatted_tools.append(tool)
-            else:
-                # 尝试从工具对象的方法生成定义
-                if hasattr(tool, '__call__'):
-                    tool_name = tool.__name__
-                    tool_desc = tool.__doc__ or f"Tool to {tool_name}"
-
-                    # check if the tool has __input__schema__ attribute which we set when wrapping MCP tools
-                    if not hasattr(tool, "__input_schema__"):
-                        # Generate one from the function signature
-                        sig = inspect.signature(tool)
-                        properties = {}
-                        required = []
-
-                        for param_name, param in sig.parameters.items():
-                            # Skip *args and **kwargs
-                            if param.kind in (
-                                    inspect.Parameter.VAR_POSITIONAL,
-                                    inspect.Parameter.VAR_KEYWORD,
-                            ):
-                                continue
-
-                            # Add the parameter to properties
-                            properties[param_name] = {
-                                "type": "string",
-                                "description": f"Parameter {param_name}",
-                            }
-
-                            # If parameter has no default, it's required
-                            if param.default == inspect.Parameter.empty:
-                                required.append(param_name)
-
-                        input_schema = {
+            elif callable(tool):
+                decorated = decorate_tool(tool)
+                tool_def = {
+                    "type": "function",
+                    "function": {
+                        "name": decorated.name,
+                        "description": decorated.description,
+                        "parameters": {
                             "type": "object",
-                            "properties": properties,
-                            "required": required,
+                            "properties": decorated.inputs,
+                            "required": [
+                                name for name, param in decorated.inputs.items()
+                                if not param.get("nullable", False)
+                            ]
                         }
-                    else:
-                        # Use the provided schema
-                        input_schema = tool.__input_schema__
-
-                    # Add the tool to available tools
-                    formatted_tools.append(
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "description": tool_desc,
-                                "parameters": input_schema,
-                            },
-                        }
-                    )
+                    }
+                }
+                formatted_tools.append(tool_def)
                      
         return formatted_tools
     

@@ -7,7 +7,7 @@
 """
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 from jinja2 import Template
 from mem0 import Memory
@@ -25,14 +25,15 @@ from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
 from minion.providers import create_llm_provider
 from minion.types.agent_response import AgentResponse
+from minion.types.agent_state import AgentState
 
 class Mind(BaseModel):
     id: str = "UnnamedMind"
     description: str = ""
     brain: Any = None  # Brain
 
-    def step(self, input):
-        moderator = ModeratorMinion(input=input, brain=self.brain)
+    def step(self, input, selected_llm=None):
+        moderator = ModeratorMinion(input=input, brain=self.brain, selected_llm=selected_llm)
         
         # 检查是否需要流式输出
         if hasattr(input, 'stream') and input.stream:
@@ -70,7 +71,8 @@ class Brain:
         llms={},
         python_env=None,
         stats_storer=None,
-        tools=None,  # 新增: 支持工具集
+        tools=None,
+        state = None
     ):
         self.id = id or uuid.uuid4()
         self.minds = {}
@@ -145,10 +147,17 @@ Supporting navigation and spatial memory""",
         # 设置工具集
         self.tools = tools or []
         
+        # Agent state reference (will be set by agent during execution)
+        self.state = None
+        
         # 默认使用 AsyncPythonExecutor，提供更好的异步支持
         self.python_env = python_env or AsyncPythonExecutor(additional_authorized_imports=["numpy", "pandas", "json", "csv", "multi_tool_use", "inspect"])
 
         self.stats_storer = stats_storer
+        if state is None:
+            from minion.types.history import History
+            state = AgentState(history=History()) #when brain is used standalone, create a AgentState to bind to it, it's like a simple agent
+        self.state = state
 
     def add_tool(self, tool):
         """
@@ -170,25 +179,53 @@ Supporting navigation and spatial memory""",
                 raise ValueError("input.images should be either a string or a list of strings/images")
         return input.images
 
-    async def step(self, state: Dict[str, Any] = None, **config_kwargs):
-        # 处理state参数
-        if state is None:
-            state = {}
+    async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
+        # 处理不同类型的state参数
+        # if state is None: #we don't handle this since this means input.query is None
+        #     state = AgentState()
             
-        # 从状态中提取参数
-        input = state.get("input")
+        # 根据state类型提取参数
+        if isinstance(state, Input):
+            # 直接是Input对象
+            input = state
+            current_tools = config_kwargs.get("tools", [])
+        elif isinstance(state, AgentState):
+            # 强类型AgentState
+            input = state.input
+            current_tools = config_kwargs.get("tools", [])
+        elif isinstance(state, dict):
+            # 字典格式（向后兼容）
+            state = AgentState.model_validate(state) #convert dict to AgentState
+            input = state.input
+            current_tools = config_kwargs.get("tools", [])
+        else:
+            raise ValueError(f"Unsupported state type: {type(state)}")
+
+        # 注意：不在这里设置 self.state，因为：
+        # 1. Brain 构造时已经通过 Brain(state=agent.state) 建立了引用关系
+        # 2. agent.state 的任何修改都会自动反映到 brain.state
+        # 3. 重新赋值会破坏引用关系，导致状态不同步
+        # 4. 如果 brain.step() 被直接调用（不通过 agent），self.state 可能为 None，这是正常的
+        self.state.input = input #now set input back to state, make sure state.input is this.
+
+        # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
         query_type = config_kwargs.get("query_type", "")
         system_prompt = config_kwargs.get("system_prompt")
-        tools = config_kwargs.get("tools")
         messages = config_kwargs.get("messages")
         stream = config_kwargs.get("stream", False)
+        selected_llm = config_kwargs.get("llm")  # 可选的LLM BaseProvider实例
         
-        # 验证state中必须有input
+        # 如果selected_llm是字符串，转换为BaseProvider实例
+        if isinstance(selected_llm, str):
+            selected_llm = create_llm_provider(config.models.get(selected_llm))
+        
+        # 验证必须有input或者有query/messages
         if input is None:
-            if not query:
-                raise ValueError("State must contain 'input' or query must be provided in config_kwargs")
-            # 从 query 创建 Input，移除已使用的参数避免重复
+            if not query and messages is None:
+                raise ValueError("State must contain 'input' or query/messages must be provided in config_kwargs")
+            
+            # 准备Input创建参数
             input_kwargs = config_kwargs.copy()
             input_kwargs.pop('query', None)
             input_kwargs.pop('query_type', None) 
@@ -196,28 +233,23 @@ Supporting navigation and spatial memory""",
             input_kwargs.pop('tools', None)
             input_kwargs.pop('messages', None)
             input_kwargs.pop('stream', None)
+            input_kwargs.pop('llm', None)
             
-            input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
-            state["input"] = input
+            # 如果有messages，优先使用messages创建Input
+            if messages is not None:
+                # 支持标准 OpenAI messages 格式
+                input = Input(query=messages, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
+            else:
+                # 否则使用query创建Input
+                input = Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **input_kwargs)
         
-        # 处理传入的tools
-        current_tools = tools if tools is not None else state.get("tools", self.tools)
-        
-        # 如果传入了messages，优先使用messages
-        if messages is not None:
-            # 从messages中提取query和system_prompt
+        # 如果传入了messages，从中提取system_prompt（如果没有显式提供的话）
+        if messages is not None and system_prompt is None:
             if isinstance(messages, list):
                 for msg in messages:
-                    if isinstance(msg, dict):
-                        if msg.get("role") == "user":
-                            query = msg.get("content", query)
-                        elif msg.get("role") == "system" and system_prompt is None:
-                            system_prompt = msg.get("content", "")
-            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **config_kwargs)
-            input.query = query  # 覆盖query
-        else:
-            # 创建Input
-            input = input or Input(query=query, query_type=query_type, query_time=datetime.utcnow(), **config_kwargs)
+                    if isinstance(msg, dict) and msg.get("role") == "system":
+                        system_prompt = msg.get("content", "")
+                        break  # 只取第一个system消息
             
         input.query_id = input.query_id or uuid.uuid4()
         input.images = self.process_image_input(input)  # normalize image format to base64
@@ -233,9 +265,9 @@ Supporting navigation and spatial memory""",
         # 选择心智
         mind_id = input.mind_id or await self.choose_mind(input)
         if mind_id == "left_mind":
-            self.llm.config.temperature = 1
+            self.llm.config.temperature = 0.1
         elif mind_id == "right_mind":
-            self.llm.config.temperature = 1
+            self.llm.config.temperature = 0.7
         mind = self.minds[mind_id]
         
         # 检查是否需要流式输出
@@ -243,12 +275,12 @@ Supporting navigation and spatial memory""",
             # 设置 stream_outputs 属性，供 UI 使用
             self.stream_outputs = True
             # 流式输出：直接返回异步生成器
-            return mind.step(input)
+            return mind.step(input, selected_llm=selected_llm)
         else:
             # 清除 stream_outputs 属性
             self.stream_outputs = False
             # 普通执行：await 结果并确保返回AgentResponse
-            result = await mind.step(input)
+            result = await mind.step(input, selected_llm=selected_llm)
             
             # 确保结果是AgentResponse格式
             if not isinstance(result, AgentResponse):
@@ -268,6 +300,7 @@ Supporting navigation and spatial memory""",
             # Tools are only set when starting a new session with new tools
 
     async def choose_mind(self, input):
+        return "left_mind" #don't choose mind for now
         mind_template = Template(
             """
 I have minds:

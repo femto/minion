@@ -175,10 +175,15 @@ def construct_messages_from_template(
     
     query = getattr(input_obj, 'query', '')
     
-    # 检查query是否为列表（多媒体内容）
+    # 检查query的格式
     if isinstance(query, list):
-        # 多媒体内容，直接构造OpenAI消息格式
-        messages.extend(_construct_multimodal_messages(template_str, query, input_obj, **kwargs))
+        # 检查是否已经是完整的 OpenAI messages 格式
+        if query and isinstance(query[0], dict) and "role" in query[0]:
+            # 已经是 messages 格式，需要将模板内容集成进去
+            messages.extend(_integrate_template_with_messages(template_str, query, input_obj, **kwargs))
+        else:
+            # Content blocks 格式，构造多媒体消息
+            messages.extend(_construct_multimodal_messages(template_str, query, input_obj, **kwargs))
     else:
         # 纯文本内容，使用jinja2渲染
         rendered_content = render_template_with_variables(
@@ -257,6 +262,92 @@ def _construct_multimodal_messages(
     return messages
 
 
+def _integrate_template_with_messages(
+    template_str: str,
+    messages_list: List[Dict[str, Any]],
+    input_obj: Any,
+    **kwargs
+) -> List[Dict[str, Any]]:
+    """
+    将模板内容集成到已有的 OpenAI messages 格式中
+    
+    Args:
+        template_str (str): 模板字符串
+        messages_list (List[Dict]): 已有的 OpenAI messages 格式
+        input_obj: 输入对象
+        **kwargs: 其他模板变量
+    
+    Returns:
+        List[Dict[str, Any]]: 集成后的 OpenAI messages 格式
+    """
+    # 如果模板字符串中没有 {{input.query}}，直接返回原 messages
+    query_pattern = r'\{\{\s*input\.query\s*\}\}'
+    if not re.search(query_pattern, template_str):
+        # 没有 query 占位符，将模板作为前缀添加到第一个用户消息
+        result_messages = messages_list.copy()
+        
+        # 渲染模板
+        rendered_template = render_template_with_variables(template_str, input=input_obj, **kwargs)
+        
+        if rendered_template.strip():
+            # 找到第一个用户消息并添加模板内容
+            for i, msg in enumerate(result_messages):
+                if msg.get("role") == "user":
+                    content = msg.get("content", "")
+                    if isinstance(content, str):
+                        # 字符串内容，直接拼接
+                        result_messages[i]["content"] = rendered_template + "\n\n" + content
+                    elif isinstance(content, list):
+                        # 列表内容，在开头插入模板
+                        template_block = {"type": "text", "text": rendered_template}
+                        result_messages[i]["content"] = [template_block] + content
+                    break
+        
+        return result_messages
+    
+    # 有 query 占位符，需要替换
+    template_parts = re.split(query_pattern, template_str)
+    result_messages = []
+    
+    # 复制非用户消息（如 system 消息）
+    user_messages = []
+    for msg in messages_list:
+        if msg.get("role") == "user":
+            user_messages.append(msg)
+        else:
+            result_messages.append(msg)
+    
+    # 处理用户消息
+    for user_msg in user_messages:
+        content_parts = []
+        
+        # 添加模板前缀
+        if template_parts[0].strip():
+            prefix_content = render_template_with_variables(template_parts[0], input=input_obj, **kwargs)
+            if prefix_content.strip():
+                content_parts.append({"type": "text", "text": prefix_content})
+        
+        # 添加原始用户消息内容
+        original_content = user_msg.get("content", "")
+        if isinstance(original_content, str):
+            content_parts.append({"type": "text", "text": original_content})
+        elif isinstance(original_content, list):
+            content_parts.extend(original_content)
+        
+        # 添加模板后缀
+        if len(template_parts) > 1 and template_parts[1].strip():
+            suffix_content = render_template_with_variables(template_parts[1], input=input_obj, **kwargs)
+            if suffix_content.strip():
+                content_parts.append({"type": "text", "text": suffix_content})
+        
+        # 创建新的用户消息
+        new_user_msg = user_msg.copy()
+        new_user_msg["content"] = content_parts
+        result_messages.append(new_user_msg)
+    
+    return result_messages
+
+
 def construct_simple_message(
     content: Union[str, List[Any], Any], 
     system_prompt: str = None
@@ -295,14 +386,57 @@ def construct_simple_message(
             "content": actual_content
         })
     elif isinstance(actual_content, list):
-        # 多媒体内容
-        formatted_content = []
-        for item in actual_content:
-            formatted_content.append(_format_multimodal_content(item))
-        
-        messages.append({
-            "role": "user",
-            "content": formatted_content
-        })
+        # 检查是否是messages格式（包含role字段的字典列表）
+        if actual_content and isinstance(actual_content[0], dict) and "role" in actual_content[0]:
+            # 这是messages列表，直接返回（但要确保content格式正确）
+            formatted_messages = []
+            for msg in actual_content:
+                if isinstance(msg, dict):
+                    formatted_msg = msg.copy()
+                    # 确保content字段格式正确
+                    if "content" in formatted_msg:
+                        content = formatted_msg["content"]
+                        if isinstance(content, str):
+                            # 字符串content需要转换为标准格式
+                            formatted_msg["content"] = [
+                                {
+                                    "type": "text",
+                                    "text": content
+                                }
+                            ]
+                        elif isinstance(content, list):
+                            # 如果已经是列表，确保每个项都有type
+                            formatted_content = []
+                            for item in content:
+                                if isinstance(item, dict) and "type" in item:
+                                    # 已经有type，保持不变
+                                    formatted_content.append(item)
+                                elif isinstance(item, dict) and "text" in item:
+                                    # 有text但没有type，添加type
+                                    formatted_content.append({
+                                        "type": "text",
+                                        **item
+                                    })
+                                else:
+                                    # 其他情况，转换为text
+                                    formatted_content.append({
+                                        "type": "text",
+                                        "text": str(item)
+                                    })
+                            formatted_msg["content"] = formatted_content
+                    formatted_messages.append(formatted_msg)
+                else:
+                    formatted_messages.append(msg)
+            return formatted_messages
+        else:
+            # 多媒体内容
+            formatted_content = []
+            for item in actual_content:
+                formatted_content.append(_format_multimodal_content(item))
+            
+            messages.append({
+                "role": "user",
+                "content": formatted_content
+            })
     
     return messages 

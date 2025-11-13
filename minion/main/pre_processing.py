@@ -18,7 +18,7 @@ class ProblemReflectMinion(PreProcessingMinion):
         prompt = Template(PROBLEM_REFLECT_PROMPT)
         prompt = prompt.render(input=self.input)
         
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         reflection = await node.execute(prompt, tools=None)
         
@@ -42,7 +42,7 @@ class ExampleReasoningMinion(PreProcessingMinion):
         prompt = Template(EXAMPLE_REASONING_PROMPT)
         prompt = prompt.render(input=self.input)
         
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         reasoning = await node.execute(prompt, tools=tools)
 

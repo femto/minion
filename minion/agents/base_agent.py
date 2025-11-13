@@ -11,8 +11,11 @@ from ..main.brain import Brain
 from ..main.input import Input
 from ..main.action_step import ActionStep, StreamChunk, StreamingActionManager
 from minion.types.agent_response import AgentResponse
+from minion.types.agent_state import AgentState
+from minion.types.llm_types import ModelType, create_llm_from_model
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class BaseAgent:
@@ -21,7 +24,14 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
-    llm: Optional[BaseProvider] = None  # LLM provider to pass to Brain
+    
+    # LLM configuration with strong typing support
+    llm: Optional[Union[BaseProvider, str, ModelType]] = None  # Primary LLM provider, model name, or ModelType
+    llms: Optional[Dict[str, Union[BaseProvider, str, ModelType]]] = None  # Multiple LLMs keyed by string
+    
+    system_prompt: Optional[str] = None  # 系统提示
+
+    state: AgentState = field(default_factory=AgentState)
     user_id: Optional[str] = None
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -29,59 +39,86 @@ class BaseAgent:
     
     # 生命周期管理
     _is_setup: bool = field(default=False, init=False)
-    _mcp_toolsets: List[Any] = field(default_factory=list, init=False)  # List of MCPToolset instances
+    _toolsets: List[Any] = field(default_factory=list, init=False)  # List of toolset instances (MCP, UTCP, etc.)
     
     # 流式输出管理
     _streaming_manager: StreamingActionManager = field(default_factory=StreamingActionManager, init=False)
     
     def __post_init__(self):
         """初始化后的处理"""
-        # Automatically handle MCPToolset objects in tools parameter
-        self._extract_mcp_toolsets_from_tools()
-        
-        # Initialize brain and setup agent synchronously
-        # This ensures brain is available in __post_init__ for all subclasses
-        import asyncio
-        try:
-            # Try to get existing event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an async context, schedule setup for later
-                # This is a fallback - ideally agents should be created in async context
-                asyncio.create_task(self.setup())
-            else:
-                # Run setup synchronously if no loop is running
-                loop.run_until_complete(self.setup())
-        except RuntimeError:
-            # No event loop exists, create one and run setup
-            asyncio.run(self.setup())
-    
-    def _extract_mcp_toolsets_from_tools(self):
+        # Set agent reference in state
+        if self.state and not self.state.agent:
+            self.state.agent = self
+            
+        # Convert LLM configurations to BaseProvider instances
+        self._convert_llm_configs()
+            
+        # Automatically handle toolset objects in tools parameter
+        # not quite useful
+        # current just for setting self._toolsets
+        # and ensure await self._toolsets.ensure_setup() in setup()
+        self._extract_toolsets_from_tools()
+
+    def _convert_llm_configs(self):
+        """Convert string/ModelType LLM configurations to BaseProvider instances"""
+        # Convert primary LLM
+        if self.llm is not None and not isinstance(self.llm, BaseProvider):
+            self.llm = create_llm_from_model(self.llm)
+            
+        # Convert multiple LLMs
+        if self.llms is not None:
+            converted_llms = {}
+            for key, model in self.llms.items():
+                if isinstance(model, BaseProvider):
+                    converted_llms[key] = model
+                else:
+                    converted_llms[key] = create_llm_from_model(model)
+            self.llms = converted_llms
+
+    @classmethod
+    async def create(cls, *args, **kwargs) :
         """
-        Extract MCPToolset objects from tools parameter and move them to _mcp_toolsets.
-        This enables direct passing of MCPToolset objects in the tools parameter.
+        异步创建并设置实例
+        
+        Args:
+            *args: 传递给构造函数的位置参数
+            **kwargs: 传递给构造函数的关键字参数
+            
+        Returns:
+            instance: 已设置完成的实例
+        """
+        instance = cls(*args, **kwargs)
+        await instance.setup()
+        return instance
+
+    #what does this method do, not quite useful?
+    def _extract_toolsets_from_tools(self):
+        """
+        Extract toolset objects from tools parameter and move them to _toolsets.
+        This enables direct passing of toolset objects (MCP, UTCP, etc.) in the tools parameter.
         """
         if self._is_setup:
             raise RuntimeError("Cannot modify toolsets after setup")
             
-        # Check if any tools are MCPToolset objects
-        mcp_toolsets = []
+        # Check if any tools are toolset objects (MCP, UTCP, etc.)
+        toolsets = []
         regular_tools = []
         
         for tool in self.tools:
-            # Check if it's an MCPToolset object
-            if hasattr(tool, '_ensure_setup') and hasattr(tool, 'connection_params'):
-                mcp_toolsets.append(tool)
+            # Check if it's a toolset object (has setup methods and connection/config params)
+            if (hasattr(tool, 'ensure_setup') and hasattr(tool, 'connection_params')) or \
+               (hasattr(tool, 'ensure_setup') and hasattr(tool, 'config')):
+                toolsets.append(tool)
             else:
                 regular_tools.append(tool)
         
         # Update the tools list to only contain regular tools
-        self.tools = regular_tools
+        self.tools = regular_tools #will add toolsets later if toolsets are healthy
         
-        # Add MCPToolset objects to _mcp_toolsets
-        for toolset in mcp_toolsets:
-            self._mcp_toolsets.append(toolset)
-            logger.info(f"Auto-detected MCPToolset {getattr(toolset, 'name', 'unnamed')} from tools parameter")
+        # Add toolset objects to _toolsets
+        for toolset in toolsets:
+            self._toolsets.append(toolset)
+            logger.info(f"Auto-detected toolset {getattr(toolset, 'name', 'unnamed')} from tools parameter")
     
     async def setup(self):
         """Setup agent with tools"""
@@ -89,28 +126,50 @@ class BaseAgent:
         if self._is_setup:
             return
             
-        # Setup MCP toolsets
-        for toolset in self._mcp_toolsets:
+        # Setup toolsets (MCP, UTCP, etc.)
+        for toolset in self._toolsets:
             try:
-                await toolset._ensure_setup()
+                await toolset.ensure_setup()
                 if not toolset.is_healthy:
-                    logger.warning(f"MCP toolset {toolset.name} failed to setup: {toolset.setup_error}")
+                    logger.warning(f"Toolset {toolset.name} failed to setup: {toolset.setup_error}")
             except Exception as e:
-                logger.error(f"Failed to setup MCP toolset {toolset.name}: {e}")
+                logger.error(f"Failed to setup toolset {toolset.name}: {e}")
 
-        # Get tools from healthy toolsets
-        tools = []
-        for toolset in self._mcp_toolsets:
+        # Get tools from healthy toolsets and merge into self.tools
+        toolset_tools = []
+        for toolset in self._toolsets:
             if toolset.is_healthy:
-                tools.extend(toolset.get_tools())
+                toolset_tools.extend(toolset.get_tools())
             else:
-                logger.warning(f"Skipping unhealthy MCP toolset {toolset.name}")
+                logger.warning(f"Skipping unhealthy toolset {toolset.name}")
+        
+        # Merge toolset tools into self.tools
+        if toolset_tools:
+            self.tools.extend(toolset_tools)
+            logger.info(f"Added {len(toolset_tools)} toolset tools to agent")
+
+        # Auto-convert raw functions to appropriate tool types
+        self._convert_raw_functions_to_tools()
+        
+        # Wrap state-aware tools to automatically pass agent state
+        logger.info("About to wrap state-aware tools...")
+        self._wrap_state_aware_tools()
+        logger.info("Finished wrapping state-aware tools")
 
         # Initialize brain with tools
         if self.brain is None:
-            brain_kwargs = {'tools': tools}
+            #we don't pass tools to brain, instead we
+            #pass agent.tools when run/run_sync to brain.step
+            #this way we can easily refresh tools on agent
+            brain_kwargs = {'tools': [], 'state': self.state}
+            
+            # Handle LLMs (already converted to BaseProvider in __post_init__)
             if self.llm is not None:
                 brain_kwargs['llm'] = self.llm
+                
+            if self.llms is not None:
+                brain_kwargs['llms'] = self.llms
+                    
             self.brain = Brain(**brain_kwargs)
         
         # Mark agent as setup
@@ -119,7 +178,7 @@ class BaseAgent:
     async def close(self):
         """
         Agent清理关闭，在停止使用agent时调用
-        这里会清理所有的MCPToolset和其他资源
+        这里会清理所有的toolset和其他资源
         """
         if not self._is_setup:
             logger.warning(f"Agent {self.name} not setup, skipping cleanup")
@@ -127,24 +186,121 @@ class BaseAgent:
         
         logger.info(f"Closing agent {self.name}")
         
-        # 清理所有MCPToolset
-        for toolset in self._mcp_toolsets:
+        # 清理所有toolsets
+        for toolset in self._toolsets:
             try:
                 await toolset.close()
-                logger.info(f"Closed MCP toolset {getattr(toolset, 'name', 'unnamed')}")
+                logger.info(f"Closed toolset {getattr(toolset, 'name', 'unnamed')}")
             except Exception as e:
-                logger.error(f"Error closing MCP toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
+                logger.error(f"Error closing toolset {getattr(toolset, 'name', 'unnamed')}: {e}")
         
-        # 清理MCP相关的工具
-        self.tools = [tool for tool in self.tools if not self._is_mcp_tool(tool)]
-        self._mcp_toolsets.clear()
+        # 清理toolset相关的工具
+        self.tools = [tool for tool in self.tools if not self._is_toolset_tool(tool)]
+        self._toolsets.clear()
         
         self._is_setup = False
         logger.info(f"Agent {self.name} cleanup completed")
     
-    def _is_mcp_tool(self, tool: BaseTool) -> bool:
-        """检查工具是否是MCP工具"""
-        return tool.__class__.__name__ == 'AsyncMcpTool'
+    def _convert_raw_functions_to_tools(self):
+        """
+        自动将原始函数转换为相应的工具类型
+        - 同步函数转换为BaseTool
+        - 异步函数转换为AsyncBaseTool
+        """
+        from ..tools.tool_decorator import tool
+        from ..tools.async_base_tool import AsyncBaseTool
+        
+        converted_tools = []
+        conversion_count = 0
+        
+        for item in self.tools:
+            # 检查是否是原始函数（不是工具实例）
+            # 使用更通用的判断：如果是可调用对象但没有工具的基本属性，则认为是原始函数
+            if callable(item) and not (hasattr(item, 'name') and hasattr(item, 'description')):
+                try:
+                    # 使用统一的tool装饰器进行转换
+                    converted_tool = tool(item)
+                    converted_tools.append(converted_tool)
+                    conversion_count += 1
+                    
+                    # 记录转换信息
+                    tool_type = "AsyncBaseTool" if isinstance(converted_tool, AsyncBaseTool) else "BaseTool"
+                    logger.info(f"Auto-converted function '{item.__name__}' to {tool_type}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to convert function '{getattr(item, '__name__', str(item))}' to tool: {e}")
+                    # 保留原始函数，不进行转换
+                    converted_tools.append(item)
+            else:
+                # 保留已经是工具实例或具有工具属性的项目
+                converted_tools.append(item)
+        
+        # 更新工具列表
+        self.tools = converted_tools
+        
+        if conversion_count > 0:
+            logger.info(f"Successfully auto-converted {conversion_count} raw functions to tools")
+    
+    def _wrap_state_aware_tools(self):
+        """
+        包装需要state的工具，使其能够接收agent的state
+        """
+        from ..tools.base_tool import BaseTool
+        from ..tools.async_base_tool import AsyncBaseTool
+        from ..tools.agent_state_aware_tool import AgentStateAwareTool
+        import asyncio
+        
+        wrapped_tools = []
+        wrap_count = 0
+        
+        for tool in self.tools:
+            if hasattr(tool, 'needs_state') and tool.needs_state:
+
+                tool_type = type(tool).__name__
+                is_async = isinstance(tool, AsyncBaseTool)
+                is_base = isinstance(tool, BaseTool)
+                logger.debug(f"Wrapping tool {tool.name}: type={tool_type}, is_async={is_async}, is_base={is_base}")
+
+                if isinstance(tool, AsyncBaseTool):
+                    # 异步工具包装器 - 使用默认参数来捕获变量
+                    def create_async_wrapper(original_forward, agent_ref):
+                        async def wrapped_async_forward(self_tool, *args, **kwargs):
+                            # 获取agent的state
+                            agent_state = getattr(agent_ref, 'state', None)
+                            # 将state作为关键字参数传递，这样不依赖于参数位置
+                            return await original_forward(*args, state=agent_state, **kwargs)
+                        return wrapped_async_forward
+
+                    wrapper = create_async_wrapper(tool.forward, self)
+                    tool.forward = wrapper.__get__(tool, type(tool))
+
+                elif isinstance(tool, BaseTool):
+                    # 同步工具包装器 - 使用默认参数来捕获变量
+                    def create_sync_wrapper(original_forward, agent_ref):
+                        def wrapped_sync_forward(self_tool, *args, **kwargs):
+                            # 获取agent的state
+                            agent_state = getattr(agent_ref, 'state', None)
+                            # 将state作为第一个位置参数传递，不传递self_tool
+                            return original_forward(*args, state=agent_state, **kwargs)
+                        return wrapped_sync_forward
+
+                    wrapper = create_sync_wrapper(tool.forward, self)
+                    tool.forward = wrapper.__get__(tool, type(tool))
+
+                wrap_count += 1
+                logger.info(f"Successfully wrapped legacy state-aware tool: {tool.name}")
+            
+            wrapped_tools.append(tool)
+        
+        # 更新工具列表
+        self.tools = wrapped_tools
+        
+        if wrap_count > 0:
+            logger.info(f"Successfully wrapped {wrap_count} state-aware tools")
+
+    def _is_toolset_tool(self, tool: BaseTool) -> bool:
+        """检查工具是否是toolset工具"""
+        return tool.__class__.__name__ in ['AsyncMcpTool', 'AsyncUtcpTool']
     
     async def __aenter__(self):
         """支持async context manager"""
@@ -169,8 +325,11 @@ class BaseAgent:
 
     def run(self, 
            task: Optional[Union[str, Input]] = None,
-           state: Optional[Dict[str, Any]] = None, 
+           state: Optional[AgentState] = None, 
            max_steps: Optional[int] = None,
+           reset: bool = False,
+           llm: Optional[Union[str, BaseProvider]] = None,
+           route: Optional[str] = None,
            **kwargs) -> Any:
         """
         Synchronous interface for running the agent.
@@ -179,28 +338,37 @@ class BaseAgent:
             task: Task description or Input object (required if state is None)
             state: Existing state for resuming interrupted execution
             max_steps: Maximum number of steps
+            reset: If True, reset the agent state before execution
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: Additional parameters
             
         Returns:
             Final task result
         """
         import asyncio
-        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, stream=False, **kwargs))
+        return asyncio.run(self.run_async(task=task, state=state, max_steps=max_steps, reset=reset, stream=False, llm=llm, route=route, **kwargs))
 
     async def run_async(self, 
                        task: Optional[Union[str, Input]] = None,
-                       state: Optional[Dict[str, Any]] = None, 
+                       state: Optional[AgentState] = None, 
                        max_steps: Optional[int] = None,
+                       reset: bool = False,
                        stream: bool = False,
+                       llm: Optional[Union[str, BaseProvider]] = None,
+                       route: Optional[str] = None,
                        **kwargs) -> Any:
         """
         运行完整任务，自动多步执行直到完成，支持从中断状态恢复
         
         Args:
             task: 任务描述或Input对象 (state为None时必须提供)
-            state: 已有状态，用于恢复中断的执行
+            state: 已有状态，用于恢复中断的执行 (强类型AgentState)
             max_steps: 最大步数
+            reset: If True, reset the agent state before execution
             stream: 若为True则使用异步迭代器返回中间结果
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: 附加参数，可包含:
                 - tools: 临时工具覆盖
                 - 其他参数会传递给brain.step
@@ -213,39 +381,51 @@ class BaseAgent:
         # 处理参数
         streaming = stream
         
+        # 解析可选的LLM参数
+        selected_llm_provider = None
+        if llm is not None:
+            selected_llm_provider = self._resolve_llm(llm)
+            if selected_llm_provider is None:
+                raise ValueError(f"LLM '{llm}' not found. Available LLMs: {list(self.list_available_llms().keys())}")
+        
         # 处理状态初始化或恢复
         if state is None:
             if task is None:
                 raise ValueError("Either 'task' or 'state' must be provided")
-            state = self.init_state(task, **kwargs)
+            # 初始化新状态
+            self._init_state_from_task(task, route=route, **kwargs)
         else:
-            # 使用已有状态，可选择更新task
+            # 使用已有状态
+            self.state = state
+                
+            # 可选择更新task
             if task is not None:
                 if isinstance(task, str):
-                    state["task"] = task
+                    self.state.task = task
                     # 更新input对象的query
-                    if "input" in state and hasattr(state["input"], 'query'):
-                        state["input"].query = task
+                    if self.state.input and hasattr(self.state.input, 'query'):
+                        self.state.input.query = task
                 else:
-                    state["task"] = task.query
-                    state["input"] = task
+                    self.state.task = task.query
+                    self.state.input = task
+            
+            # 设置route（如果提供）
+            if route is not None and self.state.input:
+                self.state.input.route = route
         
         # 确定最大步数
         max_steps = max_steps or self.max_steps
-        
-        # 保存当前状态引用，便于外部访问
-        self._current_state = state
         
         if stream:
             # 设置 stream_outputs 属性，供 UI 使用
             self.stream_outputs = True
             # 返回异步迭代器
-            return self._run_stream(state, max_steps, kwargs)
+            return self._run_stream(state, max_steps, kwargs, selected_llm_provider)
         else:
             # 清除 stream_outputs 属性
             self.stream_outputs = False
             # 一次性执行完成返回最终结果
-            return await self._run_complete(state, max_steps, kwargs)
+            return await self._run_complete(state, max_steps, kwargs, selected_llm_provider)
 
     async def run_stream(self, 
                         task: Optional[Union[str, Input]] = None,
@@ -267,26 +447,33 @@ class BaseAgent:
         # Force stream=True for this method
         return await self.run_async(task=task, state=state, max_steps=max_steps, stream=True, **kwargs)
             
-    async def _run_stream(self, state, max_steps, kwargs):
+    async def _run_stream(self, state, max_steps, kwargs, selected_llm_provider=None):
         """返回一个异步迭代器，逐步执行并返回中间结果"""
         step_count = 0
         
         while step_count < max_steps:
             # 开始新的步骤
+            input_query = ""
+            if state.input and hasattr(state.input, 'query'):
+                input_query = str(state.input.query) if state.input.query else ""
+            
             action_step = self._streaming_manager.start_step(
                 step_type="reasoning",
-                input_query=state.get("input", {}).get("query", "") if isinstance(state.get("input"), dict) else str(state.get("input", ""))
+                input_query=input_query
             )
-            
-            # yield 步骤开始信息
-            yield StreamChunk(
-                content=f"[STEP {step_count + 1}] Starting reasoning...\n",
-                chunk_type="step_start",
-                metadata={"step_number": step_count + 1, "step_id": action_step.step_id}
-            )
+            #
+            # # yield 步骤开始信息
+            # yield StreamChunk(
+            #     content=f"[STEP {step_count + 1}] Starting reasoning...\n",
+            #     chunk_type="step_start",
+            #     metadata={"step_number": step_count + 1, "step_id": action_step.step_id}
+            # )
             
             # 执行步骤并流式输出
-            async for chunk in self._execute_step_stream(state, **kwargs):
+            step_kwargs = kwargs.copy()
+            if selected_llm_provider is not None:
+                step_kwargs['llm'] = selected_llm_provider
+            async for chunk in self._execute_step_stream(state, **step_kwargs):
                 action_step.add_chunk(chunk)
                 yield chunk
                 if hasattr(chunk,'is_final_answer') and chunk.is_final_answer:
@@ -300,11 +487,11 @@ class BaseAgent:
                 action_step.is_final_answer = True
                 self._streaming_manager.complete_current_step(is_final_answer=True)
                 
-                yield StreamChunk(
-                    content=f"[FINAL] Task completed!\n",
-                    chunk_type="completion", #interesting, yield completion type
-                    metadata={"final_answer": True}
-                )
+                # yield StreamChunk(
+                #     content=f"[FINAL] Task completed!\n",
+                #     chunk_type="completion", #interesting, yield completion type
+                #     metadata={"final_answer": True}
+                # )
                 break
             
             # 更新状态，继续下一步
@@ -312,18 +499,18 @@ class BaseAgent:
             state = self.update_state(state, result)
             step_count += 1
             
-            yield StreamChunk(
-                content=f"\n[STEP {step_count}] Completed. Moving to next step...\n",
-                chunk_type="step_end",
-                metadata={"step_number": step_count}
-            )
+            # yield StreamChunk(
+            #     content=f"\n[STEP {step_count}] Completed. Moving to next step...\n",
+            #     chunk_type="step_end",
+            #     metadata={"step_number": step_count}
+            # )
             
         # 达到最大步数
         if step_count >= max_steps:
-            yield StreamChunk(
-                content=f"\n[WARNING] Reached maximum steps ({max_steps}). Providing best available answer...\n",
-                chunk_type="warning"
-            )
+            # yield StreamChunk(
+            #     content=f"\n[WARNING] Reached maximum steps ({max_steps}). Providing best available answer...\n",
+            #     chunk_type="warning"
+            # )
             
             try:
                 final_answer = await self.provide_final_answer(state)
@@ -333,16 +520,13 @@ class BaseAgent:
                 )
             except Exception as e:
                 logger.error(f"Failed to provide final answer: {e}")
-                yield StreamChunk(
-                    content=f"[ERROR] Could not provide final answer: {e}\n",
-                    chunk_type="error"
-                )
+                raise
     
     async def _execute_step_stream(self, state, **kwargs):
         """执行单个步骤的流式输出"""
         try:
             # 调用 brain.step 并检查是否返回流式生成器
-            result = await self.brain.step(state, stream=True, **kwargs)
+            result = await self.brain.step(state, stream=True,system_prompt=self.system_prompt, **kwargs)
             
             # 如果 brain.step 返回的是异步生成器，则流式处理
             if inspect.isasyncgen(result):
@@ -360,18 +544,19 @@ class BaseAgent:
                 
         except Exception as e:
             logger.error(f"Error in step execution: {e}")
-            yield StreamChunk(
-                content=f"[ERROR] Step execution failed: {e}\n",
-                chunk_type="error"
-            )
+            raise
             
-    async def _run_complete(self, state, max_steps, kwargs):
+    async def _run_complete(self, state, max_steps, kwargs, selected_llm_provider=None):
         """一次性执行所有步骤直到完成，返回最终结果"""
         step_count = 0
         final_result = None
         
         while step_count < max_steps:
-            result = await self.step(state, stream=kwargs.get('stream', False), **kwargs)
+            # 传递selected_llm_provider给step方法
+            step_kwargs = kwargs.copy()
+            if selected_llm_provider is not None:
+                step_kwargs['llm'] = selected_llm_provider
+            result = await self.step(state, stream=kwargs.get('stream', False), **step_kwargs)
             
             # 检查是否完成
             if self.is_done(result, state):
@@ -393,33 +578,34 @@ class BaseAgent:
             
         return final_result
     
-    async def step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
+    async def step(self, state: AgentState, stream: bool = False, llm: Optional[Union[str, BaseProvider]] = None, **kwargs) -> AgentResponse:
         """
         执行单步决策/行动
         Args:
-            state: 状态字典，包含 input, tools 等必要信息
+            state: 强类型状态对象，包含 input 等必要信息
+            llm: 可选的LLM名称（如 "code", "math", "creative"）或 BaseProvider 实例
             **kwargs: 其他参数，直接传递给brain
         Returns:
-            AgentResponse: 结构化的响应对象，支持tuple解包以保持向后兼容性
+            AgentResponse: 结构化的响应对象
         """
-        if "input" not in state:
-            raise ValueError("State must contain 'input' key with Input object")
+        if not state.input:
+            raise ValueError("State must contain input object")
             
-        input_obj = state["input"]
+        input_obj = state.input
         if not isinstance(input_obj, Input):
             # 将字符串转为Input
             input_obj = Input(query=str(input_obj))
-            state["input"] = input_obj
+            state.input = input_obj
             
         # 预处理输入
         input_obj, kwargs = await self.pre_step(input_obj, kwargs)
         
-        # 执行主要步骤，优先使用状态中的tools
-        tools = kwargs.pop("tools", None)
-        if tools is None:
-            tools = state.get("tools", self.tools)
-        if tools is None:
-            tools = self.tools
+        # 解析可选的LLM参数
+        if llm is not None:
+            selected_llm_provider = self._resolve_llm(llm)
+            if selected_llm_provider is None:
+                raise ValueError(f"LLM '{llm}' not found.")
+            kwargs['llm'] = selected_llm_provider
             
         # 执行主要步骤
         result = await self.execute_step(state, stream=stream, **kwargs)
@@ -430,21 +616,27 @@ class BaseAgent:
             result = AgentResponse.from_tuple(result)
         
         # 执行后处理操作
-        await self.post_step(state["input"], result)
+        await self.post_step(state.input, result)
         
         return result
     
-    async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
+    async def execute_step(self, state: AgentState, stream: bool = False, **kwargs) -> AgentResponse:
         """
         执行实际的步骤操作，默认委托给brain处理。子类可以重写此方法以自定义执行逻辑。
         Args:
-            state: 状态字典，包含 input, tools 等信息
+            state: 强类型状态对象
             **kwargs: 其他参数
         Returns:
             AgentResponse: 结构化的响应对象
         """
-        # 传递状态给brain.step
-        result = await self.brain.step(state, stream=stream, **kwargs)
+        # 使用agent的tools
+        tools = self.tools
+        
+        # 同步state到brain，这样minion可以访问agent的状态
+        self.brain.state = state
+        
+        # 传递强类型状态给brain.step
+        result = await self.brain.step(state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
         
         # 确保返回AgentResponse格式
         if not isinstance(result, AgentResponse):
@@ -526,65 +718,146 @@ Please provide the answer directly, without explaining why you couldn't complete
         # If there is no valid input object, return basic information
         return f"The task execution reached the maximum step limit and could not provide a valid final answer."
     
-    def init_state(self, task: Union[str, Input], **kwargs) -> Dict[str, Any]:
+    def _init_state_from_task(self, task: Union[str, Input], route: Optional[str] = None, **kwargs) -> None:
         """
-        初始化任务状态
+        从任务初始化内部状态
         Args:
             task: 任务描述或Input对象
+            route: 可选的route名称，指定使用哪个minion
             **kwargs: 附加参数
-        Returns:
-            Dict: 初始状态字典
         """
         # 将任务转换为Input对象
         if isinstance(task, str):
             input_obj = Input(query=task)
+            task_str = task
         else:
             input_obj = task
+            task_str = task.query
+        
+        # 设置route（如果提供）
+        if route is not None:
+            input_obj.route = route
             
-        return {
-            "input": input_obj,
-            "history": [],
-            "tools": self.tools,
-            "step_count": 0,
-            "task": task if isinstance(task, str) else task.query,
-            **kwargs
-        }
-    
-    def update_state(self, state: Dict[str, Any], result: Any) -> Dict[str, Any]:
+        # 初始化强类型状态
+        from minion.types.history import History
+        self.state = AgentState(
+            agent=self,
+            input=input_obj,
+            history=History(),
+            step_count=0,
+            task=task_str
+        )
+        
+        # 添加额外的metadata
+        self.state.metadata.update(kwargs)
+
+    def update_state(self, state: AgentState, result: Any) -> AgentState:
         """
         根据步骤结果更新状态
         Args:
-            state: 当前状态
+            state: 当前状态 (强类型AgentState)
             result: 步骤执行结果 (可以是5-tuple或AgentResponse)
         Returns:
-            Dict: 更新后的状态
+            AgentState: 更新后的状态
         """
-        # 添加结果到历史
-        state["history"].append(result)
-        state["step_count"] += 1
+        # 使用传入的状态
+        self.state = state
+            
+        # 将结果转换为消息格式并添加到历史
+        message_dict = self._convert_result_to_message(result)
+        self.state.history.append(message_dict)
+        self.state.step_count += 1
         
-        # 提取响应内容作为下一步输入
-        if hasattr(result, 'raw_response'):
-            response = result.raw_response
-        elif hasattr(result, 'answer'):
-            response = result.answer
-        # 检查5-tuple格式
-        elif isinstance(result, tuple) and len(result) > 0:
-            response = result[0]  # 返回response部分
-        else:
-            response = result
+        if isinstance(self.state.input, Input):
+            self.state.input.query = f"Continue your task: {self.state.task}"
             
-        if isinstance(state["input"], Input):
-            state["input"].query = f"上一步结果: {response}\n继续执行任务: {state['task']}"
-            
-        return state
+        return self.state
     
-    def is_done(self, result: Any, state: Dict[str, Any]) -> bool:
+    def _convert_result_to_message(self, result: Any) -> Dict[str, Any]:
+        """
+        将步骤结果转换为OpenAI消息格式
+        Args:
+            result: 步骤执行结果 (可以是5-tuple或AgentResponse)
+        Returns:
+            Dict[str, Any]: OpenAI消息格式的字典
+        """
+        from minion.types.agent_response import AgentResponse
+        
+        # 如果是AgentResponse对象
+        if isinstance(result, AgentResponse):
+            content = result.content or str(result.raw_response) if result.raw_response is not None else ""
+            message = {
+                "role": "assistant",
+                "content": content,
+                "metadata": {
+                    "score": result.score,
+                    "confidence": result.confidence,
+                    "terminated": result.terminated,
+                    "truncated": result.truncated,
+                    "is_final_answer": result.is_final_answer,
+                    "timestamp": result.timestamp
+                }
+            }
+            
+            # 添加答案信息
+            if result.answer is not None:
+                message["metadata"]["answer"] = result.answer
+            
+            # 添加错误信息
+            if result.error:
+                message["metadata"]["error"] = result.error
+                
+            # 添加执行统计
+            if result.execution_time:
+                message["metadata"]["execution_time"] = result.execution_time
+            if result.tokens_used:
+                message["metadata"]["tokens_used"] = result.tokens_used
+            message.pop("metadata")
+            return message
+        
+        # 如果是5-tuple格式
+        elif isinstance(result, tuple) and len(result) >= 5:
+            response, score, terminated, truncated, info = result
+            content = str(response) if response is not None else ""
+            
+            message = {
+                "role": "assistant", 
+                "content": content,
+                "metadata": {
+                    "score": score,
+                    "terminated": terminated,
+                    "truncated": truncated,
+                    "info": info if isinstance(info, dict) else {}
+                }
+            }
+            
+            # 从info中提取特殊字段
+            if isinstance(info, dict):
+                if "answer" in info:
+                    message["metadata"]["answer"] = info["answer"]
+                if "is_final_answer" in info:
+                    message["metadata"]["is_final_answer"] = info["is_final_answer"]
+                if "confidence" in info:
+                    message["metadata"]["confidence"] = info["confidence"]
+                if "error" in info:
+                    message["metadata"]["error"] = info["error"]
+                    
+            return message
+        
+        # 其他格式，直接转换为字符串内容
+        else:
+            return {
+                "role": "assistant",
+                "content": str(result),
+                "metadata": {}
+            }
+    
+    def is_done(self, result: Any, state: AgentState) -> bool:
         """
         判断任务是否完成
         Args:
             result: 当前步骤结果 (可以是5-tuple或AgentResponse)
-            state: 当前状态
+            state: 当前状态 (强类型AgentState)
         Returns:
             bool: 是否完成
         """
@@ -600,21 +873,25 @@ Please provide the answer directly, without explaining why you couldn't complete
             terminated = result[2]
             return terminated
         
-        # 检查结果中是否包含final_answer
-        if isinstance(result, dict) and "final_answer" in result:
+        # 检查状态中的final_answer标志
+        if state.is_final_answer:
             return True
             
         return False
     
-    def finalize(self, result: Any, state: Dict[str, Any]) -> Any:
+    def finalize(self, result: Any, state: AgentState) -> Any:
         """
         整理最终结果
         Args:
             result: 最后一步结果 (可以是5-tuple或AgentResponse)
-            state: 当前状态
+            state: 当前状态 (强类型AgentState)
         Returns:
             最终处理后的结果
         """
+        # 检查状态中的final_answer_value
+        if state.final_answer_value is not None:
+            return state.final_answer_value
+            
         # 检查AgentResponse类型
         if hasattr(result, 'answer') and result.answer is not None:
             return result.answer
@@ -629,6 +906,24 @@ Please provide the answer directly, without explaining why you couldn't complete
             
         return result
     
+    def _get_builtin_meta_tools(self) -> Dict[str, Any]:
+        """获取内置的meta工具"""
+        from ..tools.think_tool import ThinkTool
+        from ..tools.meta_tools import PlanTool, ReflectionTool
+        
+        return {
+            "think": ThinkTool(),
+            "plan": PlanTool(),
+            "reflect": ReflectionTool(),
+        }
+    
+    def add_meta_tools(self) -> None:
+        """添加内置的meta工具到agent"""
+        meta_tools = self._get_builtin_meta_tools()
+        for tool_name, tool in meta_tools.items():
+            self.add_tool(tool)
+            logger.info(f"Added meta tool: {tool_name}")
+    
     def add_tool(self, tool: BaseTool) -> None:
         """
         添加工具
@@ -639,6 +934,68 @@ Please provide the answer directly, without explaining why you couldn't complete
         # 同时向brain添加工具
         if hasattr(self.brain, 'add_tool'):
             self.brain.add_tool(tool)
+    
+    def set_primary_llm(self, model: Union[ModelType, str, BaseProvider]) -> None:
+        """
+        Set the primary LLM for the agent
+        
+        Args:
+            model: Model type, string identifier, or provider instance
+        """
+        # Convert to BaseProvider if needed
+        if isinstance(model, BaseProvider):
+            self.llm = model
+        else:
+            self.llm = create_llm_from_model(model)
+            
+        # Update brain if already setup
+        if self._is_setup and self.brain:
+            self.brain.llm = self.llm
+    
+    def add_specialized_llm(self, name: str, model: Union[ModelType, str, BaseProvider]) -> None:
+        """
+        Add a specialized LLM for specific tasks
+        
+        Args:
+            name: Name/key for the specialized LLM
+            model: Model type, string identifier, or provider instance
+        """
+        if self.llms is None:
+            self.llms = {}
+            
+        # Convert to BaseProvider if needed
+        if isinstance(model, BaseProvider):
+            self.llms[name] = model
+        else:
+            self.llms[name] = create_llm_from_model(model)
+        
+        # Update brain if already setup
+        if self._is_setup and self.brain:
+            if not hasattr(self.brain, 'llms') or self.brain.llms is None:
+                self.brain.llms = {}
+            self.brain.llms[name] = self.llms[name]
+    
+    def _resolve_llm(self, llm: Union[str, BaseProvider]) -> Optional[BaseProvider]:
+        """
+        Resolve LLM name or provider to BaseProvider instance
+        
+        Args:
+            llm: LLM name ("primary", "code", "math", etc.) or BaseProvider instance
+            
+        Returns:
+            BaseProvider instance or None if not found
+        """
+        # If already a BaseProvider instance, return it directly
+        if isinstance(llm, BaseProvider):
+            return llm
+        
+        # Otherwise treat as string name
+        if llm == "primary":
+            return self.llm
+        elif self.llms and llm in self.llms:
+            return self.llms[llm]
+        else:
+            return None
     
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """
@@ -803,14 +1160,14 @@ Please provide the answer directly, without explaining why you couldn't complete
                 
         return []
     
-    def get_current_state(self) -> Dict[str, Any]:
+    def get_state(self) -> Dict[str, Any]:
         """
         获取当前执行状态
         Returns:
             Dict[str, Any]: 当前状态的副本
         """
-        if hasattr(self, '_current_state') and self._current_state:
-            return self._current_state.copy()
+        if hasattr(self, 'state') and self.state:
+            return self.state.copy()
         else:
             raise ValueError("No current state available. Run agent first.")
     
@@ -821,7 +1178,7 @@ Please provide the answer directly, without explaining why you couldn't complete
             filepath: 保存路径
         """
         import pickle
-        state = self.get_current_state()
+        state = self.get_state()
         with open(filepath, 'wb') as f:
             pickle.dump(state, f)
     
@@ -836,3 +1193,5 @@ Please provide the answer directly, without explaining why you couldn't complete
         import pickle
         with open(filepath, 'rb') as f:
             return pickle.load(f)
+
+

@@ -61,7 +61,7 @@ class CheckMinion(Minion):
         self.input.instruction = "let's think step by step to verify this answer"
 
     async def execute(self):
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         # 检查输入是否为消息列表（multimodal support）
@@ -241,7 +241,7 @@ class DoctestMinion(CheckMinion):
 
     async def _execute_test(self, prompt_or_messages):
         """Execute test logic"""
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         # 根据输入类型调用不同的execute方法

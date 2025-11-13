@@ -27,8 +27,8 @@ async def smart_brain():
     #model = "gpt-4o"
     #model = "gpt-4.1"
     #model = "o4-mini"
-    #model = "claude-3.5"
-    model = "gpt-4o-mini"
+    #model = "claude"
+    model = "gpt-4o"
     #model = "gemini-2.0-flash-exp"
     # model = "deepseek-r1"
     # model = "phi-4"
@@ -47,14 +47,14 @@ async def smart_brain():
         llm=llm,
 
     )
-    #final_answer_tool = FinalAnswerTool()
-    # result = await brain.step(query="Define $f(x)=|| x|-\tfrac{1}{2}|$ and $g(x)=|| x|-\tfrac{1}{4}|$. Find the number of intersections of the graphs of\[y=4 g(f(\sin (2 \pi x))) \quad\text{ and }\quad x=4 g(f(\cos (3 \pi y))).\]"
-    #                                   ,route="plan",check=False,tools=[final_answer_tool])
+
+    # result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[])
     # print(result.answer)
-    #
-    #
-    result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[])
+    # result = await brain.step(messages=[{"type": "text", "content": "what's the solution 234*568"}])
+    # print(result.answer)
+    result = await brain.step(query=[{"type": "text", "content": "what's the solution 234*568"}], route="code")
     print(result.answer)
+
     #
     # result = await brain.step(query="what's the solution 234*568",route="python", check=False)
     # print(result.answer)

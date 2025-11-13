@@ -19,7 +19,7 @@ class FeedbackMinion(ImproverMinion):
     """基于反馈进行通用内容改进的 Minion"""
     async def execute(self):
         """基于反馈进行通用内容改进的执行方法"""
-        node = LmpActionNode(self.brain.llm)
+        node = LmpActionNode(self.get_llm())
         tools = (self.input.tools or []) + (self.brain.tools or [])
         
         # 检查输入是否为消息列表（multimodal support）

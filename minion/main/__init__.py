@@ -3,7 +3,6 @@ from minion.main.worker import (
     NativeMinion,
     CotMinion,
     PythonMinion,
-    MathMinion,
     PlanMinion,
     OptillmMinion,
 )
@@ -20,7 +19,6 @@ __all__ = [
     'NativeMinion', 
     'CotMinion',
     'PythonMinion',
-    'MathMinion',
     'PlanMinion',
     'OptillmMinion',
     'LocalPythonEnv',

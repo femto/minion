@@ -32,7 +32,7 @@ class LLMActionNode(ActionNode):
         # if self.input_parser:
         #     messages = self.input_parser(messages)
 
-        response = await self.llm.generate_response(messages,**kwargs)
+        response = await self.llm.generate_stream_response(messages,**kwargs)
 
         # if self.output_parser:
         #     return self.output_parser(response)

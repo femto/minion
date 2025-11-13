@@ -8,7 +8,7 @@ This agent extends the BaseAgent to provide:
 - Safe code execution with sandboxing
 - Memory integration for learning
 """
-
+from copy import copy
 from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 import re
@@ -19,7 +19,7 @@ from datetime import datetime
 
 from .base_agent import BaseAgent
 from minion.types.agent_response import AgentResponse
-from ..tools.agent_state_aware_tool import AgentStateAwareTool
+from minion.types.agent_state import AgentState, CodeAgentState
 from ..tools.base_tool import BaseTool
 from ..main.input import Input
 from ..main.local_python_executor import LocalPythonExecutor
@@ -39,27 +39,23 @@ class ThinkingEngine:
             'low_confidence': 0.3,  # Trigger reflection when confidence < 0.3
         }
     
-    def should_reflect(self, state: Dict[str, Any]) -> bool:
+    def should_reflect(self, state: CodeAgentState) -> bool:
         """Determine if the agent should reflect based on current state."""
-        error_count = state.get('error_count', 0)
-        step_count = state.get('step_count', 0)
-        last_confidence = state.get('last_confidence', 1.0)
-        
         # Check triggers
-        if error_count >= self.reflection_triggers['error_count']:
+        if state.error_count >= self.reflection_triggers['error_count']:
             return True
-        if step_count > 0 and step_count % self.reflection_triggers['step_count'] == 0:
+        if state.step_count > 0 and state.step_count % self.reflection_triggers['step_count'] == 0:
             return True
-        if last_confidence < self.reflection_triggers['low_confidence']:
+        if state.last_confidence < self.reflection_triggers['low_confidence']:
             return True
         
         return False
     
-    async def generate_reflection(self, state: Dict[str, Any]) -> str:
+    async def generate_reflection(self, state: CodeAgentState) -> str:
         """Generate a reflection prompt based on current state."""
-        history = state.get('history', [])
-        task = state.get('task', '')
-        error_count = state.get('error_count', 0)
+        history = state.history
+        task = state.task or ''
+        error_count = state.error_count
         
         reflection_prompt = f"""
 Let me think about the current situation:
@@ -125,9 +121,16 @@ class CodeAgent(BaseAgent):
     auto_save_state: bool = True
     conversation_context_limit: int = 10  # Limit conversation history for context
     
+    # Internal state management
+    state: CodeAgentState = field(default_factory=CodeAgentState, init=False)
+    
     def __post_init__(self):
         """Initialize the CodeAgent with thinking capabilities and optional state tracking."""
         super().__post_init__()
+        
+        # Set agent reference in state if not already set
+        if self.state and not self.state.agent:
+            self.state.agent = self
         
         # Initialize thinking engine
         self.thinking_engine = ThinkingEngine(self)
@@ -135,31 +138,27 @@ class CodeAgent(BaseAgent):
         # Initialize code executor based on use_async_executor flag (brain is now available)
         if self.use_async_executor:
             self.python_executor = AsyncPythonExecutor(
-                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv", "asyncio"],
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv", "asyncio","os","sys"],
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
         else:
             self.python_executor = LocalPythonExecutor(
-                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv"],
+                additional_authorized_imports=["numpy", "pandas", "matplotlib", "seaborn", "requests", "json", "csv","os","sys"],
                 max_print_outputs_length=50000,
                 additional_functions={}
             )
         
-        # Set brain.python_env to the executor
-        if self.brain:
-            self.brain.python_env = self.python_executor
-        
-        # Add the think tool and final answer tool
-        self.add_tool(FinalAnswerTool())
-        
-        # Send tools to the python executor
-        self._update_executor_tools()
-        
-        # Initialize state tracking if enabled
-        if self.enable_state_tracking:
-            self._initialize_state()
+    @property
+    def history(self) -> List[Any]:
+        """Get the history from internal state."""
+        return self.state.history
     
+    @history.setter
+    def history(self, value: List[Any]):
+        """Set the history in internal state."""
+        self.state.history = value
+
     def _initialize_state(self):
         """Initialize persistent state if state tracking is enabled."""
         if not self.persistent_state:
@@ -172,7 +171,28 @@ class CodeAgent(BaseAgent):
             }
         logger.info("State tracking initialized")
 
-    async def execute_step(self, state: Dict[str, Any], stream: bool = False, **kwargs) -> AgentResponse:
+    async def setup(self):
+        if self._is_setup:
+            return
+        await super().setup()
+        self._is_setup = False #since super setting this to True, we immediately set it to False
+        
+        # Set brain.python_env to the executor after brain is initialized
+        if self.brain and self.python_executor:
+            self.brain.python_env = self.python_executor
+
+        self.add_tool(FinalAnswerTool())
+
+        # Send tools to the python executor
+        self._update_executor_tools()
+
+        # Initialize state tracking if enabled
+        if self.enable_state_tracking:
+            self._initialize_state()
+        self._is_setup = True
+
+
+    async def execute_step(self, state: CodeAgentState, stream: bool = False, **kwargs) -> AgentResponse:
         """
         Execute a step with enhanced code-based reasoning.
         
@@ -182,33 +202,41 @@ class CodeAgent(BaseAgent):
         - Enhanced error handling
         
         Args:
-            state: State dictionary containing input and other data
+            state: Strong-typed CodeAgentState
             **kwargs: Additional arguments
         
         Returns:
             AgentResponse: Structured response instead of 5-tuple
         """
-        # Extract input_data from state
-        input_data = state.get("input")
+        # Use the provided state
+        self.state = state
+        
+        # Extract input_data from internal state
+        input_data = self.state.input
         if not input_data:
             raise ValueError("No input found in state")
         
         # Check if we should reflect first
-        if self.enable_reflection and self.thinking_engine and self.thinking_engine.should_reflect(state):
-            await self._perform_reflection(state)
+        if self.enable_reflection and self.thinking_engine and self.thinking_engine.should_reflect(self.state):
+            await self._perform_reflection()
         
-        # Enhance the input with code-thinking instructions
+        # Enhance the input with code minion routing
         enhanced_input = self._enhance_input_for_code_thinking(input_data)
+        self.state.input = enhanced_input
         
         # Execute the step
         try:
             if not self.brain:
                 raise ValueError("Brain is not initialized")
             
-            # Call brain.step with proper state format - brain expects state dict with 'input' key
-            brain_state = state.copy()
-            brain_state["input"] = enhanced_input
-            result = await self.brain.step(brain_state, stream=stream, **kwargs)
+            # Get tools list from agent
+            tools = self.tools
+            
+            # 同步state到brain，这样minion可以访问agent的状态
+            self.brain.state = self.state
+            
+            # Call brain.step with enhanced input directly
+            result = await self.brain.step(self.state, tools=tools, stream=stream, system_prompt=self.system_prompt, **kwargs)
             
             # Convert result to AgentResponse
             agent_response = AgentResponse.from_tuple(result)
@@ -241,103 +269,20 @@ class CodeAgent(BaseAgent):
             )
     
     def _enhance_input_for_code_thinking(self, input_data: Input) -> Input:
-        """Enhance input with code-thinking instructions based on smolagents approach."""
-        
-        # 获取可用的工具列表
-        available_tools = []
-        if self.tools:
-            for tool in self.tools:
-                if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                    tool_desc = f"- {tool.name}: {tool.description}"
-                    # Add async indicator if using async executor
-                    if self.use_async_executor and hasattr(tool, 'forward'):
-                        import asyncio
-                        if asyncio.iscoroutinefunction(tool.forward):
-                            tool_desc += " (async)"
-                    available_tools.append(tool_desc)
-        
-        tools_description = "\n".join(available_tools) if available_tools else "- final_answer: Provide the final answer to complete the task"
-        
-        # Add async-specific instructions if using async executor
-        async_instructions = ""
-        if self.use_async_executor:
-            async_instructions = """
-**Async Tool Support:**
-- You can use async tools with `await` syntax: `result = await async_tool_name(args)`
-- For concurrent execution, use `asyncio.gather()`: `results = await asyncio.gather(task1, task2, task3)`
-- Regular (sync) tools can be used normally without `await`
-- The `asyncio` module is available for advanced async operations
-"""
-        
-        enhanced_query = f"""You are an expert assistant who can solve any task using code blobs. You will be given a task to solve as best you can.
-To do so, you have been given access to a list of tools: these tools are basically Python functions which you can call with code.
-To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
-
-At each step, in the 'Thought:' sequence, you should first explain your reasoning towards solving the task and the tools that you want to use.
-Then in the 'Code:' sequence, you should write the code in simple Python. The code sequence must end with '<end_code>' sequence.
-During each intermediate step, you can use 'print()' to save whatever important information you will then need.
-These print outputs will then appear in the 'Observation:' field, which will be available as input for the next step.
-In the end you have to return a final answer using the `final_answer` tool.
-
-**Available Tools:**
-{tools_description}
-{async_instructions}
-**Your Task:**
-{input_data.query}
-
-**Rules you must follow:**
-1. Always provide a 'Thought:' sequence, and a 'Code:\\n```py' sequence ending with '```<end_code>' sequence, else you will fail.
-2. Use only variables that you have defined!
-3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict, but use the arguments directly.
-4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. Use print() to output results for use in the next block.
-5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
-6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
-7. Never create any notional variables in your code, as having these in your logs will derail you from the true variables.
-8. You can use imports in your code, but only from standard Python libraries (math, datetime, json, etc.) and common data science libraries (numpy, pandas, matplotlib, seaborn).
-9. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
-10. Don't give up! You're in charge of solving the task, not providing directions to solve it.
-11. **CRUCIAL**: Make sure your code is well-defined and complete. Include all necessary imports, define all variables, and ensure the code can run independently.
-12. **IMPORTANT**: When you have the final answer, call `final_answer(your_result)` to complete the task.
-13. **ASYNC TOOLS**: For async tools, use `await` syntax and consider using `asyncio.gather()` for concurrent execution.
-
-**Example Pattern:**
-Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
-
-Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool.
-Code:
-```py
-result = 5 + 3 + 1294.678
-print(f"The calculation result is: {{result}}")
-final_answer(result)
-```<end_code>
-
-**Remember:**
-- Always start with "Thought:" to explain your reasoning
-- Write complete, well-defined code in "Code:" blocks
-- End code blocks with ```<end_code>
-- Use print() to output intermediate results
-- Call final_answer() when you have the solution
-- Use `await` for async tools and `asyncio.gather()` for concurrent execution
-
-Now Begin!
-"""
-        
         # Create a new Input with enhanced query
-        enhanced_input = Input(
-            query=enhanced_query,
-            route=getattr(input_data, 'route', None) or 'code',
-            check=getattr(input_data, 'check', False),
-            dataset=getattr(input_data, 'dataset', None),
-            metadata=getattr(input_data, 'metadata', {})
-        )
+        enhanced_input = input_data
+        # Ensure route is set to 'code' for code thinking
+        if not enhanced_input.route:
+            enhanced_input.route = 'code'
         
         return enhanced_input
     
     # step方法现在由BaseAgent处理，无需覆盖
     # BaseAgent.step已经返回AgentResponse，并且支持tuple解包向后兼容性
     
-    async def _process_code_response(self, response: str, state: Dict[str, Any]) -> str:
+    async def _process_code_response(self, response: str) -> str:
         """Process and execute any code found in the response, supporting Thought-Code-Observation cycle."""
+        
         # Extract Python code blocks from the response
         code_blocks = self._extract_code_blocks(response)
         
@@ -381,15 +326,13 @@ Now Begin!
                 
                 processed_parts.extend(observation_parts)
                 
-                # Store result in state for future reference
-                state[f'code_result_{i}'] = output
-                state[f'code_logs_{i}'] = logs
-                state[f'is_final_answer_{i}'] = is_final_answer
+                # Store result in internal state for future reference
+                self.state.add_code_result(i, output, logs, is_final_answer)
                 
                 # If this is the final answer, set global flag and return immediately
                 if is_final_answer:
-                    state['is_final_answer'] = True
-                    state['final_answer_value'] = output
+                    self.state.is_final_answer = True
+                    self.state.final_answer_value = output
                     final_observation = f"\n**Final Answer Found:** {output}"
                     final_observation += f"\n**Task Status:** COMPLETED"
                     processed_parts.append(final_observation)
@@ -414,10 +357,10 @@ Now Begin!
                 processed_parts.append(error_observation)
                 
                 # Increment error count
-                state['error_count'] = state.get('error_count', 0) + 1
+                self.state.error_count += 1
                 
                 # Provide error recovery suggestions
-                if state['error_count'] <= 2:
+                if self.state.error_count <= 2:
                     recovery_suggestion = f"\n**Suggestion:** Review the error and try a different approach in the next step."
                     processed_parts.append(recovery_suggestion)
         
@@ -464,12 +407,17 @@ Now Begin!
         
         return unique_blocks
     
-    async def _perform_reflection(self, state: Dict[str, Any]) -> None:
+    async def _perform_reflection(self) -> None:
         """Perform self-reflection using the think tool."""
         if not self.thinking_engine:
             return
         
-        reflection_prompt = await self.thinking_engine.generate_reflection(state)
+        # Use internal state for reflection
+        reflection_prompt = await self.thinking_engine.generate_reflection(self.state)
+        
+        # Update reflection count
+        self.state.reflection_count += 1
+        self.state.last_reflection_step = self.state.step_count
         
         # Use the think tool
         think_tool = self.get_tool('think')
@@ -483,22 +431,16 @@ Now Begin!
                     metadata={'type': 'reflection', 'timestamp': datetime.now().isoformat()}
                 )
     
-    def update_state(self, state: Dict[str, Any], result: Any) -> Dict[str, Any]:
+    def update_state(self, state: CodeAgentState, result: Any) -> CodeAgentState:
         """Update state with CodeMinion-specific information."""
-        state = super().update_state(state, result)
+        # Update the internal state
+        self.state = super().update_state(state, result)
         
         # Extract confidence from result if available
         if isinstance(result, tuple) and len(result) >= 2:
-            state['last_confidence'] = result[1]  # score/confidence
-        
-        # Update reflection trigger counters
-        if 'error_count' not in state:
-            state['error_count'] = 0
-        
-        # 保存当前状态引用，便于外部访问
-        self.state = state
+            self.state.last_confidence = result[1]  # score/confidence
             
-        return state
+        return self.state
     
     async def solve_problem(self, problem: str, reset: bool = False, **kwargs) -> str:
         """
@@ -545,17 +487,20 @@ Use Python code to:
         result = await self.run_async(input_obj, reset=reset, **kwargs)
         return str(result)
     
-    def is_done(self, result: Any, state: Dict[str, Any]) -> bool:
+    def is_done(self, result: Any, state: CodeAgentState) -> bool:
         """
         Check if the task is completed by detecting the is_final_answer flag.
         """
+        # Use the provided state
+        self.state = state
+        
         # First call the parent's is_done method
-        parent_done = super().is_done(result, state)
+        parent_done = super().is_done(result, self.state)
         if parent_done:
             return True
         
-        # Check if there is a final_answer flag in the state
-        if state.get('is_final_answer', False):
+        # Check if there is a final_answer flag in the internal state
+        if self.state.is_final_answer:
             return True
         
         # For AgentResponse, use its built-in check method
@@ -570,20 +515,23 @@ Use Python code to:
         
         return False
     
-    def finalize(self, result: Any, state: Dict[str, Any]) -> Any:
+    def finalize(self, result: Any, state: CodeAgentState) -> Any:
         """
         Organize the final result, specially handling the final_answer case.
         """
-        # Check if there is a final_answer_value in the state
-        if 'final_answer_value' in state:
-            return state['final_answer_value']
+        # Use the provided state
+        self.state = state
+        
+        # Check if there is a final_answer_value in the internal state
+        if self.state.final_answer_value is not None:
+            return self.state.final_answer_value
         
         # For AgentResponse, prioritize using its final_answer
         if hasattr(result, 'final_answer') and result.final_answer is not None:
             return result.final_answer
         
         # Call parent's finalize method
-        return super().finalize(result, state)
+        return super().finalize(result, self.state)
 
     def _update_executor_tools(self):
         """Update the Python executor with current tools."""
@@ -612,40 +560,63 @@ Use Python code to:
             
     # State management methods from StateCodeAgent
     
-    async def run_async(self, task: Optional[Union[str, Input]] = None,
-                       state: Optional[Dict[str, Any]] = None, 
-                       max_steps: Optional[int] = None,
-                       reset: bool = False,
-                       stream: bool = False,
-                       **kwargs) -> Any:
+    def run(self, 
+           task: Optional[Union[str, Input]] = None,
+           max_steps: Optional[int] = None,
+           reset: bool = False,
+           route: Optional[str] = None,
+           **kwargs) -> Any:
         """
-        Run the CodeAgent with code-thinking capabilities.
+        Synchronous interface for running the agent using internal state.
         
         Args:
             task: Task description or Input object
-            state: Existing state for execution
+            max_steps: Maximum number of steps
+            reset: If True, reset the agent state before execution
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
+            **kwargs: Additional parameters
+            
+        Returns:
+            Final task result
+        """
+        import asyncio
+        return asyncio.run(self.run_async(task=task, max_steps=max_steps, reset=reset, stream=False, route=route, **kwargs))
+
+    async def run_async(self, task: Optional[Union[str, Input]] = None,
+                       max_steps: Optional[int] = None,
+                       reset: bool = False,
+                       stream: bool = False,
+                       route: Optional[str] = None,
+                       **kwargs) -> Any:
+        """
+        Run the CodeAgent with code-thinking capabilities using internal state.
+        
+        Args:
+            task: Task description or Input object
             max_steps: Maximum steps to execute
-            reset: If True, reset the agent state before execution (when state tracking is enabled)
+            reset: If True, reset the agent state before execution
             stream: If True, return streaming generator
+            route: 可选的route名称，如 "code", "cot", "plan" 等，指定使用哪个minion
             **kwargs: Additional parameters
             
         Returns:
             Agent response or async generator for streaming
         """
-        # Prepare input and state (main difference from BaseAgent)
-        enhanced_input = self._prepare_input(task)
-        prepared_state = self._prepare_state(state, reset)
+        # Prepare input and internal state
+        enhanced_input = self._prepare_input(task, route=route)
+        self._prepare_internal_state(task, reset)
         
         # Record input in state for interaction tracking
-        prepared_state['input'] = enhanced_input
+        self.state.input = enhanced_input
         
         try:
-            # Use BaseAgent's logic but with our enhanced input
+            # Use BaseAgent's logic but with our enhanced input and internal state
             result = await super().run_async(
-                task=enhanced_input, 
-                state=prepared_state, 
+                task=enhanced_input,
+                state=self.state, 
                 max_steps=max_steps, 
                 stream=stream, 
+                route=route,
                 **kwargs
             )
             
@@ -653,7 +624,7 @@ Use Python code to:
             if self.enable_state_tracking:
                 await self._record_interaction(enhanced_input, result, reset)
                 if self.auto_save_state:
-                    self._save_persistent_state(prepared_state)
+                    self._save_persistent_state(self.state)
             
             return result
             
@@ -663,70 +634,72 @@ Use Python code to:
                 await self._record_interaction(enhanced_input, f"Error: {e}", reset)
             raise
     
-    def _prepare_input(self, task: Optional[Union[str, Input]]) -> Input:
+    def _prepare_input(self, task: Optional[Union[str, Input]], route: Optional[str] = None) -> Input:
         """
         Prepare input data for execution.
         
         Args:
             task: Task description or Input object
+            route: 可选的route名称，如果提供则覆盖默认的'code' route
             
         Returns:
             Input: Prepared Input object with enhanced query
         """
         # Convert string task to Input if needed
         if isinstance(task, str):
-            input_data = Input(query=task, route='code')  # Key difference: prefer code route
+            # Use provided route or default to 'code'
+            default_route = route if route is not None else 'code'
+            input_data = Input(query=task, route=default_route)
         elif isinstance(task, Input):
             input_data = task
-            # Ensure we use code route if not explicitly set
-            if not input_data.route:
+            # Set route based on priority: explicit route param > existing route > default 'code'
+            if route is not None:
+                input_data.route = route
+            elif not input_data.route:
                 input_data.route = 'code'
         else:
             raise ValueError(f"Task must be string or Input object, got {type(task)}")
         
-        # Enhance input with code-thinking instructions
-        enhanced_input = self._enhance_input_for_code_thinking(input_data)
-        
-        # Add conversation context if state tracking is enabled
-        if self.enable_state_tracking:
-            enhanced_input = self._add_conversation_context(enhanced_input)
-        
+        # Enhance input with code-thinking instructions, do not repeat what's done in CodeMinion
+        enhanced_input = input_data
+
         return enhanced_input
     
-    def _prepare_state(self, state: Optional[Dict[str, Any]], reset: bool) -> Dict[str, Any]:
+    def _prepare_internal_state(self, task: Optional[Union[str, Input]], reset: bool) -> None:
         """
-        Prepare state for execution.
+        Prepare internal state for execution.
         
         Args:
-            state: Existing state or None
+            task: Task description or Input object
             reset: Whether to reset state before execution
-            
-        Returns:
-            Dict: Prepared state dictionary
         """
-        # Handle reset functionality (only if state tracking is enabled)
-        if reset and self.enable_state_tracking:
-            self.reset_state()
-            logger.info("Agent state has been reset")
+        # Initialize internal state if needed
+        if not hasattr(self, 'state') or self.state is None:
+            self.state = CodeAgentState(agent=self)
         
-        # Initialize state if None
-        if state is None:
-            state = {}
+        # Handle reset functionality
+        if reset:
+            if self.enable_state_tracking:
+                # Reset both internal state and persistent state
+                self.reset_state()
+                logger.info("Agent state has been reset (including persistent state)")
+            else:
+                # Just reset internal state
+                self.state.reset()
+                logger.info("Agent internal state has been reset")
+        
+        # Set task information
+        if task is not None:
+            if isinstance(task, str):
+                self.state.task = task
+            else:
+                self.state.task = task.query
         
         # Add persistent information if state tracking is enabled
         if self.enable_state_tracking:
-            state.update(self.persistent_state)
-            state['conversation_history'] = self.get_recent_history()
-        
-        # Ensure required keys exist
-        if 'step_count' not in state:
-            state['step_count'] = 0
-        if 'error_count' not in state:
-            state['error_count'] = 0
-        if 'history' not in state:
-            state['history'] = []
-        
-        return state
+            # Merge persistent state into metadata
+            self.state.metadata.update(self.persistent_state)
+            self.state.metadata['conversation_history'] = self.get_recent_history()
     
     def reset_state(self) -> None:
         """
@@ -736,29 +709,33 @@ Use Python code to:
         - Conversation history
         - Working variables
         - Temporary memory
+        - Internal state
         But preserves:
         - Learned patterns
         - Core configuration
         """
-        if not self.enable_state_tracking:
-            logger.warning("State tracking is disabled, reset_state has no effect")
-            return
+        # Reset internal state first
+        if hasattr(self, 'state') and self.state:
+            self.state.reset()
+        else:
+            self.state = CodeAgentState(agent=self)
+        
+        if self.enable_state_tracking:
+            # Clear conversation history
+            self.conversation_history = []
             
-        # Clear conversation history
-        self.conversation_history = []
-        
-        # Reset session ID
-        self.session_id = str(uuid.uuid4())
-        
-        # Reset working state but preserve learned patterns
-        learned_patterns = self.persistent_state.get('learned_patterns', [])
-        self.persistent_state = {
-            'initialized_at': str(uuid.uuid4()),
-            'conversation_count': 0,
-            'variables': {},
-            'memory_store': {},
-            'learned_patterns': learned_patterns  # Preserve learned patterns
-        }
+            # Reset session ID
+            self.session_id = str(uuid.uuid4())
+            
+            # Reset working state but preserve learned patterns
+            learned_patterns = self.persistent_state.get('learned_patterns', [])
+            self.persistent_state = {
+                'initialized_at': str(uuid.uuid4()),
+                'conversation_count': 0,
+                'variables': {},
+                'memory_store': {},
+                'learned_patterns': learned_patterns  # Preserve learned patterns
+            }
         
         # Reset code executor state if available
         if self.python_executor:
