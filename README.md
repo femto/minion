@@ -167,6 +167,88 @@ DEFAULT_BASE_URL=base_url
 DEFAULT_MODEL=deepseek-chat
 ```
 
+### Configuration System
+
+Minion supports flexible configuration through YAML files with a two-tier system:
+
+#### Configuration File Locations
+
+1. **Project Config**: `MINION_ROOT/config/config.yaml` - Default project configuration
+2. **User Config**: `~/.minion/config.yaml` - User-specific overrides
+
+#### Configuration Priority
+
+When both configuration files exist, they are loaded in this order:
+1. User config (`~/.minion/config.yaml`) is loaded first
+2. Project config (`MINION_ROOT/config/config.yaml`) is loaded second and **overwrites** user config
+
+**Priority (highest to lowest)**:
+- 🥇 **Project Config** - Takes precedence
+- 🥈 **User Config** - Can be overridden
+
+This allows you to:
+- Keep sensitive data (API keys) in your user config
+- Share project defaults through the project config
+- Let team settings override personal preferences when needed
+
+#### MINION_ROOT Detection
+
+`MINION_ROOT` is determined automatically:
+1. Checks `MINION_ROOT` environment variable (if set)
+2. Auto-detects by finding `.git`, `.project_root`, or `.gitignore` in parent directories
+3. Falls back to current working directory
+
+Installation method affects `MINION_ROOT`:
+- `pip install -e <path>`: MINION_ROOT = `<path>`
+- `pip install minionx`: MINION_ROOT = current directory at launch
+
+Check the startup log to see where MINION_ROOT is set:
+```
+INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
+```
+
+#### Environment Variables
+
+Configurations support environment variable substitution using `${VAR_NAME}` syntax. You can also specify `.env` files to load in your config:
+
+```yaml
+env_file:
+  - .env
+  - .env.local
+
+environment:
+  SOME_VAR: "${MY_ENV_VAR}"
+```
+
+### Other Dependencies
+#### Using Brain with docker python env
+```
+docker build -t intercode-python -f docker/python.Dockerfile .
+```
+```
+brain = Brain() #default will use docker python env
+```
+
+#### Using Brain with rpyc env(If you don't want to use docker)
+```
+python docker/utils/python_server.py --port 3007
+```
+```
+brain = Brain(python_env=RpycPythonEnv(port=3007))
+```
+#### Using Brain with Local Python env(be aware of this method, since llm can generate bad code)
+```
+brain = Brain(python_env=LocalPythonEnv(verbose=False))
+```
+#### Troubleshooting with docker python env
+#### stop existing container if necessary
+```
+docker stop intercode-python_ic_ctr
+docker rm intercode-python_ic_ctr
+docker run -d -p 3006:3006 --name intercode-python_ic_ctr intercode-python
+```
+make sure container name intercode-python_ic_ctr is listening on 3006
+
 ## Community and Support
 
 Join our Discord community to connect with other Minion users, get support, and stay updated on the latest developments:
