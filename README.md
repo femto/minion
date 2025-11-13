@@ -158,6 +158,59 @@ DEFAULT_BASE_URL=base_url
 DEFAULT_MODEL=deepseek-chat
 ```
 
+### Configuration System
+
+Minion supports flexible configuration through YAML files with a two-tier system:
+
+#### Configuration File Locations
+
+1. **Project Config**: `MINION_ROOT/config/config.yaml` - Default project configuration
+2. **User Config**: `~/.minion/config.yaml` - User-specific overrides
+
+#### Configuration Priority
+
+When both configuration files exist, they are loaded in this order:
+1. User config (`~/.minion/config.yaml`) is loaded first
+2. Project config (`MINION_ROOT/config/config.yaml`) is loaded second and **overwrites** user config
+
+**Priority (highest to lowest)**:
+- 🥇 **Project Config** - Takes precedence
+- 🥈 **User Config** - Can be overridden
+
+This allows you to:
+- Keep sensitive data (API keys) in your user config
+- Share project defaults through the project config
+- Let team settings override personal preferences when needed
+
+#### MINION_ROOT Detection
+
+`MINION_ROOT` is determined automatically:
+1. Checks `MINION_ROOT` environment variable (if set)
+2. Auto-detects by finding `.git`, `.project_root`, or `.gitignore` in parent directories
+3. Falls back to current working directory
+
+Installation method affects `MINION_ROOT`:
+- `pip install -e <path>`: MINION_ROOT = `<path>`
+- `pip install minionx`: MINION_ROOT = current directory at launch
+
+Check the startup log to see where MINION_ROOT is set:
+```
+INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
+```
+
+#### Environment Variables
+
+Configurations support environment variable substitution using `${VAR_NAME}` syntax. You can also specify `.env` files to load in your config:
+
+```yaml
+env_file:
+  - .env
+  - .env.local
+
+environment:
+  SOME_VAR: "${MY_ENV_VAR}"
+```
+
 ### Other Dependencies
 #### Using Brain with docker python env
 ```
