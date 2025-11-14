@@ -74,9 +74,10 @@ async def test_bedrock_async_stream_response():
     try:
         response = await provider.generate_stream_response(messages, temperature=0.7)
         print(f"✓ Stream response successful!")
-        print(f"Model: {response.get('model')}")
-        print(f"Content: {response['choices'][0]['message']['content']}")
-        print(f"Tokens: {response['usage']['total_tokens']}")
+        print(f"Response type: {type(response)}")
+        print(f"Model: {response.model}")
+        print(f"Content: {response.choices[0].message.content}")
+        print(f"Tokens: {response.usage.total_tokens}")
     except Exception as e:
         print(f"✗ Stream response failed: {e}")
 

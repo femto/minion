@@ -12,6 +12,8 @@ except ImportError as e:
         "Or install the full package with bedrock support: pip install -e .[bedrock]"
     ) from e
 
+from openai.types.chat import ChatCompletion
+
 from minion.configs.config import ContentType, ImageDetail
 from minion.logs import logger
 from minion.schema.message_types import Message, MessageContent, ImageContent
@@ -250,7 +252,7 @@ class BedrockAsyncProvider(BaseProvider):
             logger.error(f"Error generating completion: {e}")
             raise
 
-    async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Any:
+    async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> ChatCompletion:
         """
         Generate streaming completion from messages, returning a response object
 
@@ -260,7 +262,7 @@ class BedrockAsyncProvider(BaseProvider):
             **kwargs: Additional parameters
 
         Returns:
-            A response object with choices, usage, etc.
+            ChatCompletion: A ChatCompletion object with choices, usage, etc.
         """
         try:
             request_body = self._create_request_body(messages, temperature, **kwargs)
@@ -300,7 +302,13 @@ class BedrockAsyncProvider(BaseProvider):
                             break
 
                 # 返回类似 OpenAI 的响应格式
-                return {
+                import time
+
+                response = {
+                    "id": f"chatcmpl-bedrock-{hash(str(messages))}"[:29],  # 生成一个伪 ID
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": self.model_id,
                     "choices": [
                         {
                             "message": {
@@ -315,10 +323,9 @@ class BedrockAsyncProvider(BaseProvider):
                         "prompt_tokens": input_tokens,
                         "completion_tokens": output_tokens,
                         "total_tokens": input_tokens + output_tokens
-                    },
-                    "model": self.model_id,
-                    "object": "chat.completion"
+                    }
                 }
+                return ChatCompletion(**response)
 
         except ClientError as e:
             logger.error(f"Bedrock async streaming response error: {e}")
