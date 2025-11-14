@@ -259,14 +259,7 @@ class CodeAgent(BaseAgent):
             
         except Exception as e:
             logger.error(f"Step execution failed: {e}")
-            error_msg = f"Step execution failed: {e}"
-            return AgentResponse(
-                raw_response=error_msg,
-                score=0.0,
-                terminated=False,
-                truncated=False,
-                error=str(e)
-            )
+            raise e
     
     def _enhance_input_for_code_thinking(self, input_data: Input) -> Input:
         # Create a new Input with enhanced query
