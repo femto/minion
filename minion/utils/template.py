@@ -111,8 +111,15 @@ def _format_multimodal_content(item: Any) -> Dict[str, Any]:
             return {"type": "text", "text": item}
     
     elif isinstance(item, dict):
-        # 已经是OpenAI格式的内容
-        return item
+        # 规范化 content block 格式
+        # OpenAI 和 Anthropic 都使用 {"type": "text", "text": "..."} 格式
+        if item.get("type") == "text":
+            # 提取文本内容，支持 "text" 或 "content" 字段（向后兼容）
+            text_content = item.get("text") or item.get("content", "")
+            return {"type": "text", "text": text_content}
+        else:
+            # 其他类型（image_url 等）保持不变
+            return item
     
     else:
         # 检查是否是PIL.Image对象
