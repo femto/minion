@@ -1206,15 +1206,8 @@ Continue this Thought/Code/Observation cycle until you solve the task completely
                 # Add multimodal content
                 for item in query:
                     if isinstance(item, dict):
-                        # Normalize content block format
-                        # Handle both "content" and "text" field names
-                        if item.get("type") == "text":
-                            # Extract text from either "content" or "text" field
-                            text_content = item.get("text") or item.get("content", "")
-                            user_content_parts.append({"type": "text", "text": text_content})
-                        else:
-                            # Other content types (image, etc.), keep as is
-                            user_content_parts.append(item)
+                        # Already formatted content block
+                        user_content_parts.append(item)
                     elif isinstance(item, str):
                         # Plain text
                         user_content_parts.append({"type": "text", "text": item})
