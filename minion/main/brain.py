@@ -181,9 +181,14 @@ Supporting navigation and spatial memory""",
 
     async def step(self, state: Union[AgentState, Input, Dict[str, Any]] = None, **config_kwargs):
         # 处理不同类型的state参数
-        # if state is None: #we don't handle this since this means input.query is None
-        #     state = AgentState()
-            
+        if state is None:
+            # 如果state为None，使用Brain自身的state或创建新的AgentState
+            if self.state is not None:
+                state = self.state
+            else:
+                from minion.types.history import History
+                state = AgentState(history=History())
+
         # 根据state类型提取参数
         if isinstance(state, Input):
             # 直接是Input对象
@@ -206,7 +211,11 @@ Supporting navigation and spatial memory""",
         # 2. agent.state 的任何修改都会自动反映到 brain.state
         # 3. 重新赋值会破坏引用关系，导致状态不同步
         # 4. 如果 brain.step() 被直接调用（不通过 agent），self.state 可能为 None，这是正常的
-        self.state.input = input #now set input back to state, make sure state.input is this.
+        # 但是，如果 self.state 为 None，我们需要设置它，以便后续访问
+        if self.state is None:
+            self.state = state
+        # 更新state的input字段
+        state.input = input #now set input back to state, make sure state.input is this.
 
         # 从config_kwargs提取其他参数
         query = config_kwargs.get("query", "")
