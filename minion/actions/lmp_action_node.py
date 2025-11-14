@@ -612,13 +612,13 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
     async def _handle_tool_calls(self, response, tools, messages, api_params):
         """
         处理工具调用响应
-        
+
         Args:
             response: LLM的原始响应（可能是字符串或 ChatCompletion 对象）
             tools: 可用的工具列表
             messages: 消息历史
             api_params: API参数
-            
+
         Returns:
             str: 处理后的响应
         """
@@ -632,7 +632,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                 for tool_call in message.tool_calls:
                     tool_name = tool_call.function.name
                     args_str = tool_call.function.arguments
-                    
+
                     # 如果是final_answer，则直接抛出FinalAnswerException
                     if tool_name == 'final_answer':
                         try:
@@ -643,7 +643,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                         except json.JSONDecodeError:
                             # 如果解析失败，直接使用整个参数字符串
                             raise FinalAnswerException(args_str)
-                    
+
                     # 查找对应的工具
                     target_tool = None
                     for tool in tools:
@@ -653,7 +653,7 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                         elif hasattr(tool, '__name__') and tool.__name__ == tool_name:
                             target_tool = tool
                             break
-                    
+
                     if target_tool:
                         try:
                             if callable(target_tool):
@@ -669,36 +669,39 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                                         tool_result = target_tool(**args_dict)
                                 else:
                                     tool_result = target_tool(**args_str) #assume it's dict
-                                
+
                                 # 检查是否是 awaitable，如果是则 await
                                 if inspect.iscoroutine(tool_result):
                                     tool_result = await tool_result
                             else:
                                 tool_result = "Tool call failed: tool is not callable"
-                            
+
                             final_response += f"Tool {tool_name} execution result: {tool_result}\n"
-                            
+
                         except FinalAnswerException as e:
                             # 特殊处理 FinalAnswerException
                             final_response += f"FINAL_ANSWER_EXCEPTION:{e.answer}\n"
                         except Exception as e:
                             error_msg = f"Tool {tool_name} execution error: {str(e)}"
                             final_response += error_msg + "\n"
-                
+
                 return final_response.strip()
             else:
                 # 没有 tool_calls，返回正常内容
                 return message.content or ""
-        
+
         # 如果不是 ChatCompletion 对象，按原来的字符串处理方式
         import json
         import re
-        
+
+        # 提取响应文本内容用于正则匹配
+        response_text = str(response) if not isinstance(response, str) else response
+
         # 首先尝试解析 XML 格式的工具调用
         xml_tool_call_pattern = r'<tool_call>\s*<tool_name>(\w+)</tool_name>\s*<parameters>(.*?)</parameters>\s*</tool_call>'
-        xml_matches = re.finditer(xml_tool_call_pattern, response, re.IGNORECASE | re.DOTALL)
-        
-        final_response = response
+        xml_matches = re.finditer(xml_tool_call_pattern, response_text, re.IGNORECASE | re.DOTALL)
+
+        final_response = response_text
         
         # 处理 XML 格式的工具调用
         for match in xml_matches:
