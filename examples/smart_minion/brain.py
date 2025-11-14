@@ -48,12 +48,12 @@ async def smart_brain():
 
     )
 
-    # result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[])
-    # print(result.answer)
-    # result = await brain.step(messages=[{"type": "text", "content": "what's the solution 234*568"}])
-    # print(result.answer)
-    result = await brain.step(query=[{"type": "text", "content": "what's the solution 234*568"}], route="code")
+    result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[])
     print(result.answer)
+    result = await brain.step(messages=[{"type": "text", "text": "what's the solution 234*568"}])
+    print(result.answer)
+    # result = await brain.step(query=[{"type": "text", "text": "what's the solution 234*568"}], route="code")
+    # print(result.answer)
 
     #
     # result = await brain.step(query="what's the solution 234*568",route="python", check=False)
