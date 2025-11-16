@@ -15,7 +15,7 @@ except ImportError as e:
 from openai.types.chat import ChatCompletion
 
 from minion.configs.config import ContentType, ImageDetail
-from minion.logs import logger
+from minion.logs import logger, log_llm_stream
 from minion.schema.message_types import Message, MessageContent, ImageContent
 from minion.providers.base_provider import BaseProvider
 from minion.providers.llm_provider_registry import llm_registry
@@ -287,6 +287,7 @@ class BedrockAsyncProvider(BaseProvider):
                             if delta.get('type') == 'text_delta':
                                 text = delta.get('text', '')
                                 full_content += text
+                                log_llm_stream(text)
 
                         elif chunk.get('type') == 'message_stop':
                             # 记录token使用情况
@@ -354,6 +355,7 @@ class BedrockAsyncProvider(BaseProvider):
                             delta = chunk.get('delta', {})
                             if delta.get('type') == 'text_delta':
                                 text = delta.get('text', '')
+                                log_llm_stream(text)
                                 yield text
 
                         elif chunk.get('type') == 'message_stop':

@@ -417,6 +417,7 @@ class BedrockProvider(BaseProvider):
                         if delta.get('type') == 'text_delta':
                             text = delta.get('text', '')
                             full_response += text
+                            log_llm_stream(text)
                             yield text
                     
                     elif chunk.get('type') == 'message_stop':
