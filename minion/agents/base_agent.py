@@ -525,8 +525,11 @@ class BaseAgent:
     async def _execute_step_stream(self, state, **kwargs):
         """执行单个步骤的流式输出"""
         try:
+            # 使用agent的tools
+            tools = self.tools
+            
             # 调用 brain.step 并检查是否返回流式生成器
-            result = await self.brain.step(state, stream=True,system_prompt=self.system_prompt, **kwargs)
+            result = await self.brain.step(state, tools=tools, stream=True, system_prompt=self.system_prompt, **kwargs)
             
             # 如果 brain.step 返回的是异步生成器，则流式处理
             if inspect.isasyncgen(result):
