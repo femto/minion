@@ -57,15 +57,35 @@ class BaseTool(ABC):
     def forward(self, *args, **kwargs) -> Any:
         """
         实际的工具执行逻辑，子类必须实现此方法
-        
+
         Args:
             *args: 位置参数
             **kwargs: 关键字参数
-            
+
         Returns:
             工具执行结果
         """
         raise NotImplementedError("工具子类必须实现forward方法")
+
+    def format_for_observation(self, output: Any) -> str:
+        """
+        Format tool output for LLM observation (when tool call is the last item in code).
+
+        This method can be overridden by tools to provide LLM-friendly formatting
+        of their output when used as observations. For example:
+        - file_read tool can add line numbers
+        - search tool can format results with highlighting
+        - calculator tool can show step-by-step computation
+
+        Args:
+            output: The raw output from forward() method
+
+        Returns:
+            Formatted string suitable for LLM observation
+
+        Default behavior: Convert output to string
+        """
+        return str(output) if output is not None else ""
     
     def setup(self):
         """

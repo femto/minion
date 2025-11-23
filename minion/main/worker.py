@@ -1064,26 +1064,26 @@ Previous error:
 @register_worker_minion
 class CodeMinion(PythonMinion):
     """
-    Code Minion using smolagents-style approach: 
+    Code Minion using smolagents-style approach:
     Thought -> Code -> Observation cycle with <end_code> support
     """
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.input.instruction = "Solve this problem by writing Python code. Use the 'Thought -> Code -> Observation' approach."
         self.max_iterations = 5
-        
+
         # Initialize LocalPythonExecutor with tools like smolagents
         if hasattr(self, 'python_env') and isinstance(self.python_env, (LocalPythonExecutor, AsyncPythonExecutor)):
             # Send variables (state) to the python executor
             variables = getattr(self.input, 'symbols', {})
             self.python_env.send_variables(variables=variables)
-            
+
             # Send tools to the python executor
             brain_tools = getattr(self.brain, 'tools', [])
             input_tools = getattr(self.input, 'tools', [])
             all_tools = {}
-            
+
             # Convert tools to dict format expected by send_tools
             for tool in (brain_tools + input_tools):
                 if hasattr(tool, 'name'):
@@ -1096,8 +1096,87 @@ class CodeMinion(PythonMinion):
                     # Generic callable, use str representation as fallback
                     tool_name = getattr(tool, '__name__', str(tool))
                     all_tools[tool_name] = tool
-            
+
             self.python_env.send_tools(all_tools)
+
+    def _get_last_tool_from_code(self, code: str):
+        """
+        Extract the last tool called in the code by parsing AST.
+
+        Args:
+            code: Python code string to parse
+
+        Returns:
+            Tool object if found, None otherwise
+        """
+        import ast
+        try:
+            tree = ast.parse(code)
+            # Get the last statement
+            if not tree.body:
+                return None
+
+            last_stmt = tree.body[-1]
+
+            # Handle different types of last statements
+            tool_name = None
+            if isinstance(last_stmt, ast.Expr) and isinstance(last_stmt.value, ast.Call):
+                # Last statement is a direct function call
+                call = last_stmt.value
+                if isinstance(call.func, ast.Name):
+                    tool_name = call.func.id
+                elif isinstance(call.func, ast.Attribute):
+                    tool_name = call.func.attr
+            elif isinstance(last_stmt, (ast.Assign, ast.AnnAssign)):
+                # Last statement is an assignment, check the value
+                value = last_stmt.value if isinstance(last_stmt, ast.Assign) else last_stmt.value
+                if isinstance(value, ast.Call):
+                    call = value
+                    if isinstance(call.func, ast.Name):
+                        tool_name = call.func.id
+                    elif isinstance(call.func, ast.Attribute):
+                        tool_name = call.func.attr
+            elif isinstance(last_stmt, ast.Await):
+                # Handle await expressions
+                if isinstance(last_stmt.value, ast.Call):
+                    call = last_stmt.value
+                    if isinstance(call.func, ast.Name):
+                        tool_name = call.func.id
+                    elif isinstance(call.func, ast.Attribute):
+                        tool_name = call.func.attr
+
+            # Look up tool from python_env's custom_tools
+            if tool_name and hasattr(self.python_env, 'custom_tools'):
+                return self.python_env.custom_tools.get(tool_name)
+
+            return None
+        except Exception as e:
+            logger.debug(f"Failed to extract tool from code: {e}")
+            return None
+
+    def _format_output_for_observation(self, output: Any, code: str) -> str:
+        """
+        Format output for observation, using tool's format_for_observation if available.
+
+        Args:
+            output: The output from code execution
+            code: The code that was executed
+
+        Returns:
+            Formatted output string
+        """
+        # Try to get the last tool used
+        tool = self._get_last_tool_from_code(code)
+
+        if tool and hasattr(tool, 'format_for_observation'):
+            try:
+                return tool.format_for_observation(output)
+            except Exception as e:
+                logger.debug(f"Failed to format output with tool.format_for_observation: {e}")
+                # Fall back to default formatting
+
+        # Default formatting
+        return str(output) if output is not None else ""
         
     def construct_current_turn_messages(self, query, tools=[], task=None, error="", current_turn_attempts=[]):
         """Construct OpenAI messages format for current turn execution
@@ -1446,8 +1525,10 @@ Please fix the error and try again."""
                     if logs:
                         observation_parts.append(f"Logs:\n{logs}")
                     if output is not None:
-                        observation_parts.append(f"Output: {output}")
-                    
+                        # Use tool's format_for_observation if available
+                        formatted_output = self._format_output_for_observation(output, code)
+                        observation_parts.append(f"Output: {formatted_output}")
+
                     observation = f"**Observation:** Code executed successfully:\n" + "\n".join(observation_parts)
                     self.current_turn_attempts.append(observation)
                     

@@ -76,15 +76,35 @@ class AsyncBaseTool(ABC):
     async def forward(self, *args, **kwargs) -> Any:
         """
         实际的异步工具执行逻辑，子类必须实现此方法
-        
+
         Args:
             *args: 位置参数
             **kwargs: 关键字参数
-            
+
         Returns:
             工具执行结果
         """
         raise NotImplementedError("异步工具子类必须实现forward方法")
+
+    def format_for_observation(self, output: Any) -> str:
+        """
+        Format tool output for LLM observation (when tool call is the last item in code).
+
+        This method can be overridden by tools to provide LLM-friendly formatting
+        of their output when used as observations. For example:
+        - file_read tool can add line numbers
+        - search tool can format results with highlighting
+        - calculator tool can show step-by-step computation
+
+        Args:
+            output: The raw output from forward() method
+
+        Returns:
+            Formatted string suitable for LLM observation
+
+        Default behavior: Convert output to string
+        """
+        return str(output) if output is not None else ""
     
     async def setup(self):
         """
@@ -132,7 +152,7 @@ class SyncToAsyncToolAdapter(AsyncBaseTool):
     适配器类，将同步工具转换为异步工具
     这允许在异步执行器中使用现有的同步工具
     """
-    
+
     def __init__(self, sync_tool):
         super().__init__()
         self.sync_tool = sync_tool
@@ -142,7 +162,7 @@ class SyncToAsyncToolAdapter(AsyncBaseTool):
         self.output_type = sync_tool.output_type
         self.readonly = sync_tool.readonly
         self.is_initialized = True
-    
+
     async def forward(self, *args, **kwargs):
         """
         在执行器中运行同步工具
@@ -150,6 +170,12 @@ class SyncToAsyncToolAdapter(AsyncBaseTool):
         """
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: self.sync_tool.forward(*args, **kwargs))
+
+    def format_for_observation(self, output: Any) -> str:
+        """
+        Delegate observation formatting to the wrapped sync tool
+        """
+        return self.sync_tool.format_for_observation(output)
 
 
 class AsyncToolCollection:
