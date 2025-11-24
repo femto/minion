@@ -18,9 +18,6 @@ import functools
 import ast
 import sys
 
-from minion.tools.tool_decorator import get_imports
-
-
 class BaseTool(ABC):
     """工具基类，定义所有工具的基本接口"""
     
@@ -120,6 +117,7 @@ class {self.__class__.__name__}(BaseTool):
         # 实现工具的逻辑
         pass
 """
+        from minion.tools.tool_decorator import get_imports
         imports = get_imports(tool_code)
         requirements = {el for el in imports if el not in sys.stdlib_module_names}
         
