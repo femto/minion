@@ -18,6 +18,8 @@ import functools
 import ast
 import sys
 
+from minion.tools.tool_decorator import get_imports
+
 
 class BaseTool(ABC):
     """工具基类，定义所有工具的基本接口"""
