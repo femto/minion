@@ -553,20 +553,22 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             return []
             
         formatted_tools = []
-        
+
         for tool in tools:
             # 检查是否是 BaseTool 实例
             if hasattr(tool, 'name') and hasattr(tool, 'description') and hasattr(tool, 'inputs'):
+                # 如果 description 是 callable，调用它获取描述
+                description = tool.description() if callable(tool.description) else tool.description
                 tool_def = {
                     "type": "function",
                     "function": {
                         "name": tool.name,
-                        "description": tool.description,
+                        "description": description,
                         "parameters": {
                             "type": "object",
                             "properties": tool.inputs,
                             "required": [
-                                name for name, param in tool.inputs.items() 
+                                name for name, param in tool.inputs.items()
                                 if not param.get("nullable", False)
                             ]
                         }
@@ -590,11 +592,13 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                 formatted_tools.append(tool)
             elif callable(tool):
                 decorated = decorate_tool(tool)
+                # 如果 description 是 callable，调用它获取描述
+                description = decorated.description() if callable(decorated.description) else decorated.description
                 tool_def = {
                     "type": "function",
                     "function": {
                         "name": decorated.name,
-                        "description": decorated.description,
+                        "description": description,
                         "parameters": {
                             "type": "object",
                             "properties": decorated.inputs,
