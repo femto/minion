@@ -76,7 +76,7 @@ You can create similar configurations for your own benchmarks by following these
 
 The core logic of Minion is implemented in `examples/smart_minion/brain.py`. You can experiment with different examples by modifying the code, as various scenarios are commented out for easy testing.
 
-### Agent Types
+### Agent (NEW mode of invocation)
 
 - **CodeAgent**: A powerful Python code execution agent with optional state tracking capability. Use it for code reasoning, problem solving, and stateful conversations. See [CodeAgent Documentation](docs/merged_code_agent.md) for details.
 - **BaseAgent**: The foundation for all agents, providing core functionality for step-by-step reasoning.
