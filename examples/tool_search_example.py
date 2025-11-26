@@ -655,7 +655,7 @@ Supported search strategies:
 async def main_with_agent():
     """Run demos including agent integration."""
     # Run basic demos first
-    main()
+    # main()
 
     # Then run agent demos
     print("\n" + "=" * 60)
@@ -663,7 +663,7 @@ async def main_with_agent():
     print("=" * 60)
 
     # Demo 7: Basic search demo
-    await demo_with_agent()
+    #await demo_with_agent()
 
     # Demo 8: Full workflow - search, load, and USE the tool
     await demo_agent_with_dynamic_loading()

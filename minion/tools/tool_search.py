@@ -529,8 +529,8 @@ Example workflow:
             }
 
         # Get agent from state if available (passed via needs_state mechanism)
-        agent = kwargs.get('_agent') or self.agent
-        state = kwargs.get('_state')
+        agent = kwargs.get('agent') or self.agent
+        state = kwargs.get('state')
 
         # Try to get agent from state
         if agent is None and state is not None:
