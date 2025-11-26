@@ -35,7 +35,7 @@ Minion has achieved impressive results on various benchmarks:
 - AIME 2024: 26% success rate (4 out of 15 tasks completed successfully)
 - Humaneval: 98.2% pass@1 rate using gpt-4o
 
-## InProgress
+## Various Benchmarks
 
 Minion supports processing various benchmarks through configurable workflows. You can find examples in:
 - `examples/smart_minion/gsm8k/`: Math word problem solving
