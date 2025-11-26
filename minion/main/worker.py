@@ -1216,8 +1216,7 @@ class CodeMinion(PythonMinion):
                         param_type = param_info.get('type', 'any')
                         param_desc = param_info.get('description', '')
                         param_list.append(f"{param_name} ({param_type}): {param_desc}")
-
-                tool_desc += f"\n  Parameters: {', '.join(param_list)}"
+                    tool_desc += f"\n  Parameters: {', '.join(param_list)}"
                 available_tools.append(tool_desc)
         
         tools_description = "\n".join(available_tools) if available_tools else "- print: Output information to the user"

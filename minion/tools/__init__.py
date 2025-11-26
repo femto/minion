@@ -45,31 +45,54 @@ try:
     HAS_UTCP_TOOLSET = True
 except ImportError:
     HAS_UTCP_TOOLSET = False
-    
+
     # Create dummy classes as fallback
     class UtcpManualToolset:
         """Dummy UtcpManualToolset when UTCP is not available."""
-        
+
         def __init__(self, *args, **kwargs):
             self._error_msg = "UTCP package is not available. Please install it to use UtcpManualToolset."
             raise ImportError(self._error_msg)
-    
+
     def create_utcp_toolset(*args, **kwargs):
         """Dummy create_utcp_toolset function when UTCP is not available."""
         raise ImportError("UTCP package is not available. Please install it to use create_utcp_toolset.")
 
+# Tool Search Tool - Dynamic tool discovery
+from .tool_search import (
+    ToolInfo,
+    ToolRegistry,
+    ToolSearchTool,
+    LoadToolTool,
+    ToolSearchStrategy,
+    KeywordSearchStrategy,
+    RegexSearchStrategy,
+    BM25SearchStrategy,
+    HAS_BM25
+)
+
 __all__ = [
-    "BaseTool", 
-    "tool", 
+    "BaseTool",
+    "tool",
     "ToolCollection",
     "Toolset",
-    "AsyncBaseTool", 
-    "async_tool", 
-    "SyncToAsyncToolAdapter", 
+    "AsyncBaseTool",
+    "async_tool",
+    "SyncToAsyncToolAdapter",
     "AsyncToolCollection",
     "BrowserTool",
     "HAS_BROWSER_TOOL",
     "UtcpManualToolset",
     "create_utcp_toolset",
-    "HAS_UTCP_TOOLSET"
+    "HAS_UTCP_TOOLSET",
+    # Tool Search Tool exports
+    "ToolInfo",
+    "ToolRegistry",
+    "ToolSearchTool",
+    "LoadToolTool",
+    "ToolSearchStrategy",
+    "KeywordSearchStrategy",
+    "RegexSearchStrategy",
+    "BM25SearchStrategy",
+    "HAS_BM25"
 ]
