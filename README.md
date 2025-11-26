@@ -160,6 +160,7 @@ models:
     model: "deepseek-chat"
     temperature: 0
 ```
+for convience, config.yaml can load .env or ENV variables,
 then config/.env
 ```
 DEFAULT_API_KEY=sk-xxx
