@@ -1,28 +1,17 @@
 # Agent Development Guidelines
+when creating BaseAgent or CodeAgent,
+Please use .create cls method instead of constructor,
+# Create CodeAgent with budget-related tools
+CodeAgent.create(brain=brain,tools=[GetTeamMembersTool(),GetExpensesTool(),GetBudgetByLevelTool()])
 
+instead of
+    agent = CodeAgent(brain=brain)
+    agent.add_tool(GetTeamMembersTool())
+    agent.add_tool(GetExpensesTool())
+    agent.add_tool(GetBudgetByLevelTool())
+    await agent.setup()  # Initialize the agent
 
+since .setup() is handled in .create
 
 # Note
 
-**Content:** hello
-
----
-
-**Note:** This entry appears to be incomplete or a test. Please provide more detailed information about:
-- What agent or topic this relates to
-- What you want to remember about it
-- Any relevant context or details
-
-Once you add more information, I can help structure it into a more useful format for your AGENTS.md file.
-
-_Added on 11/08/2025, 04:09:13 PM_
-
-
-# ls
-
-_Added on 11/08/2025, 04:29:43 PM_
-
-
-# hello
-
-_Added on 11/08/2025, 04:30:07 PM_
