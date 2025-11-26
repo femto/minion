@@ -534,14 +534,22 @@ Use Python code to:
                 tool_dict = {}
                 for tool in self.tools:
                     if hasattr(tool, 'name'):
+                        # Register with original name (for compatibility)
                         tool_dict[tool.name] = tool
+                        # Also register with Python-safe name (dots/dashes replaced with underscores)
+                        safe_name = tool.name.replace('.', '_').replace('-', '_')
+                        if safe_name != tool.name:
+                            tool_dict[safe_name] = tool
                 self.python_executor.send_tools(tool_dict)
             else:
-                #same logic
+                # Same logic for sync executor
                 tool_dict = {}
                 for tool in self.tools:
                     if hasattr(tool, 'name'):
                         tool_dict[tool.name] = tool
+                        safe_name = tool.name.replace('.', '_').replace('-', '_')
+                        if safe_name != tool.name:
+                            tool_dict[safe_name] = tool
                 self.python_executor.send_tools(tool_dict)
     
     def add_tool(self, tool: BaseTool):
