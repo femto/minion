@@ -478,20 +478,30 @@ class LoadToolTool(BaseTool):
     Tool for loading a discovered tool into active use.
 
     After using ToolSearchTool to find relevant tools, use this tool
-    to actually load them so they become available for use.
+    to actually load them so they become available for use in the agent's
+    code execution environment.
+
+    The loaded tool becomes callable in subsequent code blocks.
     """
 
     name: str = "load_tool"
-    description: str = """Load a tool by name so it can be used.
+    description: str = """Load a tool by name so it can be used in code.
 
 After searching for tools with tool_search, use this to load
-the tools you need. This makes them available for actual use.
+the tools you need. Once loaded, the tool becomes available as a
+callable function in your code.
 
 Args:
-    tool_name: Name of the tool to load
+    tool_name: Name of the tool to load (e.g., "github.create_pull_request")
 
 Returns:
-    Confirmation of tool loading with tool details.
+    Confirmation with tool details. After loading, you can call the tool
+    directly in code, e.g.: result = await github_create_pull_request(repo="owner/repo", ...)
+
+Example workflow:
+    1. Search: results = await tool_search(query="github pull request")
+    2. Load: await load_tool(tool_name="github.create_pull_request")
+    3. Use: result = await github_create_pull_request(repo="owner/repo", title="Fix bug", ...)
 """
     inputs: Dict[str, Dict[str, Any]] = {
         "tool_name": {
@@ -500,15 +510,16 @@ Returns:
         }
     }
     output_type: str = "object"
-    readonly: bool = True
+    readonly: bool = False  # This modifies agent state
 
     def __init__(self, registry: ToolRegistry, agent=None):
         super().__init__()
         self.registry = registry
         self.agent = agent  # Reference to agent for adding loaded tools
+        self.needs_state = True  # We need access to agent state to add tools
 
-    def forward(self, tool_name: str) -> Dict[str, Any]:
-        """Load a tool by name."""
+    def forward(self, tool_name: str, **kwargs) -> Dict[str, Any]:
+        """Load a tool by name and add it to the agent's available tools."""
         tool = self.registry.load_tool(tool_name)
 
         if tool is None:
@@ -517,13 +528,33 @@ Returns:
                 'error': f"Tool '{tool_name}' not found or could not be loaded"
             }
 
-        # If we have an agent reference, add the tool to it
-        if self.agent is not None and hasattr(self.agent, 'add_tool'):
-            self.agent.add_tool(tool)
+        # Get agent from state if available (passed via needs_state mechanism)
+        agent = kwargs.get('_agent') or self.agent
+        state = kwargs.get('_state')
+
+        # Try to get agent from state
+        if agent is None and state is not None:
+            agent = getattr(state, 'agent', None)
+
+        # Add tool to agent if we have a reference
+        tool_added_to_agent = False
+        if agent is not None and hasattr(agent, 'add_tool'):
+            try:
+                agent.add_tool(tool)
+                tool_added_to_agent = True
+                logger.info(f"Tool '{tool_name}' added to agent")
+            except Exception as e:
+                logger.warning(f"Failed to add tool to agent: {e}")
+
+        # Create a sanitized function name for code use
+        func_name = tool_name.replace('.', '_').replace('-', '_')
 
         return {
             'success': True,
             'tool_name': tool.name,
+            'function_name': func_name,
             'description': tool.description,
-            'message': f"Tool '{tool_name}' loaded successfully"
+            'parameters': list(tool.inputs.keys()) if hasattr(tool, 'inputs') and tool.inputs else [],
+            'added_to_agent': tool_added_to_agent,
+            'message': f"Tool '{tool_name}' loaded successfully. Call it as: await {func_name}(...)"
         }

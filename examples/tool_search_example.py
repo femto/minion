@@ -449,7 +449,18 @@ def demo_token_savings():
 
 
 async def demo_with_agent():
-    """Demonstrate using Tool Search Tool with CodeAgent."""
+    """
+    Demonstrate using Tool Search Tool with CodeAgent.
+
+    This shows the complete flow:
+    1. Agent starts with only tool_search (not all 16+ tools)
+    2. Agent searches for relevant tools based on task
+    3. Agent uses the discovered tools to complete the task
+
+    This is the key pattern from Anthropic's article - the agent
+    dynamically discovers what it needs instead of having everything
+    loaded upfront.
+    """
     print("\n" + "=" * 60)
     print("Demo 7: Integration with CodeAgent")
     print("=" * 60)
@@ -464,10 +475,14 @@ async def demo_with_agent():
         print("This demo requires the full minion package to be configured.")
         return
 
-    # Create registry and tools
+    # Create registry with all tools (but they won't be loaded into agent context)
     registry = create_tool_registry()
     search_tool = ToolSearchTool(registry)
-    load_tool = LoadToolTool(registry)
+
+    print(f"\nTool Registry Stats:")
+    print(f"  - Total tools available: {len(registry.tools)}")
+    print(f"  - Categories: {search_tool.list_categories()}")
+    print(f"  - Initially loaded: {len(registry.loaded_tools)} (only search tool in agent)")
 
     # Setup LLM
     llm_config = config.models.get("gpt-4.1")
@@ -478,27 +493,130 @@ async def demo_with_agent():
     llm = create_llm_provider(llm_config)
     brain = Brain(llm=llm)
 
-    # Create agent with only search and load tools
+    # Create agent with ONLY the search tool
+    # This is the key insight: agent doesn't see all 16 tool definitions,
+    # just the search tool (~500 tokens instead of ~5000+ tokens)
     agent = await CodeAgent.create(
         brain=brain,
-        tools=[search_tool, load_tool]
+        tools=[search_tool]
     )
 
+    # Task that requires discovering and using tools
     task = """
-    I need to create a pull request on GitHub.
+    I need to find out what tools are available for working with GitHub.
 
-    First, search for the relevant tool using tool_search.
-    Then describe what tool you found and how to use it.
+    Steps:
+    1. Use tool_search to find GitHub-related tools
+    2. List what tools are available and their purposes
+    3. Show which tool would be best for creating a pull request
+
+    Use the tool_search function with query="github" to discover available tools.
     """
 
     print(f"\nTask: {task}")
-    print("\nExecuting (agent will search for tools dynamically)...")
+    print("\n" + "-" * 40)
+    print("Executing with Tool Search Tool pattern...")
+    print("(Agent will discover tools dynamically)")
+    print("-" * 40)
 
     try:
         result = await agent.run_async(task)
-        print(f"\nResult: {result}")
+        print(f"\n{'=' * 40}")
+        print("RESULT:")
+        print("=" * 40)
+        print(result)
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def demo_agent_with_dynamic_loading():
+    """
+    Advanced demo: Agent that searches, loads, and uses tools dynamically.
+
+    This demonstrates the FULL Tool Search Tool workflow where the agent:
+    1. Searches for relevant tools
+    2. Loads the tool into its execution environment
+    3. Actually CALLS the loaded tool to complete the task
+
+    This is the complete pattern from Anthropic's article.
+    """
+    print("\n" + "=" * 60)
+    print("Demo 8: Full Workflow - Search, Load, and USE Tools")
+    print("=" * 60)
+
+    try:
+        from minion import config
+        from minion.agents import CodeAgent
+        from minion.main.brain import Brain
+        from minion.providers import create_llm_provider
+    except ImportError as e:
+        print(f"\nSkipping agent demo: {e}")
+        return
+
+    # Create registry with all tools
+    registry = create_tool_registry()
+
+    # Create search and load tools, passing registry
+    search_tool = ToolSearchTool(registry)
+
+    # Setup LLM
+    llm_config = config.models.get("gpt-4.1")
+    if not llm_config:
+        print("\nSkipping agent demo: No LLM configured")
+        return
+
+    llm = create_llm_provider(llm_config)
+    brain = Brain(llm=llm)
+
+    # Create agent with search tool
+    # LoadToolTool needs agent reference to add tools dynamically
+    agent = await CodeAgent.create(
+        brain=brain,
+        tools=[search_tool]
+    )
+
+    # Create load_tool with agent reference so it can add tools
+    load_tool = LoadToolTool(registry, agent=agent)
+    agent.add_tool(load_tool)
+
+    print(f"\nInitial agent tools: {[t.name for t in agent.tools]}")
+    print(f"Total tools in registry: {len(registry.tools)}")
+
+    # Task that requires the FULL workflow: search -> load -> use
+    task = """
+    Create a pull request on GitHub for repository "myorg/myrepo".
+
+    
+    """
+
+    print(f"\nTask: {task}")
+    print("\n" + "-" * 40)
+    print("Executing FULL workflow: Search → Load → Use")
+    print("-" * 40)
+
+    try:
+        result = await agent.run_async(task)
+        print(f"\n{'=' * 40}")
+        print("RESULT:")
+        print("=" * 40)
+        print(result)
+
+        # Show what tools were loaded and added to agent
+        print(f"\n{'=' * 40}")
+        print("Tools loaded into registry:")
+        for name in registry.loaded_tools:
+            print(f"  - {name}")
+
+        print(f"\nAgent's final tool list:")
+        for tool in agent.tools:
+            print(f"  - {tool.name}")
+
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def main():
@@ -519,7 +637,7 @@ Supported search strategies:
 - bm25: Relevance-ranked search (requires rank_bm25)
     """)
 
-    # Run demos
+    # Run basic demos
     demo_keyword_search()
     demo_regex_search()
     demo_bm25_search()
@@ -527,9 +645,33 @@ Supported search strategies:
     demo_tool_loading()
     demo_token_savings()
 
-    # Optional: Run agent demo
-    # asyncio.run(demo_with_agent())
+    print("\n" + "=" * 60)
+    print("Basic demos completed!")
+    print("=" * 60)
+    print("\nTo run agent integration demos, use:")
+    print("  python examples/tool_search_example.py --with-agent")
+
+
+async def main_with_agent():
+    """Run demos including agent integration."""
+    # Run basic demos first
+    main()
+
+    # Then run agent demos
+    print("\n" + "=" * 60)
+    print("Running Agent Integration Demos...")
+    print("=" * 60)
+
+    # Demo 7: Basic search demo
+    await demo_with_agent()
+
+    # Demo 8: Full workflow - search, load, and USE the tool
+    await demo_agent_with_dynamic_loading()
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--with-agent" in sys.argv:
+        asyncio.run(main_with_agent())
+    else:
+        main()
