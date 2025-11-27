@@ -20,7 +20,7 @@ Minion implements two advanced patterns to solve these problems:
 
 ### Core Concept
 
-PTC lets Claude write Python code to orchestrate tool calls, instead of using traditional JSON tool call format.
+PTC lets Minion write Python code to orchestrate tool calls, instead of using traditional JSON tool call format.
 
 **Traditional approach**: Each tool call requires a complete JSON structure
 ```json
@@ -402,6 +402,10 @@ registry.register_factory(
 - `examples/ptc_example.py` - PTC example
 - `examples/tool_search_example.py` - Tool Search Tool example
 
+## Video Examples
+- [PTC Example - Expense Tracking](https://youtu.be/hDAIB0sF7-k)
+- [Tool Search Tool Example - Create GitHub PR](https://youtu.be/G7dDvza9PO8)
+ 
 ## References
 
 - [Anthropic: Advanced Tool Use](https://www.anthropic.com/engineering/advanced-tool-use)
