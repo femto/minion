@@ -259,3 +259,7 @@ Join our Discord community to connect with other Minion users, get support, and 
 Follow the project creator on Twitter for announcements and insights:
 
 [![Twitter Follow](https://img.shields.io/twitter/follow/femtowin?style=social)](https://x.com/femtowin)
+
+WeChat Group (minion-agent discussion):
+
+<img src="docs/images/wechat.jpg" alt="WeChat Group" width="300">
