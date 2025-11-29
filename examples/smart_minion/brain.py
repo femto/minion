@@ -28,11 +28,12 @@ async def smart_brain():
     #model = "gpt-4.1"
     #model = "o4-mini"
     #model = "claude"
-    model = "gpt-4o"
+    #model = "gpt-4o"
     #model = "gemini-2.0-flash-exp"
     # model = "deepseek-r1"
     # model = "phi-4"
     #model = "llama3.2"
+    model = "claude-opus-4-5"  # Azure Anthropic Claude Opus 4.5
     llm_config = config.models.get(model)
 
 
