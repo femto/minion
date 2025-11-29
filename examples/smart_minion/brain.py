@@ -11,9 +11,7 @@ import os
 import yaml
 
 from minion import config
-from minion.main import LocalPythonEnv
 from minion.main.brain import Brain
-from minion.main.rpyc_python_env import RpycPythonEnv
 from minion.providers import create_llm_provider
 from minion.tools.default_tools import FinalAnswerTool
 from minion.types.agent_response import AgentResponse
@@ -28,24 +26,21 @@ async def smart_brain():
     #model = "gpt-4.1"
     #model = "o4-mini"
     #model = "claude"
-    model = "gpt-4o"
+    #model = "gpt-4o"
     #model = "gemini-2.0-flash-exp"
     # model = "deepseek-r1"
     # model = "phi-4"
     #model = "llama3.2"
+    model = "claude-opus-4-5"  # Azure Anthropic Claude Opus 4.5
     llm_config = config.models.get(model)
 
 
 
     llm = create_llm_provider(llm_config)
 
-    # python_env_config = {"port": 3006}
-    # python_env = RpycPythonEnv(port=python_env_config.get("port", 3006))
-    python_env = LocalPythonEnv(verbose=False)
+    # Brain now uses AsyncPythonExecutor by default
     brain = Brain(
-        python_env=python_env,
         llm=llm,
-
     )
 
     result = await brain.step(query="what's the solution 234*568", route="raw", check=False, tools=[])

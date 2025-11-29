@@ -197,6 +197,13 @@ class BedrockAsyncProvider(BaseProvider):
         if "top_k" in kwargs:
             request_body["top_k"] = kwargs["top_k"]
 
+        # 处理stop参数 - Bedrock使用stop_sequences
+        if "stop" in kwargs and kwargs["stop"]:
+            stop_sequences = kwargs["stop"]
+            if isinstance(stop_sequences, str):
+                stop_sequences = [stop_sequences]
+            request_body["stop_sequences"] = stop_sequences
+
         return request_body
 
     def generate_sync(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> str:
@@ -267,6 +274,10 @@ class BedrockAsyncProvider(BaseProvider):
         try:
             request_body = self._create_request_body(messages, temperature, **kwargs)
 
+            # 获取 stop_sequences 用于客户端检测
+            # Bedrock 流式 API 可能不会严格遵守 stop_sequences，需要客户端检测
+            stop_sequences = request_body.get('stop_sequences', [])
+
             async with self.session.create_client(**self._get_client_kwargs()) as client:
                 # Bedrock支持流式调用
                 response = await client.invoke_model_with_response_stream(
@@ -277,8 +288,11 @@ class BedrockAsyncProvider(BaseProvider):
                 full_content = ""
                 input_tokens = 0
                 output_tokens = 0
+                stopped_by_sequence = False
+                finish_reason = "stop"
+                response_body = response['body']
 
-                async for event in response['body']:
+                async for event in response_body:
                     if 'chunk' in event:
                         chunk = json.loads(event['chunk']['bytes'])
 
@@ -288,6 +302,21 @@ class BedrockAsyncProvider(BaseProvider):
                                 text = delta.get('text', '')
                                 full_content += text
                                 log_llm_stream(text)
+
+                                # 客户端检测 stop sequence
+                                # Bedrock 流式 API 可能不会在 stop sequence 处停止，需要手动检测
+                                for stop_seq in stop_sequences:
+                                    if stop_seq in full_content:
+                                        # 截断到 stop sequence（包含 stop sequence 本身）
+                                        idx = full_content.find(stop_seq)
+                                        full_content = full_content[:idx + len(stop_seq)]
+                                        stopped_by_sequence = True
+                                        finish_reason = "stop_sequence"
+                                        logger.info(f"[STOP_SEQ] Client-side stop sequence detected: '{stop_seq}', truncating response")
+                                        break
+
+                                if stopped_by_sequence:
+                                    break
 
                         elif chunk.get('type') == 'message_stop':
                             # 记录token使用情况
@@ -301,6 +330,26 @@ class BedrockAsyncProvider(BaseProvider):
                                     model=self.model_id
                                 )
                             break
+
+                    if stopped_by_sequence:
+                        break
+
+                # 如果提前退出循环，需要关闭流以避免 "Unclosed connection" 警告
+                if stopped_by_sequence:
+                    # AioEventStream._raw_stream 直接是 aiohttp.ClientResponse
+                    try:
+                        if hasattr(response_body, '_raw_stream'):
+                            aiohttp_response = response_body._raw_stream
+                            # 先释放连接，再关闭
+                            if hasattr(aiohttp_response, 'release'):
+                                aiohttp_response.release()
+                            if hasattr(aiohttp_response, 'close'):
+                                aiohttp_response.close()
+                        # 然后调用 AioEventStream.close()
+                        if hasattr(response_body, 'close'):
+                            response_body.close()
+                    except Exception as e:
+                        logger.debug(f"Error closing stream: {e}")
 
                 # 返回类似 OpenAI 的响应格式
                 import time
@@ -316,7 +365,7 @@ class BedrockAsyncProvider(BaseProvider):
                                 "role": "assistant",
                                 "content": full_content
                             },
-                            "finish_reason": "stop",
+                            "finish_reason": finish_reason,
                             "index": 0
                         }
                     ],
@@ -340,6 +389,9 @@ class BedrockAsyncProvider(BaseProvider):
         try:
             request_body = self._create_request_body(messages, temperature, **kwargs)
 
+            # 获取 stop_sequences 用于客户端检测
+            stop_sequences = request_body.get('stop_sequences', [])
+
             async with self.session.create_client(**self._get_client_kwargs()) as client:
                 # Bedrock支持流式调用
                 response = await client.invoke_model_with_response_stream(
@@ -347,7 +399,11 @@ class BedrockAsyncProvider(BaseProvider):
                     body=json.dumps(request_body)
                 )
 
-                async for event in response['body']:
+                full_content = ""
+                stopped_by_sequence = False
+                response_body = response['body']
+
+                async for event in response_body:
                     if 'chunk' in event:
                         chunk = json.loads(event['chunk']['bytes'])
 
@@ -355,7 +411,24 @@ class BedrockAsyncProvider(BaseProvider):
                             delta = chunk.get('delta', {})
                             if delta.get('type') == 'text_delta':
                                 text = delta.get('text', '')
+                                full_content += text
                                 log_llm_stream(text)
+
+                                # 客户端检测 stop sequence
+                                for stop_seq in stop_sequences:
+                                    if stop_seq in full_content:
+                                        # 只 yield 到 stop sequence 位置的内容
+                                        idx = full_content.find(stop_seq)
+                                        # 计算这次需要 yield 的部分
+                                        yield_end = idx + len(stop_seq) - (len(full_content) - len(text))
+                                        if yield_end > 0:
+                                            yield text[:yield_end]
+                                        stopped_by_sequence = True
+                                        break
+
+                                if stopped_by_sequence:
+                                    break
+
                                 yield text
 
                         elif chunk.get('type') == 'message_stop':
@@ -368,6 +441,24 @@ class BedrockAsyncProvider(BaseProvider):
                                     model=self.model_id
                                 )
                             break
+
+                    if stopped_by_sequence:
+                        break
+
+                # 如果提前退出循环，关闭流以避免 "Unclosed connection" 警告
+                if stopped_by_sequence:
+                    # AioEventStream._raw_stream 直接是 aiohttp.ClientResponse
+                    try:
+                        if hasattr(response_body, '_raw_stream'):
+                            aiohttp_response = response_body._raw_stream
+                            if hasattr(aiohttp_response, 'release'):
+                                aiohttp_response.release()
+                            if hasattr(aiohttp_response, 'close'):
+                                aiohttp_response.close()
+                        if hasattr(response_body, 'close'):
+                            response_body.close()
+                    except Exception as e:
+                        logger.debug(f"Error closing stream: {e}")
 
         except ClientError as e:
             logger.error(f"Bedrock async streaming error: {e}")

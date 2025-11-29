@@ -12,12 +12,29 @@ from math import isclose
 from typing import Union, Optional
 
 import regex
-from sympy import N, simplify
-from sympy.parsing.latex import parse_latex
-from sympy.parsing.sympy_parser import parse_expr
 
 from minion.utils.custom_decoder import CustomDecoder
 from minion.utils.sanitize import sanitize
+
+# Lazy imports for sympy (heavy library, only import when needed)
+_sympy_loaded = False
+N = None
+simplify = None
+parse_latex = None
+parse_expr = None
+
+def _load_sympy():
+    """Lazy load sympy modules"""
+    global _sympy_loaded, N, simplify, parse_latex, parse_expr
+    if not _sympy_loaded:
+        from sympy import N as _N, simplify as _simplify
+        from sympy.parsing.latex import parse_latex as _parse_latex
+        from sympy.parsing.sympy_parser import parse_expr as _parse_expr
+        N = _N
+        simplify = _simplify
+        parse_latex = _parse_latex
+        parse_expr = _parse_expr
+        _sympy_loaded = True
 
 
 def extract_final_answer(text):
@@ -160,6 +177,9 @@ def is_digit(num):
 
 
 def symbolic_equal(a, b):
+    # Lazy load sympy when this function is called
+    _load_sympy()
+
     def _parse(s):
         for f in [parse_latex, parse_expr]:
             try:
