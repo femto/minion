@@ -6,7 +6,6 @@ import re
 import random
 import inspect
 
-import ell
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
 from minion.configs.config import config

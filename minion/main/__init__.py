@@ -6,24 +6,28 @@ from minion.main.worker import (
     PlanMinion,
     OptillmMinion,
 )
-from minion.main.local_python_env import LocalPythonEnv
+from minion.main.async_python_executor import AsyncPythonExecutor
 
-try:
-    from minion.main.ldb_worker import LDBMinion
-    HAS_LDB = True
-except ImportError:
-    HAS_LDB = False
+# LDBMinion is lazily imported to avoid loading transformers/torch at startup
+# Use get_ldb_minion() to access it when needed
+_LDBMinion = None
+
+def get_ldb_minion():
+    """Lazy load LDBMinion to avoid importing transformers/torch at startup"""
+    global _LDBMinion
+    if _LDBMinion is None:
+        from minion.main.ldb_worker import LDBMinion
+        _LDBMinion = LDBMinion
+    return _LDBMinion
 
 __all__ = [
     'WorkerMinion',
-    'NativeMinion', 
+    'NativeMinion',
     'CotMinion',
     'PythonMinion',
     'PlanMinion',
     'OptillmMinion',
-    'LocalPythonEnv',
+    'AsyncPythonExecutor',
+    'get_ldb_minion',
 ]
-
-if HAS_LDB:
-    __all__.append('LDBMinion')
 

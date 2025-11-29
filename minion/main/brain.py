@@ -18,8 +18,6 @@ from minion import config
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.input import Input
 from minion.main.python_env import PythonEnv
-from minion.main.local_python_env import LocalPythonEnv
-from minion.main.local_python_executor import LocalPythonExecutor
 from minion.main.async_python_executor import AsyncPythonExecutor
 from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
