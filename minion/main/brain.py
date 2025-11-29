@@ -10,8 +10,16 @@ from datetime import datetime
 from typing import Any, Dict, Union
 
 from jinja2 import Template
-from mem0 import Memory
 from pydantic import BaseModel
+
+# Lazy import for mem0 (heavy dependency, only load when needed)
+Memory = None
+def _get_memory_class():
+    global Memory
+    if Memory is None:
+        from mem0 import Memory as _Memory
+        Memory = _Memory
+    return Memory
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
 
 from minion import config
@@ -118,7 +126,8 @@ Supporting navigation and spatial memory""",
         self.mem = memory
         if not memory:
             if memory_config:
-                self.mem = memory = Memory.from_config(memory_config)
+                MemoryClass = _get_memory_class()
+                self.mem = memory = MemoryClass.from_config(memory_config)
 
         # Process default llm
         if isinstance(llm, str):
