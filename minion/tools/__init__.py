@@ -1,89 +1,131 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-工具模块
+工具模块 - 使用懒加载避免不必要的依赖加载
 """
 from minion.tools.base_tool import BaseTool, ToolCollection, Toolset
 from minion.tools.async_base_tool import AsyncBaseTool
 from minion.tools.tool_decorator import tool
 
-# Optional imports with fallbacks
-try:
-    from .browser_tool import BrowserTool
-    HAS_BROWSER_TOOL = True
-except ImportError:
-    HAS_BROWSER_TOOL = False
-    
-    # Create a dummy BrowserTool class as fallback
-    class BrowserTool:
-        """Dummy BrowserTool when browser-use is not available."""
-        
-        @staticmethod
-        def is_browser_use_available() -> bool:
-            """Check if browser_use package is available."""
-            return False
-        
-        def __init__(self, *args, **kwargs):
-            """Initialize the dummy browser tool."""
-            self._error_msg = "browser_use package is not available. Please install it to use BrowserTool."
-        
-        def _not_available(self, *args, **kwargs):
-            """Return error message for all methods."""
-            return {
-                "success": False,
-                "message": self._error_msg,
-                "data": None
-            }
-        
-        # Define all methods that would be available in the real implementation
-        navigate = click = input_text = screenshot = get_html = _not_available
-        get_text = read_links = execute_js = scroll = switch_tab = _not_available
-        new_tab = close_tab = refresh = get_current_state = cleanup = _not_available
+# 懒加载的模块缓存
+_lazy_imports = {}
 
-try:
-    from .utcp.utcp_manual_toolset import UtcpManualToolset, create_utcp_toolset
-    HAS_UTCP_TOOLSET = True
-except ImportError:
-    HAS_UTCP_TOOLSET = False
 
-    # Create dummy classes as fallback
-    class UtcpManualToolset:
-        """Dummy UtcpManualToolset when UTCP is not available."""
+def __getattr__(name):
+    """懒加载机制，按需导入工具"""
 
-        def __init__(self, *args, **kwargs):
-            self._error_msg = "UTCP package is not available. Please install it to use UtcpManualToolset."
-            raise ImportError(self._error_msg)
+    # BrowserTool
+    if name == "BrowserTool":
+        if "BrowserTool" not in _lazy_imports:
+            try:
+                from .browser_tool import BrowserTool
+                _lazy_imports["BrowserTool"] = BrowserTool
+                _lazy_imports["HAS_BROWSER_TOOL"] = True
+            except ImportError:
+                # Create a dummy BrowserTool class as fallback
+                class BrowserTool:
+                    """Dummy BrowserTool when browser-use is not available."""
 
-    def create_utcp_toolset(*args, **kwargs):
-        """Dummy create_utcp_toolset function when UTCP is not available."""
-        raise ImportError("UTCP package is not available. Please install it to use create_utcp_toolset.")
+                    @staticmethod
+                    def is_browser_use_available() -> bool:
+                        return False
 
-# Tool Search Tool - Dynamic tool discovery
-from .tool_search import (
-    ToolInfo,
-    ToolRegistry,
-    ToolSearchTool,
-    LoadToolTool,
-    ToolSearchStrategy,
-    KeywordSearchStrategy,
-    RegexSearchStrategy,
-    BM25SearchStrategy,
-    HAS_BM25
-)
+                    def __init__(self, *args, **kwargs):
+                        self._error_msg = "browser_use package is not available."
 
-# Skill Tool - Execute skills within the conversation
-from .skill_tool import SkillTool, generate_skill_tool_prompt
+                    def _not_available(self, *args, **kwargs):
+                        return {"success": False, "message": self._error_msg, "data": None}
 
-# Bash Tool - Execute bash commands
-from .bash_tool import BashTool
+                    navigate = click = input_text = screenshot = get_html = _not_available
+                    get_text = read_links = execute_js = scroll = switch_tab = _not_available
+                    new_tab = close_tab = refresh = get_current_state = cleanup = _not_available
+
+                _lazy_imports["BrowserTool"] = BrowserTool
+                _lazy_imports["HAS_BROWSER_TOOL"] = False
+        return _lazy_imports["BrowserTool"]
+
+    if name == "HAS_BROWSER_TOOL":
+        # Trigger BrowserTool loading to set HAS_BROWSER_TOOL
+        __getattr__("BrowserTool")
+        return _lazy_imports.get("HAS_BROWSER_TOOL", False)
+
+    # UTCP Toolset
+    if name == "UtcpManualToolset":
+        if "UtcpManualToolset" not in _lazy_imports:
+            try:
+                from .utcp.utcp_manual_toolset import UtcpManualToolset
+                _lazy_imports["UtcpManualToolset"] = UtcpManualToolset
+                _lazy_imports["HAS_UTCP_TOOLSET"] = True
+            except ImportError:
+                class UtcpManualToolset:
+                    def __init__(self, *args, **kwargs):
+                        raise ImportError("UTCP package is not available.")
+                _lazy_imports["UtcpManualToolset"] = UtcpManualToolset
+                _lazy_imports["HAS_UTCP_TOOLSET"] = False
+        return _lazy_imports["UtcpManualToolset"]
+
+    if name == "create_utcp_toolset":
+        if "create_utcp_toolset" not in _lazy_imports:
+            try:
+                from .utcp.utcp_manual_toolset import create_utcp_toolset
+                _lazy_imports["create_utcp_toolset"] = create_utcp_toolset
+            except ImportError:
+                def create_utcp_toolset(*args, **kwargs):
+                    raise ImportError("UTCP package is not available.")
+                _lazy_imports["create_utcp_toolset"] = create_utcp_toolset
+        return _lazy_imports["create_utcp_toolset"]
+
+    if name == "HAS_UTCP_TOOLSET":
+        __getattr__("UtcpManualToolset")
+        return _lazy_imports.get("HAS_UTCP_TOOLSET", False)
+
+    # Tool Search Tools
+    if name in ("ToolInfo", "ToolRegistry", "ToolSearchTool", "LoadToolTool",
+                "ToolSearchStrategy", "KeywordSearchStrategy", "RegexSearchStrategy",
+                "BM25SearchStrategy", "HAS_BM25"):
+        if "ToolSearchTool" not in _lazy_imports:
+            from .tool_search import (
+                ToolInfo, ToolRegistry, ToolSearchTool, LoadToolTool,
+                ToolSearchStrategy, KeywordSearchStrategy, RegexSearchStrategy,
+                BM25SearchStrategy, HAS_BM25
+            )
+            _lazy_imports["ToolInfo"] = ToolInfo
+            _lazy_imports["ToolRegistry"] = ToolRegistry
+            _lazy_imports["ToolSearchTool"] = ToolSearchTool
+            _lazy_imports["LoadToolTool"] = LoadToolTool
+            _lazy_imports["ToolSearchStrategy"] = ToolSearchStrategy
+            _lazy_imports["KeywordSearchStrategy"] = KeywordSearchStrategy
+            _lazy_imports["RegexSearchStrategy"] = RegexSearchStrategy
+            _lazy_imports["BM25SearchStrategy"] = BM25SearchStrategy
+            _lazy_imports["HAS_BM25"] = HAS_BM25
+        return _lazy_imports[name]
+
+    # Skill Tool
+    if name in ("SkillTool", "generate_skill_tool_prompt"):
+        if "SkillTool" not in _lazy_imports:
+            from .skill_tool import SkillTool, generate_skill_tool_prompt
+            _lazy_imports["SkillTool"] = SkillTool
+            _lazy_imports["generate_skill_tool_prompt"] = generate_skill_tool_prompt
+        return _lazy_imports[name]
+
+    # Bash Tool
+    if name == "BashTool":
+        if "BashTool" not in _lazy_imports:
+            from .bash_tool import BashTool
+            _lazy_imports["BashTool"] = BashTool
+        return _lazy_imports["BashTool"]
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
+    # 基础工具 - 直接导入
     "BaseTool",
     "tool",
     "ToolCollection",
     "Toolset",
     "AsyncBaseTool",
-
+    # 懒加载工具
     "BrowserTool",
     "HAS_BROWSER_TOOL",
     "UtcpManualToolset",

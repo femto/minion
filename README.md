@@ -92,6 +92,7 @@ The flowchart demonstrates the complete process from query to final result:
 
 - [CodeAgent Documentation](docs/merged_code_agent.md) - Powerful Python code execution agent
 - [Brain Usage Guide](docs/brain_usage.md) - Using brain.step() for various tasks
+- [Skills Guide](docs/skills.md) - Extend agent capabilities with modular skills
 - [Benchmarks](docs/benchmarks.md) - Performance results on GSM8K, Game of 24, AIME, Humaneval
 - [Route Parameter Guide](docs/agent_route_parameter_guide.md) - Route options for different reasoning strategies
 - [Gradio UI Guide](docs/gradio_ui_guide.md) - Web interface for Minion
