@@ -20,13 +20,13 @@ async def main():
     # Create agent with skill support
     agent = await CodeAgent.create(
         name="Skill-Enabled Agent",
-        llm="gpt-4o",  # or your preferred model
+        llm="sonnet",  # or your preferred model
         tools=[SkillTool(), BashTool()],
     )
 
     # The agent can now invoke skills
     # Skills are automatically discovered from .minion/skills/ and ~/.minion/skills/
-    async for event in await agent.run_async("List available skills", stream=True):
+    async for event in await agent.run_async("what does .minion/memory.pdf say?", stream=True):
         print(event)
 
 
