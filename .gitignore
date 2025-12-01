@@ -105,3 +105,4 @@ run_*.json
 tracing_log
 uploads
 .minion
+.mcp.json
