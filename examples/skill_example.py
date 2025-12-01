@@ -26,7 +26,7 @@ async def main():
 
     # The agent can now invoke skills
     # Skills are automatically discovered from .minion/skills/ and ~/.minion/skills/
-    async for event in await agent.run_async("List available skills",stream=True):
+    async for event in await agent.run_async("List available skills", stream=True):
         print(event)
 
 

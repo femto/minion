@@ -17,13 +17,25 @@ Project-level skills override user-level skills with the same name.
 
 ## Installing Skills
 
-Simply copy the skill folder to one of the skill directories:
+### Install Skills from git(eg. Anthropic Skills )
+
+```bash
+# Create skills directory and clone official skills
+mkdir -p .minion/
+cd .minion/
+git clone https://github.com/anthropics/skills.git
+```
+
+### Install Individual Skills
+
+Simply copy skill folders to one of the skill directories:
 
 ```bash
 # Install to project (recommended for project-specific skills)
 cp -r path/to/my-skill .minion/skills/
 
 # Install to user directory (available across all projects)
+mkdir -p ~/.minion/skills/
 cp -r path/to/my-skill ~/.minion/skills/
 ```
 
@@ -93,7 +105,7 @@ if result["success"]:
 ### With CodeAgent
 
 ```python
-from minion.main.agent import CodeAgent
+from minion.agents import CodeAgent
 from minion.tools import SkillTool, BashTool
 
 # Create agent with skill support
