@@ -8,11 +8,19 @@ from pathlib import Path
 from typing import Optional, Union
 
 import aiofiles
-from nltk.corpus import wordnet
 from PIL import Image
 
 from minion.utils.custom_decoder import CustomDecoder
 from minion.utils.sanitize import sanitize
+
+# Lazy import for nltk (heavy dependency via scipy, only load when needed)
+_wordnet = None
+def _get_wordnet():
+    global _wordnet
+    if _wordnet is None:
+        from nltk.corpus import wordnet
+        _wordnet = wordnet
+    return _wordnet
 
 
 def extract_id_and_command(full_command):
@@ -163,6 +171,7 @@ async def save_stats_async(stats, output_file_path):
 
 # Function to find synonyms
 def get_synonyms(word):
+    wordnet = _get_wordnet()
     synonyms = set()
     for syn in wordnet.synsets(word):
         for lemma in syn.lemmas():

@@ -316,39 +316,60 @@ class BedrockProvider(BaseProvider):
     async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> ChatCompletion:
         """
         Generate streaming completion from messages, returning a response object
-        
+
         Args:
             messages: List of Message objects
             temperature: Temperature for generation
             **kwargs: Additional parameters
-            
+
         Returns:
             A response object with choices, usage, etc.
         """
         try:
             request_body = self._create_request_body(messages, temperature, **kwargs)
-            
+
+            # 获取 stop_sequences 用于客户端检测
+            # Bedrock 流式 API 可能不会严格遵守 stop_sequences，需要客户端检测
+            stop_sequences = request_body.get('stop_sequences', [])
+
             # Bedrock支持流式调用
             response = self.client.invoke_model_with_response_stream(
                 modelId=self.model_id,
                 body=json.dumps(request_body)
             )
-            
+
             full_content = ""
             input_tokens = 0
             output_tokens = 0
-            
+            stopped_by_sequence = False
+            finish_reason = "stop"
+
             for event in response['body']:
                 if 'chunk' in event:
                     chunk = json.loads(event['chunk']['bytes'])
-                    
+
                     if chunk.get('type') == 'content_block_delta':
                         delta = chunk.get('delta', {})
                         if delta.get('type') == 'text_delta':
                             text = delta.get('text', '')
                             full_content += text
                             log_llm_stream(text)
-                    
+
+                            # 客户端检测 stop sequence
+                            # Bedrock 流式 API 可能不会在 stop sequence 处停止，需要手动检测
+                            for stop_seq in stop_sequences:
+                                if stop_seq in full_content:
+                                    # 截断到 stop sequence（包含 stop sequence 本身）
+                                    idx = full_content.find(stop_seq)
+                                    full_content = full_content[:idx + len(stop_seq)]
+                                    stopped_by_sequence = True
+                                    finish_reason = "stop_sequence"
+                                    logger.info(f"[STOP_SEQ] Client-side stop sequence detected: '{stop_seq}', truncating response")
+                                    break
+
+                            if stopped_by_sequence:
+                                break
+
                     elif chunk.get('type') == 'message_stop':
                         # 记录token使用情况
                         usage = chunk.get('amazon-bedrock-invocationMetrics', {})
@@ -361,10 +382,13 @@ class BedrockProvider(BaseProvider):
                                 model=self.model_id
                             )
                         break
-            
+
+                if stopped_by_sequence:
+                    break
+
             # 返回类似 OpenAI 的响应格式
             import time
-            
+
             response = {
                 "id": f"chatcmpl-bedrock-{hash(str(messages))}"[:29],  # 生成一个伪 ID
                 "object": "chat.completion",
@@ -376,7 +400,7 @@ class BedrockProvider(BaseProvider):
                             "role": "assistant",
                             "content": full_content
                         },
-                        "finish_reason": "stop",
+                        "finish_reason": finish_reason,
                         "index": 0
                     }
                 ],
