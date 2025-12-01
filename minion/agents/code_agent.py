@@ -176,7 +176,7 @@ class CodeAgent(BaseAgent):
             return
         await super().setup()
         self._is_setup = False #since super setting this to True, we immediately set it to False
-        
+
         # Set brain.python_env to the executor after brain is initialized
         if self.brain and self.python_executor:
             self.brain.python_env = self.python_executor
@@ -186,10 +186,35 @@ class CodeAgent(BaseAgent):
         # Send tools to the python executor
         self._update_executor_tools()
 
+        # Append skills prompt if SkillTool is in tools
+        self._append_skills_prompt()
+
         # Initialize state tracking if enabled
         if self.enable_state_tracking:
             self._initialize_state()
         self._is_setup = True
+
+    def _append_skills_prompt(self):
+        """Append skills prompt to system_prompt if SkillTool is available."""
+        from minion.tools.skill_tool import SkillTool, generate_skill_tool_prompt
+
+        # Check if SkillTool is in tools
+        has_skill_tool = any(isinstance(t, SkillTool) for t in self.tools)
+        if not has_skill_tool:
+            return
+
+        # Generate skills prompt
+        skills_prompt = generate_skill_tool_prompt()
+        if not skills_prompt or "<available_skills>" not in skills_prompt:
+            return
+
+        # Append to system_prompt
+        if self.system_prompt:
+            self.system_prompt += "\n\n# Skills\n" + skills_prompt
+        else:
+            self.system_prompt = "# Skills\n" + skills_prompt
+
+        logger.debug("Skills prompt appended to system_prompt")
 
 
     async def execute_step(self, state: CodeAgentState, stream: bool = False, **kwargs) -> AgentResponse:
