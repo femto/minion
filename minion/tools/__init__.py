@@ -71,15 +71,19 @@ from .tool_search import (
     HAS_BM25
 )
 
+# Skill Tool - Execute skills within the conversation
+from .skill_tool import SkillTool, generate_skill_tool_prompt
+
+# Bash Tool - Execute bash commands
+from .bash_tool import BashTool
+
 __all__ = [
     "BaseTool",
     "tool",
     "ToolCollection",
     "Toolset",
     "AsyncBaseTool",
-    "async_tool",
-    "SyncToAsyncToolAdapter",
-    "AsyncToolCollection",
+
     "BrowserTool",
     "HAS_BROWSER_TOOL",
     "UtcpManualToolset",
@@ -94,5 +98,10 @@ __all__ = [
     "KeywordSearchStrategy",
     "RegexSearchStrategy",
     "BM25SearchStrategy",
-    "HAS_BM25"
+    "HAS_BM25",
+    # Skill Tool exports
+    "SkillTool",
+    "generate_skill_tool_prompt",
+    # Bash Tool exports
+    "BashTool",
 ]
