@@ -1670,19 +1670,226 @@ Please fix the error and try again."""
         return False
     
     async def execute_stream(self):
-        """流式执行方法 - CodeMinion 暂不支持真正的流式输出，回退到普通执行"""
-        result = await self.execute()
-        # Convert AgentResponse to StreamChunk for consistent streaming interface
-        if isinstance(result, AgentResponse):
-            # AgentResponse now inherits from StreamChunk, so it can be yielded directly
-            yield result
+        """流式执行方法 - 支持真正的流式输出，包括 Thought/Code/Observation 事件"""
+        from minion.main.action_step import StreamChunk
+
+        # Determine the query to use
+        if self.task:
+            query = self.task.get("instruction", "") or self.task.get("task_description", "")
         else:
-            # Convert other results to StreamChunk
-            from minion.main.action_step import StreamChunk
+            query = self.input.query
+
+        self.current_turn_attempts = []
+
+        error = ""
+        previous_turns_history = self._get_history()
+        tools = self.brain.tools + self.input.tools
+
+        for iteration in range(self.max_iterations):
+            # Emit step start event
             yield StreamChunk(
-                content=str(result),
-                chunk_type="agent_response" if hasattr(result, 'answer') else "text"
+                content=f"Step {iteration + 1}/{self.max_iterations}",
+                chunk_type="step_start",
+                metadata={"iteration": iteration, "max_iterations": self.max_iterations}
             )
+
+            # Construct messages for this iteration
+            messages = self.construct_messages_with_history(query, tools, self.task, error, previous_turns_history)
+
+            # Get LLM response with streaming
+            node = LmpActionNode(llm=self.brain.llm)
+            tools = (self.input.tools or []) + (self.brain.tools or [])
+            stop_sequences = ["<end_code>"]
+
+            try:
+                # Stream LLM response
+                response = ""
+                stream_generator = await node.execute(messages, tools=tools, stop=stop_sequences, stream=True)
+
+                async for chunk in stream_generator:
+                    if hasattr(chunk, 'content'):
+                        chunk_content = chunk.content
+                    else:
+                        chunk_content = str(chunk)
+
+                    response += chunk_content
+                    # Yield text chunk as it comes in
+                    yield StreamChunk(
+                        content=chunk_content,
+                        chunk_type="thinking",
+                        metadata={"iteration": iteration, "partial": True}
+                    )
+
+                if response and not response.strip().endswith("<end_code>"):
+                    response += "<end_code>"
+
+            except FinalAnswerException as e:
+                final_answer = e.answer
+                self.answer = self.input.answer = final_answer
+
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                yield AgentResponse(
+                    raw_response=final_answer,
+                    answer=final_answer,
+                    is_final_answer=True,
+                    score=1.0,
+                    terminated=True,
+                    truncated=False,
+                    info={'final_answer_exception': True}
+                )
+                return
+
+            # Extract and execute code
+            code_blocks = self.extract_code_blocks(response)
+            self.current_turn_attempts.append(f"**Assistant Response {iteration + 1}:** {response}")
+
+            if not code_blocks:
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                self.answer = self.input.answer = response
+                yield AgentResponse(
+                    raw_response=response,
+                    answer=self.answer,
+                    score=0.5,
+                    terminated=True,
+                    is_final_answer=True,
+                    truncated=False,
+                    info={'no_code_found': True}
+                )
+                return
+
+            # Execute the first code block
+            code = code_blocks[0]
+
+            # Emit code_start event
+            yield StreamChunk(
+                content=code,
+                chunk_type="code_start",
+                metadata={"iteration": iteration, "code_preview": code[:100] + "..." if len(code) > 100 else code}
+            )
+
+            # Execute the code using python_env
+            try:
+                if hasattr(self.python_env, '__call__') and asyncio.iscoroutinefunction(self.python_env.__call__):
+                    output, logs, is_final_answer = await self.python_env(code)
+                else:
+                    output, logs, is_final_answer = self.python_env(code)
+
+                if isinstance(output, Exception):
+                    error = str(output)
+                    # Emit code_result with error
+                    yield StreamChunk(
+                        content=error,
+                        chunk_type="code_result",
+                        metadata={"success": False, "error": error, "iteration": iteration}
+                    )
+                    observation = f"**Observation:** Error occurred:\n{error}"
+                    self.current_turn_attempts.append(observation)
+                    continue
+                else:
+                    # Format observation
+                    observation_parts = []
+                    if logs:
+                        observation_parts.append(f"Logs:\n{logs}")
+                    if output is not None:
+                        formatted_output = self._format_output_for_observation(output, code)
+                        observation_parts.append(f"Output: {formatted_output}")
+
+                    observation_content = "\n".join(observation_parts)
+
+                    # Emit code_result with success
+                    yield StreamChunk(
+                        content=observation_content,
+                        chunk_type="code_result",
+                        metadata={"success": True, "iteration": iteration, "has_logs": bool(logs)}
+                    )
+
+                    observation = f"**Observation:** Code executed successfully:\n{observation_content}"
+                    self.current_turn_attempts.append(observation)
+
+                    if is_final_answer:
+                        self.answer = self.input.answer = output
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                        yield AgentResponse(
+                            raw_response=output,
+                            answer=output,
+                            is_final_answer=True,
+                            score=1.0,
+                            terminated=True,
+                            truncated=False,
+                            info={'final_answer_detected': True}
+                        )
+                        return
+
+                    result_text = logs if logs else str(output)
+                    if self.is_final_answer(result_text):
+                        self.answer = self.input.answer = result_text
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                        yield AgentResponse(
+                            raw_response=result_text,
+                            answer=result_text,
+                            is_final_answer=True,
+                            score=1.0,
+                            terminated=True,
+                            truncated=False,
+                            info={'final_answer_heuristic': True}
+                        )
+                        return
+
+                    if iteration == self.max_iterations - 1:
+                        self.answer = self.input.answer = result_text
+                        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                        yield AgentResponse(
+                            raw_response=self.answer,
+                            answer=self.answer,
+                            score=0.8,
+                            terminated=False,
+                            is_final_answer=False,
+                            truncated=True,
+                            info={'max_iterations_reached': True}
+                        )
+                        return
+
+                    error = ""
+
+            except FinalAnswerException as e:
+                final_answer = e.answer
+                self.answer = self.input.answer = final_answer
+                self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                yield AgentResponse(
+                    raw_response=final_answer,
+                    answer=final_answer,
+                    is_final_answer=True,
+                    score=1.0,
+                    terminated=True,
+                    truncated=False,
+                    info={'final_answer_exception': True}
+                )
+                return
+            except Exception as e:
+                error = str(e)
+                logger.error(f"Execution error: {error}")
+                # Emit code_result with error
+                yield StreamChunk(
+                    content=error,
+                    chunk_type="code_result",
+                    metadata={"success": False, "error": error, "iteration": iteration}
+                )
+                observation = f"**Observation:** Execution failed:\n{error}"
+                self.current_turn_attempts.append(observation)
+                continue
+
+        # If we've exhausted all iterations
+        self.answer = self.input.answer = response
+        self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+        yield AgentResponse(
+            raw_response=self.answer,
+            answer=self.answer,
+            score=0.3,
+            terminated=False,
+            is_final_answer=False,
+            truncated=True,
+            info={'all_iterations_failed': True}
+        )
 
 #do we need this minion?
 class CodeProblemMinion(PlanMinion):

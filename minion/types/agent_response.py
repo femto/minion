@@ -1,13 +1,241 @@
 import time
-from typing import Dict, Any, Optional
+import uuid
+from typing import Dict, Any, Optional, List, Union
 from dataclasses import dataclass, field
+
+
+@dataclass
+class Usage:
+    """Token usage information for a single API call"""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_input_tokens: int = 0  # Anthropic prompt caching
+    cache_read_input_tokens: int = 0      # Anthropic prompt caching
+    # Cost in USD (calculated from tokens * model pricing, not from API)
+    cost_usd: Optional[float] = None
+
+    @property
+    def total_tokens(self) -> int:
+        """Total tokens used (input + output)"""
+        return self.input_tokens + self.output_tokens
+
+    def calculate_cost(
+        self,
+        input_cost_per_token: float,
+        output_cost_per_token: float,
+        cache_read_cost_per_token: Optional[float] = None,
+        cache_write_cost_per_token: Optional[float] = None,
+    ) -> float:
+        """
+        Calculate cost based on token counts and pricing.
+
+        Args:
+            input_cost_per_token: Cost per input token (e.g., 0.000003 for $3/M)
+            output_cost_per_token: Cost per output token (e.g., 0.000015 for $15/M)
+            cache_read_cost_per_token: Cost per cache read token (default: 10% of input)
+            cache_write_cost_per_token: Cost per cache write token (default: 125% of input)
+
+        Returns:
+            Total cost in USD
+        """
+        if cache_read_cost_per_token is None:
+            cache_read_cost_per_token = input_cost_per_token * 0.1
+        if cache_write_cost_per_token is None:
+            cache_write_cost_per_token = input_cost_per_token * 1.25
+
+        cost = (
+            self.input_tokens * input_cost_per_token +
+            self.output_tokens * output_cost_per_token +
+            self.cache_read_input_tokens * cache_read_cost_per_token +
+            self.cache_creation_input_tokens * cache_write_cost_per_token
+        )
+        return cost
+
+    def calculate_cost_from_model(self, model_name: str) -> Optional[float]:
+        """
+        Calculate cost using model pricing from litellm price database.
+
+        Args:
+            model_name: Model name (e.g., 'gpt-4o', 'claude-3-5-sonnet-20241022')
+
+        Returns:
+            Total cost in USD, or None if model not found
+        """
+        try:
+            from minion.utils.model_price import get_model_price
+            price_info = get_model_price(model_name)
+            if price_info:
+                self.cost_usd = self.calculate_cost(
+                    input_cost_per_token=price_info['prompt'],
+                    output_cost_per_token=price_info['completion'],
+                )
+                return self.cost_usd
+        except ImportError:
+            pass
+        return None
+
+    @staticmethod
+    def get_default_pricing(model_name: str) -> Dict[str, float]:
+        """
+        Get default pricing for common models (fallback).
+
+        Returns dict with 'input' and 'output' cost per token.
+        """
+        PRICING = {
+            # Anthropic (per token)
+            'claude-3-5-sonnet': {'input': 0.000003, 'output': 0.000015},
+            'claude-3-5-haiku': {'input': 0.0000008, 'output': 0.000004},
+            'claude-3-opus': {'input': 0.000015, 'output': 0.000075},
+            'claude-sonnet-4': {'input': 0.000003, 'output': 0.000015},
+            # OpenAI
+            'gpt-4o': {'input': 0.0000025, 'output': 0.00001},
+            'gpt-4o-mini': {'input': 0.00000015, 'output': 0.0000006},
+            'o1': {'input': 0.000015, 'output': 0.00006},
+            'o1-mini': {'input': 0.000003, 'output': 0.000012},
+            # Default (Claude 3.5 Haiku)
+            'default': {'input': 0.0000008, 'output': 0.000004},
+        }
+
+        model_lower = model_name.lower()
+        for key in PRICING:
+            if key in model_lower:
+                return PRICING[key]
+        return PRICING['default']
+
+
 @dataclass
 class StreamChunk:
-    """单个流式输出块"""
+    """
+    单个流式输出块
+
+    partial=True: Token stream (增量文本，追加到之前的内容)
+    partial=False: Complete message (完整消息，替换之前的 partial chunks)
+    """
     content: str
-    chunk_type: str = "text"  # text, tool_call, observation, error, agent_response, final_answer, completion
+    chunk_type: str = "text"  # text, thinking, tool_call, tool_result, observation, error, agent_response, final_answer, completion
     metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
+    partial: bool = False  # True for token streaming, False for complete message
+    uuid: str = field(default_factory=lambda: str(uuid.uuid4()))
+    # Per-message usage (optional, from raw API response)
+    usage: Optional[Usage] = None
+    # Model that generated this chunk (useful for multi-model scenarios)
+    model: Optional[str] = None
+
+
+# =============================================================================
+# StreamChunk 子类 - 用于不同类型的消息
+# =============================================================================
+
+@dataclass
+class UserStreamChunk(StreamChunk):
+    """用户消息"""
+    chunk_type: str = "user"
+
+
+@dataclass
+class AssistantStreamChunk(StreamChunk):
+    """助手消息，可包含多个内容块"""
+    chunk_type: str = "assistant"
+    stop_reason: Optional[str] = None  # "end_turn", "tool_use", etc.
+
+
+@dataclass
+class ThinkingStreamChunk(StreamChunk):
+    """思考/推理内容 (extended thinking)"""
+    chunk_type: str = "thinking"
+    thinking: str = ""
+
+    def __post_init__(self):
+        if self.thinking and not self.content:
+            self.content = self.thinking
+
+
+@dataclass
+class ToolUseStreamChunk(StreamChunk):
+    """工具调用请求"""
+    chunk_type: str = "tool_call"
+    tool_id: str = ""
+    tool_name: str = ""
+    tool_input: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.metadata.update({
+            'tool_id': self.tool_id,
+            'tool_name': self.tool_name,
+            'tool_input': self.tool_input
+        })
+
+
+@dataclass
+class ToolResultStreamChunk(StreamChunk):
+    """工具执行结果"""
+    chunk_type: str = "tool_result"
+    tool_use_id: str = ""
+    is_error: bool = False
+
+    def __post_init__(self):
+        self.metadata.update({
+            'tool_use_id': self.tool_use_id,
+            'is_error': self.is_error
+        })
+
+
+@dataclass
+class CodeExecutionStreamChunk(StreamChunk):
+    """代码执行块"""
+    chunk_type: str = "code"
+    language: str = "python"
+    code: str = ""
+    output: Optional[str] = None
+    success: bool = True
+
+    def __post_init__(self):
+        self.metadata.update({
+            'language': self.language,
+            'code': self.code,
+            'output': self.output,
+            'success': self.success
+        })
+
+
+@dataclass
+class SystemStreamChunk(StreamChunk):
+    """系统消息 (初始化、错误等)"""
+    chunk_type: str = "system"
+    subtype: str = ""  # "init", "error", "warning", etc.
+
+
+@dataclass
+class ResultStreamChunk(StreamChunk):
+    """
+    最终结果块 - 标记响应结束
+
+    Cost/usage 信息通过继承的 StreamChunk.usage: Usage 获取:
+    - usage.cost_usd: 总成本
+    - usage.input_tokens / output_tokens: token 统计
+    """
+    chunk_type: str = "completion"
+    subtype: str = "success"  # "success", "error", "interrupted"
+    duration_ms: int = 0
+    is_error: bool = False
+    num_turns: int = 0
+    session_id: str = ""
+    # usage 继承自 StreamChunk，类型为 Optional[Usage]
+
+
+# Type alias
+AnyStreamChunk = Union[
+    StreamChunk,
+    UserStreamChunk,
+    AssistantStreamChunk,
+    ThinkingStreamChunk,
+    ToolUseStreamChunk,
+    ToolResultStreamChunk,
+    CodeExecutionStreamChunk,
+    SystemStreamChunk,
+    ResultStreamChunk
+]
 @dataclass
 class AgentResponse(StreamChunk):
     """
