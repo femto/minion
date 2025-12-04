@@ -102,6 +102,34 @@ class Usage:
                 return PRICING[key]
         return PRICING['default']
 
+    def add(self, other: 'Usage') -> 'Usage':
+        """
+        累加另一个 Usage 的值到当前对象 (in-place)
+
+        Args:
+            other: 要累加的 Usage 对象
+
+        Returns:
+            self (支持链式调用)
+        """
+        self.input_tokens += other.input_tokens
+        self.output_tokens += other.output_tokens
+        self.cache_creation_input_tokens += other.cache_creation_input_tokens
+        self.cache_read_input_tokens += other.cache_read_input_tokens
+        # cost_usd 不累加，需要最后重新计算
+        return self
+
+    def __add__(self, other: 'Usage') -> 'Usage':
+        """
+        支持 usage1 + usage2 语法，返回新对象
+        """
+        return Usage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_creation_input_tokens=self.cache_creation_input_tokens + other.cache_creation_input_tokens,
+            cache_read_input_tokens=self.cache_read_input_tokens + other.cache_read_input_tokens,
+        )
+
 
 @dataclass
 class StreamChunk:
@@ -240,10 +268,14 @@ AnyStreamChunk = Union[
 class AgentResponse(StreamChunk):
     """
     Agent执行步骤的响应结果，替换原有的5-tuple格式
-    
+
     This class replaces the 5-tuple format (response, score, terminated, truncated, info)
     with a more structured and extensible approach.
-    
+
+    Usage tracking:
+        - self.usage (继承自 StreamChunk): 单条消息的 usage
+        - self.total_usage: 整个 agent 运行的汇总 usage
+
     Fields:
         raw_response: 每步的原始响应内容
         answer: 当前最佳答案（可能是最终答案，也可能是中间答案）
@@ -254,8 +286,8 @@ class AgentResponse(StreamChunk):
         truncated: 是否被截断
         info: 扩展信息字典
         error: 错误信息
-        execution_time: 执行时间
-        tokens_used: 使用的token数量
+        execution_time: 执行时间 (ms)
+        total_usage: 汇总的 token usage 和 cost
     """
     
     # Override StreamChunk fields with defaults
@@ -284,7 +316,12 @@ class AgentResponse(StreamChunk):
     
     # 执行统计
     execution_time: Optional[float] = None
-    tokens_used: Optional[int] = None
+    tokens_used: Optional[int] = None  # deprecated, use total_usage instead
+
+    # 汇总 usage (所有 API 调用的累计)
+    # 注意: 继承的 self.usage 是单条消息的 usage
+    # total_usage 是整个 agent 运行期间的汇总
+    total_usage: Optional[Usage] = None
     
     def __post_init__(self):
         """Initialize StreamChunk fields based on AgentResponse content"""
