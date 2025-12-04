@@ -156,20 +156,20 @@ class StreamChunk:
 # =============================================================================
 
 @dataclass
-class UserStreamChunk(StreamChunk):
+class UserMessage(StreamChunk):
     """用户消息"""
     chunk_type: str = "user"
 
 
 @dataclass
-class AssistantStreamChunk(StreamChunk):
+class AssistantMessage(StreamChunk):
     """助手消息，可包含多个内容块"""
     chunk_type: str = "assistant"
     stop_reason: Optional[str] = None  # "end_turn", "tool_use", etc.
 
 
 @dataclass
-class ThinkingStreamChunk(StreamChunk):
+class ThinkingMessage(StreamChunk):
     """思考/推理内容 (extended thinking)"""
     chunk_type: str = "thinking"
     thinking: str = ""
@@ -180,7 +180,7 @@ class ThinkingStreamChunk(StreamChunk):
 
 
 @dataclass
-class ToolUseStreamChunk(StreamChunk):
+class ToolUseMessage(StreamChunk):
     """工具调用请求"""
     chunk_type: str = "tool_call"
     tool_id: str = ""
@@ -196,7 +196,7 @@ class ToolUseStreamChunk(StreamChunk):
 
 
 @dataclass
-class ToolResultStreamChunk(StreamChunk):
+class ToolResultMessage(StreamChunk):
     """工具执行结果"""
     chunk_type: str = "tool_result"
     tool_use_id: str = ""
@@ -210,7 +210,7 @@ class ToolResultStreamChunk(StreamChunk):
 
 
 @dataclass
-class CodeExecutionStreamChunk(StreamChunk):
+class CodeExecutionMessage(StreamChunk):
     """代码执行块"""
     chunk_type: str = "code"
     language: str = "python"
@@ -228,14 +228,14 @@ class CodeExecutionStreamChunk(StreamChunk):
 
 
 @dataclass
-class SystemStreamChunk(StreamChunk):
+class SystemMessage(StreamChunk):
     """系统消息 (初始化、错误等)"""
     chunk_type: str = "system"
     subtype: str = ""  # "init", "error", "warning", etc.
 
 
 @dataclass
-class ResultStreamChunk(StreamChunk):
+class ResultMessage(StreamChunk):
     """
     最终结果块 - 标记响应结束
 
@@ -253,16 +253,15 @@ class ResultStreamChunk(StreamChunk):
 
 
 # Type alias
-AnyStreamChunk = Union[
-    StreamChunk,
-    UserStreamChunk,
-    AssistantStreamChunk,
-    ThinkingStreamChunk,
-    ToolUseStreamChunk,
-    ToolResultStreamChunk,
-    CodeExecutionStreamChunk,
-    SystemStreamChunk,
-    ResultStreamChunk
+Message = Union[
+    UserMessage,
+    AssistantMessage,
+    ThinkingMessage,
+    ToolUseMessage,
+    ToolResultMessage,
+    CodeExecutionMessage,
+    SystemMessage,
+    ResultMessage,
 ]
 @dataclass
 class AgentResponse(StreamChunk):
