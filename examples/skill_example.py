@@ -26,8 +26,8 @@ async def main():
 
     # The agent can now invoke skills
     # Skills are automatically discovered from .minion/skills/ and ~/.minion/skills/
-    async for event in await agent.run_async("what does .minion/memory.pdf say?", stream=True):
-        print(event)
+    result = await agent.run_async("can you summary what does .minion/memory.pdf say")
+    print(result.content)
 
 
 if __name__ == "__main__":
