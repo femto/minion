@@ -1459,14 +1459,15 @@ Please fix the error and try again."""
                     response += "<end_code>"
             except FinalAnswerException as e:
                 # 收到 final_answer 工具调用，直接返回结果
+                # 注意：此时 response 还未赋值（异常在 node.execute 内部抛出）
                 final_answer = e.answer
                 self.answer = self.input.answer = final_answer
                 print(f"Final answer exception detected: {final_answer}")
 
                 self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
-                # 返回 AgentResponse并标记为终止
+                # 返回 AgentResponse - 此处 raw_response 只能用 final_answer，因为没有 LLM 原始输出
                 return AgentResponse(
-                    raw_response=final_answer,  # raw_response是正确的属性名
+                    raw_response=str(final_answer),  # 没有 LLM 输出可用，使用 answer
                     answer=final_answer,
                     is_final_answer=True,
                     score=1.0,
@@ -1539,9 +1540,10 @@ Please fix the error and try again."""
                         self._append_history(self.construct_current_turn_messages(query, tools, self.task, error,
                                                                                   self.current_turn_attempts))
                         # Return AgentResponse with final answer flag
+                        # raw_response = LLM output (thought + code), answer = final result
                         return AgentResponse(
-                            raw_response=output,
-                            answer=output,
+                            raw_response=response,  # LLM 原始输出 (thought + code)
+                            answer=output,          # final_answer 的参数
                             is_final_answer=True,
                             score=1.0,
                             terminated=True,
@@ -1598,9 +1600,10 @@ Please fix the error and try again."""
                 self._append_history(
                     self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
                 # 返回 AgentResponse并标记为终止
+                # raw_response = LLM output (thought + code), answer = final result
                 return AgentResponse(
-                    raw_response=final_answer,  # raw_response是正确的属性名
-                    answer=final_answer,
+                    raw_response=response,      # LLM 原始输出 (thought + code)
+                    answer=final_answer,        # final_answer 的参数
                     is_final_answer=True,
                     score=1.0,
                     terminated=True,
@@ -1728,9 +1731,10 @@ Please fix the error and try again."""
                 self.answer = self.input.answer = final_answer
 
                 self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                # raw_response = LLM output so far, answer = final result
                 yield AgentResponse(
-                    raw_response=final_answer,
-                    answer=final_answer,
+                    raw_response=response if response else str(final_answer),  # LLM 输出（可能是部分）
+                    answer=final_answer,        # final_answer 的参数
                     is_final_answer=True,
                     score=1.0,
                     terminated=True,
@@ -1809,9 +1813,10 @@ Please fix the error and try again."""
                     if is_final_answer:
                         self.answer = self.input.answer = output
                         self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                        # raw_response = LLM output (thought + code), answer = final result
                         yield AgentResponse(
-                            raw_response=output,
-                            answer=output,
+                            raw_response=response,  # LLM 原始输出 (thought + code)
+                            answer=output,          # final_answer 的参数
                             is_final_answer=True,
                             score=1.0,
                             terminated=True,
@@ -1824,9 +1829,10 @@ Please fix the error and try again."""
                     if self.is_final_answer(result_text):
                         self.answer = self.input.answer = result_text
                         self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                        # raw_response = LLM output (thought + code), answer = heuristic result
                         yield AgentResponse(
-                            raw_response=result_text,
-                            answer=result_text,
+                            raw_response=response,  # LLM 原始输出 (thought + code)
+                            answer=result_text,     # 启发式检测的答案
                             is_final_answer=True,
                             score=1.0,
                             terminated=True,
@@ -1855,9 +1861,10 @@ Please fix the error and try again."""
                 final_answer = e.answer
                 self.answer = self.input.answer = final_answer
                 self._append_history(self.construct_current_turn_messages(query, tools, self.task, error, self.current_turn_attempts))
+                # raw_response = LLM output (thought + code), answer = final result
                 yield AgentResponse(
-                    raw_response=final_answer,
-                    answer=final_answer,
+                    raw_response=response,      # LLM 原始输出 (thought + code)
+                    answer=final_answer,        # final_answer 的参数
                     is_final_answer=True,
                     score=1.0,
                     terminated=True,

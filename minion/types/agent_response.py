@@ -271,14 +271,26 @@ class AgentResponse(StreamChunk):
     This class replaces the 5-tuple format (response, score, terminated, truncated, info)
     with a more structured and extensible approach.
 
+    Key Fields (响应内容):
+        raw_response: LLM 的原始输出，未经处理。
+                      例如 CodeMinion: "thought:... ```python code``` <end_code>"
+                      保留完整推理过程，便于调试和审计。
+
+        answer: 从原始响应中提取的最终答案。
+                例如 CodeMinion 的 final_answer(4) 调用后，answer=4
+                这是用户通常需要的干净结果。
+
+        content: UI 显示用（继承自 StreamChunk，自动派生）。
+                 - 当 is_final_answer=True 时，content = str(answer)
+                 - 否则 content = str(raw_response)
+                 用户一般不需要直接访问此字段。
+
     Usage tracking:
         - self.usage (继承自 StreamChunk): 单条消息的 usage
         - self.total_usage: 整个 agent 运行的汇总 usage
 
-    Fields:
-        raw_response: 每步的原始响应内容
-        answer: 当前最佳答案（可能是最终答案，也可能是中间答案）
-        is_final_answer: 标识answer是否为最终答案
+    Other Fields:
+        is_final_answer: 标识 answer 是否为最终答案
         score: 执行质量指标
         confidence: 置信度
         terminated: 是否终止
@@ -288,14 +300,15 @@ class AgentResponse(StreamChunk):
         execution_time: 执行时间 (ms)
         total_usage: 汇总的 token usage 和 cost
     """
-    
+
     # Override StreamChunk fields with defaults
-    content: str = ""  # Will be set from raw_response in __post_init__
-    
-    # 主要响应内容
+    # content 用于 UI 显示，自动从 answer 或 raw_response 派生
+    content: str = ""
+
+    # LLM 原始输出 (thought + code 等完整内容)
     raw_response: Any = None
-    
-    # 答案相关
+
+    # 提取后的最终答案 (final_answer 的参数)
     answer: Optional[Any] = None
     is_final_answer: bool = False
     
@@ -324,10 +337,17 @@ class AgentResponse(StreamChunk):
     
     def __post_init__(self):
         """Initialize StreamChunk fields based on AgentResponse content"""
-        # Set content from raw_response if not already set
+        # Set content for UI display:
+        # - If final answer, show the answer (clean result)
+        # - Otherwise, show raw_response (for debugging/intermediate steps)
         if not hasattr(self, 'content') or not self.content:
-            self.content = str(self.raw_response) if self.raw_response is not None else ""
-        
+            if self.is_final_answer and self.answer is not None:
+                self.content = str(self.answer)
+            elif self.raw_response is not None:
+                self.content = str(self.raw_response)
+            else:
+                self.content = ""
+
         # Set appropriate chunk_type
         if not hasattr(self, 'chunk_type') or not self.chunk_type:
             if self.error:
