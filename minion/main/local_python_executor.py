@@ -141,7 +141,8 @@ BASE_PYTHON_TOOLS = {
     "issubclass": issubclass,
     "type": type,
     "complex": complex,
-    "open":open
+    "open": open,
+    "super": super,
 }
 
 # Non-exhaustive list of dangerous modules that should not be imported
