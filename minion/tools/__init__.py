@@ -123,6 +123,15 @@ def __getattr__(name):
             _lazy_imports["create_web_fetch_tool"] = create_web_fetch_tool
         return _lazy_imports[name]
 
+    # Web Search Tool
+    if name in ("WebSearchTool", "create_web_search_tool", "SearchResult"):
+        if "WebSearchTool" not in _lazy_imports:
+            from .web_search_tool import WebSearchTool, create_web_search_tool, SearchResult
+            _lazy_imports["WebSearchTool"] = WebSearchTool
+            _lazy_imports["create_web_search_tool"] = create_web_search_tool
+            _lazy_imports["SearchResult"] = SearchResult
+        return _lazy_imports[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -152,4 +161,8 @@ __all__ = [
     # Web Fetch Tool exports
     "WebFetchTool",
     "create_web_fetch_tool",
+    # Web Search Tool exports
+    "WebSearchTool",
+    "create_web_search_tool",
+    "SearchResult",
 ]
