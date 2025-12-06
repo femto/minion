@@ -115,6 +115,14 @@ def __getattr__(name):
             _lazy_imports["BashTool"] = BashTool
         return _lazy_imports["BashTool"]
 
+    # Web Fetch Tool
+    if name in ("WebFetchTool", "create_web_fetch_tool"):
+        if "WebFetchTool" not in _lazy_imports:
+            from .web_fetch_tool import WebFetchTool, create_web_fetch_tool
+            _lazy_imports["WebFetchTool"] = WebFetchTool
+            _lazy_imports["create_web_fetch_tool"] = create_web_fetch_tool
+        return _lazy_imports[name]
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -141,4 +149,7 @@ __all__ = [
     "generate_skill_tool_prompt",
     # Bash Tool exports
     "BashTool",
+    # Web Fetch Tool exports
+    "WebFetchTool",
+    "create_web_fetch_tool",
 ]
