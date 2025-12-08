@@ -1712,15 +1712,21 @@ Please fix the error and try again."""
                 async for chunk in stream_generator:
                     if hasattr(chunk, 'content'):
                         chunk_content = chunk.content
+                        # 获取原始 chunk 的 usage（如果有）
+                        chunk_usage = getattr(chunk, 'usage', None)
                     else:
                         chunk_content = str(chunk)
+                        chunk_usage = None
 
                     response += chunk_content
                     # Yield text chunk as it comes in
+                    # partial=True 表示这是增量内容（不是累积的）
                     yield StreamChunk(
                         content=chunk_content,
                         chunk_type="thinking",
-                        metadata={"iteration": iteration, "partial": True}
+                        metadata={"iteration": iteration},
+                        partial=True,  # 增量内容，不是累积的
+                        usage=chunk_usage  # 传递 usage 信息
                     )
 
                 if response and not response.strip().endswith("<end_code>"):

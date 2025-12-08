@@ -13,6 +13,9 @@ from ..main.action_step import ActionStep, StreamChunk, StreamingActionManager
 from minion.types.agent_response import AgentResponse
 from minion.types.agent_state import AgentState
 from minion.types.llm_types import ModelType, create_llm_from_model
+from minion.utils.model_price import get_model_context_window, DEFAULT_CONTEXT_WINDOW
+from minion.utils.token_counter import num_tokens_from_messages
+from minion.types.history import History
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,14 @@ class BaseAgent:
     agent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     max_steps: int = 20
-    
+
+    # Auto compact configuration
+    auto_compact_enabled: bool = True           # Enable/disable auto compact
+    auto_compact_threshold: float = 0.92        # Trigger threshold (92% of context window)
+    auto_compact_keep_recent: int = 10          # Keep recent N messages as-is
+    default_context_window: int = 128000        # Default context window size (128K tokens)
+    compact_model: Optional[str] = None         # Model for compaction, None uses agent.llm
+
     # 生命周期管理
     _is_setup: bool = field(default=False, init=False)
     _toolsets: List[Any] = field(default_factory=list, init=False)  # List of toolset instances (MCP, UTCP, etc.)
@@ -496,7 +506,7 @@ class BaseAgent:
             
             # 更新状态，继续下一步
             self._streaming_manager.complete_current_step()
-            state = self.update_state(state, result)
+            state = await self.update_state(state, result)
             step_count += 1
             
             # yield StreamChunk(
@@ -566,9 +576,9 @@ class BaseAgent:
                 return result
 
             # 更新状态，继续下一步
-            state = self.update_state(state, result)
+            state = await self.update_state(state, result)
             step_count += 1
-            
+
         # 达到最大步数
         if step_count >= max_steps:
             # Try to get the final answer and return it
@@ -754,26 +764,32 @@ Please provide the answer directly, without explaining why you couldn't complete
         # 添加额外的metadata
         self.state.metadata.update(kwargs)
 
-    def update_state(self, state: AgentState, result: Any) -> AgentState:
+    async def update_state(self, state: AgentState, result: Any) -> AgentState:
         """
-        根据步骤结果更新状态
+        Update state based on step result.
+
         Args:
-            state: 当前状态 (强类型AgentState)
-            result: 步骤执行结果 (可以是5-tuple或AgentResponse)
+            state: Current state (strongly typed AgentState)
+            result: Step execution result (can be 5-tuple or AgentResponse)
+
         Returns:
-            AgentState: 更新后的状态
+            AgentState: Updated state
         """
-        # 使用传入的状态
+        # Use the passed state
         self.state = state
-            
-        # 将结果转换为消息格式并添加到历史
+
+        # Convert result to message format and add to history
         message_dict = self._convert_result_to_message(result)
         self.state.history.append(message_dict)
         self.state.step_count += 1
-        
+
         if isinstance(self.state.input, Input):
             self.state.input.query = f"Continue your task: {self.state.task}"
-            
+
+        # Auto compact check
+        if self.auto_compact_enabled and self._should_compact(self.state.history):
+            self.state.history = await self._compact_history(self.state.history)
+
         return self.state
     
     def _convert_result_to_message(self, result: Any) -> Dict[str, Any]:
@@ -854,7 +870,213 @@ Please provide the answer directly, without explaining why you couldn't complete
                 "content": str(result),
                 "metadata": {}
             }
-    
+
+    # ============================================
+    # Auto Compact Methods
+    # ============================================
+
+    def _get_model_name(self) -> Optional[str]:
+        """Get the model name from the LLM provider."""
+        if self.llm is None:
+            return None
+        if hasattr(self.llm, 'config') and hasattr(self.llm.config, 'model'):
+            return self.llm.config.model
+        if hasattr(self.llm, 'model'):
+            return self.llm.model
+        return None
+
+    def _get_context_window_limit(self) -> int:
+        """Get current model's context window size.
+
+        Returns:
+            int: The context window limit in tokens.
+        """
+        model_name = self._get_model_name()
+        if model_name:
+            context_info = get_model_context_window(model_name)
+            return context_info.get("max_input_tokens", self.default_context_window)
+        return self.default_context_window
+
+    def _calculate_current_tokens(self, history: History) -> int:
+        """Calculate current history token count.
+
+        Args:
+            history: The conversation history.
+
+        Returns:
+            int: The total token count of the history.
+        """
+        if not history or len(history) == 0:
+            return 0
+        # Convert History to list of message dicts for token counting
+        messages = list(history)
+        model_name = self._get_model_name() or "gpt-4o"
+        return num_tokens_from_messages(messages, model=model_name)
+
+    def _should_compact(self, history: History) -> bool:
+        """Check if compaction is needed based on threshold.
+
+        Args:
+            history: The conversation history.
+
+        Returns:
+            bool: True if compaction should be triggered.
+        """
+        if not self.auto_compact_enabled:
+            return False
+        if not history or len(history) <= self.auto_compact_keep_recent:
+            return False
+
+        current_tokens = self._calculate_current_tokens(history)
+        context_limit = self._get_context_window_limit()
+        threshold_tokens = int(context_limit * self.auto_compact_threshold)
+
+        if current_tokens >= threshold_tokens:
+            logger.info(
+                f"Auto compact triggered: {current_tokens} tokens >= {threshold_tokens} "
+                f"({self.auto_compact_threshold*100:.0f}% of {context_limit})"
+            )
+            return True
+        return False
+
+    def _get_compact_llm(self) -> BaseProvider:
+        """Get LLM for compaction.
+
+        Returns:
+            BaseProvider: The LLM to use for generating summaries.
+        """
+        if self.compact_model:
+            return create_llm_from_model(self.compact_model)
+        return self.llm
+
+    async def _compact_history(self, history: History) -> History:
+        """Execute compaction - summarize old messages with LLM.
+
+        Args:
+            history: The conversation history to compact.
+
+        Returns:
+            History: The compacted history with summary + recent messages.
+        """
+        if len(history) <= self.auto_compact_keep_recent:
+            return history
+
+        # Split: old messages vs recent messages
+        old_messages = list(history)[:-self.auto_compact_keep_recent]
+        recent_messages = list(history)[-self.auto_compact_keep_recent:]
+
+        # Separate system messages (always preserve)
+        system_messages = [m for m in old_messages if m.get("role") == "system"]
+        messages_to_summarize = [m for m in old_messages if m.get("role") != "system"]
+
+        if not messages_to_summarize:
+            return history
+
+        # Build summary prompt
+        summary_prompt = self._build_compact_prompt(messages_to_summarize)
+
+        # Get LLM for compaction
+        compact_llm = self._get_compact_llm()
+        if compact_llm is None:
+            logger.warning("No LLM available for compaction, skipping")
+            return history
+
+        try:
+            # Call LLM to generate summary
+            summary_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a conversation history summarizer. Compress the following "
+                        "conversation history into a concise summary, preserving:\n"
+                        "1. The user's main task and goals\n"
+                        "2. Key steps that have been completed\n"
+                        "3. Important code snippets or decisions made\n"
+                        "4. Problems encountered and their solutions\n\n"
+                        "The summary should be detailed enough to allow the conversation to "
+                        "continue without losing context."
+                    )
+                },
+                {"role": "user", "content": summary_prompt}
+            ]
+
+            # Use the LLM provider's generate method
+            if hasattr(compact_llm, 'generate'):
+                response = await compact_llm.generate(summary_messages)
+                summary_content = response.get("content", "") if isinstance(response, dict) else str(response)
+            elif hasattr(compact_llm, 'chat'):
+                response = await compact_llm.chat(summary_messages)
+                summary_content = response.get("content", "") if isinstance(response, dict) else str(response)
+            else:
+                logger.warning("LLM provider does not have generate or chat method, skipping compaction")
+                return history
+
+            # Build new history: system messages + summary + recent messages
+            new_history = History()
+
+            # Add preserved system messages
+            for msg in system_messages:
+                new_history.append(msg)
+
+            # Add summary as a system message
+            summary_message = {
+                "role": "system",
+                "content": (
+                    f"[Conversation History Summary]\n{summary_content}\n"
+                    "[End of Summary - Recent messages follow]"
+                )
+            }
+            new_history.append(summary_message)
+
+            # Add recent messages
+            for msg in recent_messages:
+                new_history.append(msg)
+
+            logger.info(
+                f"Compacted history from {len(history)} messages to {len(new_history)} messages "
+                f"(summarized {len(messages_to_summarize)} messages)"
+            )
+            return new_history
+
+        except Exception as e:
+            logger.error(f"Failed to compact history: {e}")
+            return history
+
+    def _build_compact_prompt(self, messages: List[Dict[str, Any]]) -> str:
+        """Build the prompt for summarizing messages.
+
+        Args:
+            messages: List of messages to summarize.
+
+        Returns:
+            str: The formatted prompt for summarization.
+        """
+        formatted_messages = []
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            # Truncate very long messages in the summary request
+            if len(content) > 2000:
+                content = content[:2000] + "... [truncated]"
+            formatted_messages.append(f"[{role.upper()}]: {content}")
+
+        return (
+            "Please summarize the following conversation history:\n\n"
+            + "\n\n".join(formatted_messages)
+            + "\n\nOutput the summary in a clear, structured format."
+        )
+
+    async def compact_now(self, state: Optional[AgentState] = None) -> None:
+        """Manually trigger compaction.
+
+        Args:
+            state: The agent state to compact. Uses self.state if not provided.
+        """
+        target_state = state or self.state
+        if target_state and hasattr(target_state, 'history'):
+            target_state.history = await self._compact_history(target_state.history)
+            logger.info("Manual compaction completed")
+
     def is_done(self, result: Any, state: AgentState) -> bool:
         """
         判断任务是否完成

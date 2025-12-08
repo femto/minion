@@ -449,15 +449,15 @@ class CodeAgent(BaseAgent):
                     metadata={'type': 'reflection', 'timestamp': datetime.now().isoformat()}
                 )
     
-    def update_state(self, state: CodeAgentState, result: Any) -> CodeAgentState:
+    async def update_state(self, state: CodeAgentState, result: Any) -> CodeAgentState:
         """Update state with CodeMinion-specific information."""
         # Update the internal state
-        self.state = super().update_state(state, result)
-        
+        self.state = await super().update_state(state, result)
+
         # Extract confidence from result if available
         if isinstance(result, tuple) and len(result) >= 2:
             self.state.last_confidence = result[1]  # score/confidence
-            
+
         return self.state
     
     async def solve_problem(self, problem: str, reset: bool = False, **kwargs) -> str:
