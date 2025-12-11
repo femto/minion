@@ -429,13 +429,13 @@ class BaseAgent:
         if stream:
             # 设置 stream_outputs 属性，供 UI 使用
             self.stream_outputs = True
-            # 返回异步迭代器
-            return self._run_stream(state, max_steps, kwargs, selected_llm_provider)
+            # 返回异步迭代器 - 使用 self.state 而不是原始 state 参数
+            return self._run_stream(self.state, max_steps, kwargs, selected_llm_provider)
         else:
             # 清除 stream_outputs 属性
             self.stream_outputs = False
-            # 一次性执行完成返回最终结果
-            return await self._run_complete(state, max_steps, kwargs, selected_llm_provider)
+            # 一次性执行完成返回最终结果 - 使用 self.state 而不是原始 state 参数
+            return await self._run_complete(self.state, max_steps, kwargs, selected_llm_provider)
 
     async def run_stream(self, 
                         task: Optional[Union[str, Input]] = None,
