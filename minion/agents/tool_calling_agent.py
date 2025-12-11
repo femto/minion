@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import inspect
 from dataclasses import dataclass, field
 
-from .base_agent import BaseAgent
+from .base_agent import BaseAgent, AgentState
 from ..main.input import Input
 from ..main.action_step import StreamChunk
 from ..tools.base_tool import BaseTool
@@ -15,11 +15,93 @@ from ..providers import create_llm_provider
 from .. import config
 from ..exceptions import FinalAnswerException
 from minion.types.agent_response import AgentResponse
+from ..tools.default_tools import FinalAnswerTool
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ToolCallingAgent(BaseAgent):
-    #ToolCallingAgent is the same as  BaseAgent now
-    pass
+    """
+    Tool calling agent with automatic final_answer support.
+
+    This agent automatically adds a FinalAnswerTool and detects when it is called
+    to properly terminate execution, similar to smolagents' ToolCallingAgent.
+    """
+
+    async def setup(self):
+        """Setup agent and add FinalAnswerTool if not present."""
+        # Add FinalAnswerTool if not already present
+        has_final_answer = any(
+            getattr(tool, 'name', None) == 'final_answer'
+            for tool in self.tools
+        )
+        if not has_final_answer:
+            self.add_tool(FinalAnswerTool())
+            logger.debug("Added FinalAnswerTool to ToolCallingAgent")
+
+        await super().setup()
+
+    def is_done(self, result: Any, state: AgentState) -> bool:
+        """
+        Check if task is completed by detecting final_answer tool call.
+
+        Args:
+            result: The result from the current step
+            state: Current agent state
+
+        Returns:
+            bool: True if task is completed
+        """
+        # Check parent's is_done first
+        if super().is_done(result, state):
+            return True
+
+        # Check if final_answer was called in this step
+        if hasattr(result, 'answer') and result.answer:
+            answer = str(result.answer)
+            # Check for final_answer tool execution result
+            if 'final_answer' in answer.lower() and 'execution result' in answer.lower():
+                logger.debug("Detected final_answer tool call, marking task as done")
+                return True
+            # Check for FINAL_ANSWER marker
+            if 'FINAL_ANSWER:' in answer:
+                logger.debug("Detected FINAL_ANSWER marker, marking task as done")
+                return True
+
+        return False
+
+    def finalize(self, result: Any, state: AgentState) -> Any:
+        """
+        Extract the final answer from the result.
+
+        Args:
+            result: The result from execution
+            state: Current agent state
+
+        Returns:
+            The final answer value
+        """
+        # Try to extract final_answer from the result
+        if hasattr(result, 'answer') and result.answer:
+            answer = str(result.answer)
+
+            # Check for FINAL_ANSWER marker and extract the value
+            if 'FINAL_ANSWER:' in answer:
+                # Extract content after FINAL_ANSWER:
+                idx = answer.find('FINAL_ANSWER:')
+                final_value = answer[idx + len('FINAL_ANSWER:'):].strip()
+                # Try to find the end (next newline or end of string)
+                newline_idx = final_value.find('\n')
+                if newline_idx > 0:
+                    final_value = final_value[:newline_idx].strip()
+                return final_value
+
+            # Check for final_answer tool execution result pattern
+            import re
+            match = re.search(r'Tool final_answer execution result:\s*(.+?)(?:\n|$)', answer, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+
+        # Fall back to parent's finalize
+        return super().finalize(result, state)

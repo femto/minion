@@ -18,6 +18,36 @@ from minion.exceptions import FinalAnswerException
 from minion.tools.tool_decorator import tool as decorate_tool
 
 
+def _format_tool_result(tool_name: str, tool_result: Any) -> str:
+    """
+    Format tool execution result for LLM consumption.
+
+    Args:
+        tool_name: Name of the tool
+        tool_result: Result from tool execution
+
+    Returns:
+        Formatted string for the tool result
+    """
+    # Special handling for final_answer tool
+    if tool_name == 'final_answer':
+        if isinstance(tool_result, dict):
+            result_str = json.dumps(tool_result, ensure_ascii=False, indent=2)
+        else:
+            result_str = str(tool_result)
+        return f"FINAL_ANSWER:{result_str}"
+
+    # Format the result based on type
+    if isinstance(tool_result, dict):
+        result_str = json.dumps(tool_result, ensure_ascii=False, indent=2)
+    elif isinstance(tool_result, (list, tuple)):
+        result_str = json.dumps(tool_result, ensure_ascii=False, indent=2)
+    else:
+        result_str = str(tool_result)
+
+    return f"Tool {tool_name} execution result:\n{result_str}"
+
+
 # @ell.complex(model="gpt-4o-mini")
 # def ell_call(ret):
 #     """You are a helpful assistant."""
@@ -675,11 +705,11 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                             else:
                                 tool_result = "Tool call failed: tool is not callable"
 
-                            final_response += f"Tool {tool_name} execution result: {tool_result}\n"
+                            final_response += _format_tool_result(tool_name, tool_result) + "\n"
 
                         except FinalAnswerException as e:
                             # 特殊处理 FinalAnswerException
-                            final_response += f"FINAL_ANSWER_EXCEPTION:{e.answer}\n"
+                            final_response += f"FINAL_ANSWER:{e.answer}\n"
                         except Exception as e:
                             error_msg = f"Tool {tool_name} execution error: {str(e)}"
                             final_response += error_msg + "\n"
@@ -746,23 +776,23 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                             tool_result = await tool_result
                     else:
                         tool_result = "Tool call failed: tool is not callable"
-                    
+
                     # 替换响应中的工具调用为工具结果
                     final_response = final_response.replace(
-                        match.group(0), 
-                        f"Tool {tool_name} execution result: {tool_result}"
+                        match.group(0),
+                        _format_tool_result(tool_name, tool_result)
                     )
-                    
+
                 except FinalAnswerException as e:
                     # 特殊处理 FinalAnswerException
                     final_response = final_response.replace(
-                        match.group(0), 
-                        f"FINAL_ANSWER_EXCEPTION:{e.answer}"
+                        match.group(0),
+                        f"FINAL_ANSWER:{e.answer}"
                     )
                 except Exception as e:
                     error_msg = f"Tool {tool_name} execution error: {str(e)}"
                     final_response = final_response.replace(match.group(0), error_msg)
-        
+
         # 然后尝试解析传统的函数调用模式
         tool_call_pattern = r'(?:调用工具|使用工具|call tool|use tool).*?(\w+)\s*\((.*?)\)'
         matches = re.finditer(tool_call_pattern, final_response, re.IGNORECASE | re.DOTALL)
@@ -810,18 +840,18 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                             tool_result = await tool_result
                     else:
                         tool_result = "Tool call failed: tool is not callable"
-                    
+
                     # 替换响应中的工具调用为工具结果
                     final_response = final_response.replace(
-                        match.group(0), 
-                        f"Tool {tool_name} execution result: {tool_result}"
+                        match.group(0),
+                        _format_tool_result(tool_name, tool_result)
                     )
-                    
+
                 except FinalAnswerException as e:
                     # 特殊处理 FinalAnswerException
                     final_response = final_response.replace(
-                        match.group(0), 
-                        f"FINAL_ANSWER_EXCEPTION:{e.answer}"
+                        match.group(0),
+                        f"FINAL_ANSWER:{e.answer}"
                     )
                 except Exception as e:
                     error_msg = f"Tool {tool_name} execution error: {str(e)}"

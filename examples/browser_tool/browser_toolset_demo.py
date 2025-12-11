@@ -8,6 +8,8 @@ to perform web automation tasks.
 """
 
 import asyncio
+
+from minion.agents import CodeAgent
 from minion.tools.browser import BrowserToolset
 from minion.agents.tool_calling_agent import ToolCallingAgent
 from minion.main.input import Input
@@ -67,10 +69,10 @@ async def demo_with_agent():
 
     async with BrowserToolset(headless=False) as toolset:
         # Create agent with browser tools using async create
-        agent = await ToolCallingAgent.create(
+        agent = await CodeAgent.create(
             name="BrowserAgent",
             tools=toolset.tools,
-            llm="gpt-4o",  # Or any compatible model
+            llm="claude-sonnet-4-5",  # Or any compatible model
             system_prompt="""You are a web browsing assistant.
             Use the browser tools to navigate websites and extract information.
             Always get the page state after navigating to confirm the URL.

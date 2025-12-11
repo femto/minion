@@ -1091,17 +1091,23 @@ Please provide the answer directly, without explaining why you couldn't complete
             return result.is_done()
         elif hasattr(result, 'terminated') or hasattr(result, 'is_final_answer'):
             return getattr(result, 'terminated', False) or getattr(result, 'is_final_answer', False)
-        
+
         # 检查5-tuple格式
         if isinstance(result, tuple) and len(result) >= 3:
             # 返回格式为 (response, score, terminated, truncated, info)
             terminated = result[2]
             return terminated
-        
+
         # 检查状态中的final_answer标志
         if state.is_final_answer:
             return True
-            
+
+        # 检查结果中是否包含 FINAL_ANSWER 标记（来自 final_answer 工具调用）
+        if hasattr(result, 'answer') and result.answer:
+            answer = str(result.answer)
+            if 'FINAL_ANSWER:' in answer:
+                return True
+
         return False
     
     def finalize(self, result: Any, state: AgentState) -> Any:
