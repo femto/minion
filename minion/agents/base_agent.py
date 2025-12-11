@@ -1109,34 +1109,7 @@ Please provide the answer directly, without explaining why you couldn't complete
                 return True
 
         return False
-    
-    def finalize(self, result: Any, state: AgentState) -> Any:
-        """
-        整理最终结果
-        Args:
-            result: 最后一步结果 (可以是5-tuple或AgentResponse)
-            state: 当前状态 (强类型AgentState)
-        Returns:
-            最终处理后的结果
-        """
-        # 检查状态中的final_answer_value
-        if state.final_answer_value is not None:
-            return state.final_answer_value
-            
-        # 检查AgentResponse类型
-        if hasattr(result, 'answer') and result.answer is not None:
-            return result.answer
-        elif hasattr(result, 'raw_response'):
-            return result.raw_response
-        
-        # 检查5-tuple格式
-        if isinstance(result, tuple) and len(result) > 0:
-            return result[0]  # 返回response部分
-        elif isinstance(result, dict):
-            return result.get("answer", result.get("final_answer"))  # 兼容旧格式
-            
-        return result
-    
+
     def _get_builtin_meta_tools(self) -> Dict[str, Any]:
         """获取内置的meta工具"""
         from ..tools.think_tool import ThinkTool

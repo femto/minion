@@ -69,14 +69,44 @@ async def demo_with_agent():
 
     async with BrowserToolset(headless=False) as toolset:
         # Create agent with browser tools using async create
+        # Note: ToolCallingAgent needs a detailed system_prompt that explains
+        # available tools, since the LLM only sees tool schemas via function calling
+        system_prompt = """You are a web browsing assistant with browser automation capabilities.
+
+You have access to these browser tools - use them directly:
+
+**Navigation & Page Info:**
+- browser_navigate(url): Navigate to a URL
+- browser_get_state(): Get current browser state with URL, title, and interactive elements (with indices)
+- browser_get_text(): Get the text content of the page
+- browser_get_html(): Get the HTML content of the page
+- browser_read_links(): Get all links on the page
+- browser_refresh(): Refresh the current page
+
+**Interaction:**
+- browser_click(index): Click an element by its index (get indices from browser_get_state)
+- browser_input_text(index, text): Input text into an element by its index
+- browser_scroll(pixels): Scroll the page by specified pixels (positive=down, negative=up)
+
+**Tab Management:**
+- browser_new_tab(url): Open a new tab with URL
+- browser_switch_tab(tab_id): Switch to a specific tab
+- browser_close_tab(): Close current tab
+
+**Typical Workflow:**
+1. Use browser_navigate(url) to go to a page
+2. Use browser_get_state() to see the page info and interactive elements with their indices
+3. Use browser_click(index) or browser_input_text(index, text) to interact with elements
+4. Use browser_get_text() to extract content
+
+When you have completed the task, use final_answer(answer) to report your findings.
+"""
+
         agent = await CodeAgent.create(
             name="BrowserAgent",
             tools=toolset.tools,
             llm="claude-sonnet-4-5",  # Or any compatible model
-            system_prompt="""You are a web browsing assistant.
-            Use the browser tools to navigate websites and extract information.
-            Always get the page state after navigating to confirm the URL.
-            """
+            system_prompt=system_prompt
         )
 
         # Create task

@@ -530,26 +530,8 @@ Use Python code to:
             terminated = result[2]
             if terminated:
                 return True
-        
+
         return False
-    
-    def finalize(self, result: Any, state: CodeAgentState) -> Any:
-        """
-        Organize the final result, specially handling the final_answer case.
-        """
-        # Use the provided state
-        self.state = state
-        
-        # Check if there is a final_answer_value in the internal state
-        if self.state.final_answer_value is not None:
-            return self.state.final_answer_value
-        
-        # For AgentResponse, prioritize using its final_answer
-        if hasattr(result, 'final_answer') and result.final_answer is not None:
-            return result.final_answer
-        
-        # Call parent's finalize method
-        return super().finalize(result, self.state)
 
     def _update_executor_tools(self):
         """Update the Python executor with current tools."""

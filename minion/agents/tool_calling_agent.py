@@ -70,38 +70,3 @@ class ToolCallingAgent(BaseAgent):
                 return True
 
         return False
-
-    def finalize(self, result: Any, state: AgentState) -> Any:
-        """
-        Extract the final answer from the result.
-
-        Args:
-            result: The result from execution
-            state: Current agent state
-
-        Returns:
-            The final answer value
-        """
-        # Try to extract final_answer from the result
-        if hasattr(result, 'answer') and result.answer:
-            answer = str(result.answer)
-
-            # Check for FINAL_ANSWER marker and extract the value
-            if 'FINAL_ANSWER:' in answer:
-                # Extract content after FINAL_ANSWER:
-                idx = answer.find('FINAL_ANSWER:')
-                final_value = answer[idx + len('FINAL_ANSWER:'):].strip()
-                # Try to find the end (next newline or end of string)
-                newline_idx = final_value.find('\n')
-                if newline_idx > 0:
-                    final_value = final_value[:newline_idx].strip()
-                return final_value
-
-            # Check for final_answer tool execution result pattern
-            import re
-            match = re.search(r'Tool final_answer execution result:\s*(.+?)(?:\n|$)', answer, re.IGNORECASE)
-            if match:
-                return match.group(1).strip()
-
-        # Fall back to parent's finalize
-        return super().finalize(result, state)
