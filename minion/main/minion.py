@@ -40,10 +40,13 @@ def register_minion(name):
 def register_worker_minion(cls=None, *, name=None):
     """Decorator to register worker minions.
     Can be used as @register_worker_minion or @register_worker_minion(name="custom_name")
+    Registers to both WORKER_MINIONS and MINION_REGISTRY for route lookup support.
     """
     def decorator(cls):
         register_name = name if name is not None else camel_case_to_snake_case(cls.__name__)
         WORKER_MINIONS[register_name] = cls
+        # Also register to MINION_REGISTRY for route lookup
+        MINION_REGISTRY[register_name] = cls
         return cls
 
     if cls is None:

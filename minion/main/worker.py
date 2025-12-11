@@ -36,6 +36,7 @@ from minion.main.minion import (
     MINION_REGISTRY,
     WORKER_MINIONS,
     Minion,
+    register_minion,
     register_worker_minion,
     RESULT_STRATEGY_REGISTRY,
 )
@@ -77,9 +78,10 @@ from minion.utils.template import construct_messages_from_template, construct_si
 class WorkerMinion(Minion):
     pass
 
-#don't register worker minion here for RawMinion
+@register_worker_minion
+@register_minion("raw_minion")
 class RawMinion(WorkerMinion):
-    """Raw minion that directly queries LLM without any prompt processing or modifications"""
+    """Raw minion that directly queries LLM without any prompt processing or modifications, supports tool calling"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

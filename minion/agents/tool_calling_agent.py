@@ -27,7 +27,21 @@ class ToolCallingAgent(BaseAgent):
 
     This agent automatically adds a FinalAnswerTool and detects when it is called
     to properly terminate execution, similar to smolagents' ToolCallingAgent.
+
+    Uses 'raw_minion' route by default which supports OpenAI-style function calling.
     """
+
+    # Default route for tool calling - RawMinion supports function calling via LmpActionNode
+    default_route: str = "raw_minion"
+
+    def _init_state_from_task(self, task: Union[str, Input], route: Optional[str] = None, **kwargs) -> None:
+        """
+        Initialize state from task with default route='raw_minion' for tool calling support.
+        """
+        # Use raw_minion route by default for tool calling support
+        if route is None:
+            route = self.default_route
+        super()._init_state_from_task(task, route=route, **kwargs)
 
     async def setup(self):
         """Setup agent and add FinalAnswerTool if not present."""

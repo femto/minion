@@ -10,8 +10,8 @@ to perform web automation tasks.
 import asyncio
 
 from minion.agents import CodeAgent
-from minion.tools.browser import BrowserToolset
 from minion.agents.tool_calling_agent import ToolCallingAgent
+from minion.tools.browser import BrowserToolset
 from minion.main.input import Input
 
 
@@ -102,7 +102,9 @@ You have access to these browser tools - use them directly:
 When you have completed the task, use final_answer(answer) to report your findings.
 """
 
-        agent = await CodeAgent.create(
+        # Use ToolCallingAgent which now uses raw_minion route by default
+        # raw_minion supports OpenAI-style function calling via LmpActionNode
+        agent = await ToolCallingAgent.create(
             name="BrowserAgent",
             tools=toolset.tools,
             llm="claude-sonnet-4-5",  # Or any compatible model
