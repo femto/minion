@@ -240,7 +240,7 @@ class AzureAnthropicProvider(BaseProvider):
             async with self.client.messages.stream(**params) as stream:
                 async for text in stream.text_stream:
                     full_content += text
-                    log_llm_stream(text)
+                    # log_llm_stream(text)  # Disabled: causes duplicate output in streaming mode
 
                     # Client-side stop sequence detection
                     for stop_seq in stop_sequences:
@@ -287,7 +287,7 @@ class AzureAnthropicProvider(BaseProvider):
             async with self.client.messages.stream(**params) as stream:
                 async for text in stream.text_stream:
                     full_content += text
-                    log_llm_stream(text)
+                    # log_llm_stream(text)  # Disabled: causes duplicate output in streaming mode
 
                     # Client-side stop sequence detection
                     for stop_seq in stop_sequences:
