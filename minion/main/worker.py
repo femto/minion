@@ -36,7 +36,6 @@ from minion.main.minion import (
     MINION_REGISTRY,
     WORKER_MINIONS,
     Minion,
-    register_minion,
     register_worker_minion,
     RESULT_STRATEGY_REGISTRY,
 )
@@ -79,7 +78,6 @@ class WorkerMinion(Minion):
     pass
 
 @register_worker_minion
-@register_minion("raw_minion")
 class RawMinion(WorkerMinion):
     """Raw minion that directly queries LLM without any prompt processing or modifications, supports tool calling"""
 

@@ -32,7 +32,7 @@ class ToolCallingAgent(BaseAgent):
     """
 
     # Default route for tool calling - RawMinion supports function calling via LmpActionNode
-    default_route: str = "raw_minion"
+    default_route: str = "raw"
 
     def _init_state_from_task(self, task: Union[str, Input], route: Optional[str] = None, **kwargs) -> None:
         """
