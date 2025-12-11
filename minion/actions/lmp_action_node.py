@@ -354,15 +354,23 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
                 
                 # 立即 yield 工具响应
                 from minion.main.action_step import StreamChunk
+
+                # Check if this is the final_answer tool
+                is_final = function_name == "final_answer"
+
                 tool_response_chunk = StreamChunk(
                     content=f"\n📊 工具执行结果: {str(result)}\n",
-                    chunk_type="tool_response",
+                    chunk_type="tool_response" if not is_final else "final_answer",
                     metadata={
                         "tool_call_id": tool_call_id,
                         "tool_name": function_name,
                         "tool_result": str(result)
                     }
                 )
+                # Set is_final_answer flag for final_answer tool
+                if is_final:
+                    tool_response_chunk.is_final_answer = True
+
                 yield tool_response_chunk
                 
             except Exception as e:

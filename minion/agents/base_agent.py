@@ -483,14 +483,22 @@ class BaseAgent:
             step_kwargs = kwargs.copy()
             if selected_llm_provider is not None:
                 step_kwargs['llm'] = selected_llm_provider
+
+            should_break = False
             async for chunk in self._execute_step_stream(state, **step_kwargs):
                 action_step.add_chunk(chunk)
                 yield chunk
                 if hasattr(chunk,'is_final_answer') and chunk.is_final_answer:
                     action_step.is_final_answer = True
-            
+                    should_break = True  # Mark to break after streaming completes
+
             # 完成步骤
             result = action_step.to_agent_response()
+
+            # If final_answer was called during streaming, terminate
+            if should_break or action_step.is_final_answer:
+                self._streaming_manager.complete_current_step(is_final_answer=True)
+                break
             
             # 检查是否完成
             if self.is_done(result, state):
