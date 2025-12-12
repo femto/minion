@@ -283,3 +283,11 @@ class TaskMinion(WorkerMinion):
         """流式执行方法 - TaskMinion 暂不支持真正的流式输出，回退到普通执行"""
         result = await self.choose_minion_and_run()
         yield str(result)
+
+
+class CodeProblemMinion(PlanMinion):
+    "This is a coding problem which requires stragety thinking to solve it, you will first explore the stragety space then solve it"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.input.instruction = "This is a coding problem which requires stragety thinking to solve it, you will first explore the stragety space then solve it"
