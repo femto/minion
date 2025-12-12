@@ -37,6 +37,7 @@ from minion.main.minion import (
     WORKER_MINIONS,
     Minion,
     register_worker_minion,
+    register_minion_for_route,
     RESULT_STRATEGY_REGISTRY,
 )
 from minion.types.agent_response import AgentResponse
@@ -77,9 +78,13 @@ from minion.utils.template import construct_messages_from_template, construct_si
 class WorkerMinion(Minion):
     pass
 
-@register_worker_minion
+@register_minion_for_route("raw")
 class RawMinion(WorkerMinion):
-    """Raw minion that directly queries LLM without any prompt processing or modifications, supports tool calling"""
+    """Raw minion that directly queries LLM without any prompt processing or modifications, supports tool calling.
+
+    Note: This minion is NOT registered in WORKER_MINIONS intentionally - it should only be accessible
+    via explicit route lookup (e.g., ToolCallingAgent with route='raw'), not through Brain's smart route selection.
+    """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
