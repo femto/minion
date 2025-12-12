@@ -305,10 +305,20 @@ Provide a final XML structure that aligns seamlessly with both the XML and JSON 
             for tool_call in tool_calls:
                 tool_result = await self._execute_single_tool_call(tool_call, tools)
                 tool_results.append(tool_result)
-            
+
+            # 检查是否调用了 final_answer，如果是则不再递归调用 LLM
+            has_final_answer = any(
+                tc.get("function", {}).get("name") == "final_answer"
+                for tc in tool_calls
+            )
+
+            if has_final_answer:
+                # final_answer 已调用，直接结束，不再递归
+                return
+
             # 添加工具调用消息和结果到对话历史
             updated_messages = messages + [assistant_message] + tool_results
-            
+
             # 递归调用获取最终响应
             async for chunk in self._execute_stream_generator(updated_messages, **api_params):
                 yield chunk
