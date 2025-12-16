@@ -138,34 +138,6 @@ Check the startup log:
 INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
 ```
 
-## Python Environment Setup
-
-### Docker (Recommended)
-
-```bash
-docker build -t intercode-python -f docker/python.Dockerfile .
-```
-
-```python
-brain = Brain()  # Default uses docker
-```
-
-### RPYC (No Docker)
-
-```bash
-python docker/utils/python_server.py --port 3007
-```
-
-```python
-brain = Brain(python_env=RpycPythonEnv(port=3007))
-```
-
-### Local Python
-
-```python
-brain = Brain(python_env=LocalPythonEnv(verbose=False))
-```
-
 > **Warning**: Be cautious - LLM can generate potentially harmful code.
 
 ## Community and Support
