@@ -176,4 +176,4 @@ brain = Brain(python_env=LocalPythonEnv(verbose=False))
 
 WeChat Group (minion-agent discussion):
 
-<img src="docs/images/wechat.jpg" alt="WeChat Group" width="300">
+<img src="docs/images/wechat.png" alt="WeChat Group" width="300">
