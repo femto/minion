@@ -301,7 +301,7 @@ class BedrockAsyncProvider(BaseProvider):
                             if delta.get('type') == 'text_delta':
                                 text = delta.get('text', '')
                                 full_content += text
-                                log_llm_stream(text)
+                                # log_llm_stream(text)  # Disabled: causes duplicate output in streaming mode
 
                                 # 客户端检测 stop sequence
                                 # Bedrock 流式 API 可能不会在 stop sequence 处停止，需要手动检测
@@ -412,7 +412,7 @@ class BedrockAsyncProvider(BaseProvider):
                             if delta.get('type') == 'text_delta':
                                 text = delta.get('text', '')
                                 full_content += text
-                                log_llm_stream(text)
+                                # log_llm_stream(text)  # Disabled: causes duplicate output in streaming mode
 
                                 # 客户端检测 stop sequence
                                 for stop_seq in stop_sequences:

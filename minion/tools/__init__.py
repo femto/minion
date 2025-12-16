@@ -132,6 +132,33 @@ def __getattr__(name):
             _lazy_imports["SearchResult"] = SearchResult
         return _lazy_imports[name]
 
+    # Browser Toolset
+    if name in ("BrowserToolset", "create_browser_toolset"):
+        if "BrowserToolset" not in _lazy_imports:
+            try:
+                from .browser import BrowserToolset, create_browser_toolset
+                _lazy_imports["BrowserToolset"] = BrowserToolset
+                _lazy_imports["create_browser_toolset"] = create_browser_toolset
+                _lazy_imports["HAS_BROWSER_TOOLSET"] = True
+            except ImportError:
+                class BrowserToolset:
+                    """Dummy BrowserToolset when browser-use is not available."""
+                    def __init__(self, *args, **kwargs):
+                        raise ImportError("browser-use package is not available.")
+                    @staticmethod
+                    def is_available():
+                        return False
+                def create_browser_toolset(*args, **kwargs):
+                    raise ImportError("browser-use package is not available.")
+                _lazy_imports["BrowserToolset"] = BrowserToolset
+                _lazy_imports["create_browser_toolset"] = create_browser_toolset
+                _lazy_imports["HAS_BROWSER_TOOLSET"] = False
+        return _lazy_imports[name]
+
+    if name == "HAS_BROWSER_TOOLSET":
+        __getattr__("BrowserToolset")
+        return _lazy_imports.get("HAS_BROWSER_TOOLSET", False)
+
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -165,4 +192,8 @@ __all__ = [
     "WebSearchTool",
     "create_web_search_tool",
     "SearchResult",
+    # Browser Toolset exports
+    "BrowserToolset",
+    "create_browser_toolset",
+    "HAS_BROWSER_TOOLSET",
 ]

@@ -429,13 +429,13 @@ class BaseAgent:
         if stream:
             # 设置 stream_outputs 属性，供 UI 使用
             self.stream_outputs = True
-            # 返回异步迭代器
-            return self._run_stream(state, max_steps, kwargs, selected_llm_provider)
+            # 返回异步迭代器 - 使用 self.state 而不是原始 state 参数
+            return self._run_stream(self.state, max_steps, kwargs, selected_llm_provider)
         else:
             # 清除 stream_outputs 属性
             self.stream_outputs = False
-            # 一次性执行完成返回最终结果
-            return await self._run_complete(state, max_steps, kwargs, selected_llm_provider)
+            # 一次性执行完成返回最终结果 - 使用 self.state 而不是原始 state 参数
+            return await self._run_complete(self.state, max_steps, kwargs, selected_llm_provider)
 
     async def run_stream(self, 
                         task: Optional[Union[str, Input]] = None,
@@ -483,14 +483,22 @@ class BaseAgent:
             step_kwargs = kwargs.copy()
             if selected_llm_provider is not None:
                 step_kwargs['llm'] = selected_llm_provider
+
+            should_break = False
             async for chunk in self._execute_step_stream(state, **step_kwargs):
                 action_step.add_chunk(chunk)
                 yield chunk
                 if hasattr(chunk,'is_final_answer') and chunk.is_final_answer:
                     action_step.is_final_answer = True
-            
+                    should_break = True  # Mark to break after streaming completes
+
             # 完成步骤
             result = action_step.to_agent_response()
+
+            # If final_answer was called during streaming, terminate
+            if should_break or action_step.is_final_answer:
+                self._streaming_manager.complete_current_step(is_final_answer=True)
+                break
             
             # 检查是否完成
             if self.is_done(result, state):
@@ -1091,46 +1099,25 @@ Please provide the answer directly, without explaining why you couldn't complete
             return result.is_done()
         elif hasattr(result, 'terminated') or hasattr(result, 'is_final_answer'):
             return getattr(result, 'terminated', False) or getattr(result, 'is_final_answer', False)
-        
+
         # 检查5-tuple格式
         if isinstance(result, tuple) and len(result) >= 3:
             # 返回格式为 (response, score, terminated, truncated, info)
             terminated = result[2]
             return terminated
-        
+
         # 检查状态中的final_answer标志
         if state.is_final_answer:
             return True
-            
+
+        # 检查结果中是否包含 FINAL_ANSWER 标记（来自 final_answer 工具调用）
+        if hasattr(result, 'answer') and result.answer:
+            answer = str(result.answer)
+            if 'FINAL_ANSWER:' in answer:
+                return True
+
         return False
-    
-    def finalize(self, result: Any, state: AgentState) -> Any:
-        """
-        整理最终结果
-        Args:
-            result: 最后一步结果 (可以是5-tuple或AgentResponse)
-            state: 当前状态 (强类型AgentState)
-        Returns:
-            最终处理后的结果
-        """
-        # 检查状态中的final_answer_value
-        if state.final_answer_value is not None:
-            return state.final_answer_value
-            
-        # 检查AgentResponse类型
-        if hasattr(result, 'answer') and result.answer is not None:
-            return result.answer
-        elif hasattr(result, 'raw_response'):
-            return result.raw_response
-        
-        # 检查5-tuple格式
-        if isinstance(result, tuple) and len(result) > 0:
-            return result[0]  # 返回response部分
-        elif isinstance(result, dict):
-            return result.get("answer", result.get("final_answer"))  # 兼容旧格式
-            
-        return result
-    
+
     def _get_builtin_meta_tools(self) -> Dict[str, Any]:
         """获取内置的meta工具"""
         from ..tools.think_tool import ThinkTool
