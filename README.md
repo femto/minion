@@ -109,16 +109,27 @@ This allows you to:
 
 ### Environment Variables
 
-Configurations support environment variable substitution using `${VAR_NAME}` syntax:
+**Variable Substitution**: Use `${VAR_NAME}` syntax to reference environment variables directly in config values:
+
+```yaml
+models:
+  "default":
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "${OPENAI_BASE_URL}"
+    api_type: "openai"
+    model: "gpt-4.1"
+    temperature: 0.3
+```
+
+**Loading .env Files**: Use `env_file` to load environment variables from `.env` files (follows Docker `.env` file format):
 
 ```yaml
 env_file:
   - .env
   - .env.local
-
-environment:
-  SOME_VAR: "${MY_ENV_VAR}"
 ```
+
+Variables defined in these files will be available for `${VAR_NAME}` substitution throughout the configuration.
 
 ### MINION_ROOT Detection
 
