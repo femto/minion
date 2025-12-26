@@ -29,15 +29,6 @@ models:
     model: "deepseek-chat"
     temperature: 0
 ```
-
-Edit `config/.env`:
-
-```bash
-DEFAULT_API_KEY=sk-xxx
-DEFAULT_BASE_URL=base_url
-DEFAULT_MODEL=deepseek-chat
-```
-
 ## Quick Start
 
 ### Using CodeAgent (Recommended)
