@@ -26,7 +26,7 @@ models:
     api_type: "openai"
     base_url: "${DEFAULT_BASE_URL}"
     api_key: "${DEFAULT_API_KEY}"
-    model: "deepseek-chat"
+    model: "gpt-4.1"
     temperature: 0
 ```
 
