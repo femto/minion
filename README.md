@@ -29,6 +29,9 @@ models:
     model: "deepseek-chat"
     temperature: 0
 ```
+
+See [Configuration](#configuration) for more details on configuration options.
+
 ## Quick Start
 
 ### Using CodeAgent (Recommended)
