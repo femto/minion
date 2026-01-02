@@ -153,4 +153,4 @@ INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
 
 WeChat Group (minion-agent discussion):
 
-<img src="docs/images/wechat.png" alt="WeChat Group" width="300">
+<img src="docs/images/wechat.jpg" alt="WeChat Group" width="300">
