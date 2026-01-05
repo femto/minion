@@ -17,18 +17,13 @@
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │ Skill Loader │───▶│ Skill Parser │───▶│  Skill Tool  │ │
+│  │ Skill Loader │───▶│ Skill Parser │───▶│    Skill     │ │
 │  └──────────────┘    └──────────────┘    └──────────────┘ │
 │         │                                         │         │
-│         │                                         ▼         │
-│         │                               ┌──────────────┐   │
-│         └──────────────────────────────▶│ Brain Router │   │
-│                                         └──────────────┘   │
-│                                                 │           │
-│                                                 ▼           │
-│                                       ┌──────────────┐     │
-│                                       │ SkillMinion  │     │
-│                                       └──────────────┘     │
+│         ▼                                         ▼         │
+│  ┌──────────────┐                       ┌──────────────┐   │
+│  │SkillRegistry │──────────────────────▶│ Brain/Agent  │   │
+│  └──────────────┘                       └──────────────┘   │
 │                                                 │           │
 │                       ┌─────────────────────────┼──────────┤
 │                       ▼                         ▼           │
@@ -160,60 +155,23 @@ class SkillTool(AsyncBaseTool):
         # 4. 返回结果
 ```
 
-### 3. SkillMinion (`minion/main/skill_minion.py`)
+### 3. Skill Execution
 
-专门执行技能任务的Minion：
+> **Note**: The original design included a separate `SkillMinion` class, but the current implementation uses a simpler approach where skills are loaded and their prompts are injected directly into the agent context. This simplification reduces complexity while maintaining the core functionality.
+
+Skills are executed through the existing Brain/Agent infrastructure:
 
 ```python
-class SkillMinion:
-    """Minion specialized for skill execution"""
+# Skills are loaded via SkillLoader and SkillRegistry
+from minion.skills import SkillLoader, SkillRegistry
 
-    def __init__(
-        self,
-        llm: LLMProvider,
-        skills: List[Skill],
-        python_executor: Optional[PythonExecutor] = None
-    ):
-        self.llm = llm
-        self.skills = {s.metadata.name: s for s in skills}
-        self.executor = python_executor or AsyncPythonExecutor()
+# Load skills
+loader = SkillLoader()
+skills = loader.load_all_skills()
 
-    async def execute(
-        self,
-        task: str,
-        skill_name: Optional[str] = None,
-        **kwargs
-    ) -> AgentResponse:
-        """Execute task using appropriate skill"""
-
-        # 1. 选择合适的skill（如果未指定）
-        if not skill_name:
-            skill_name = await self._select_skill(task)
-
-        # 2. 加载skill context
-        skill = self.skills[skill_name]
-        context = self._prepare_skill_context(skill)
-
-        # 3. 构造messages with skill instructions
-        messages = self._build_messages(task, context)
-
-        # 4. 执行LLM + tools
-        response = await self.llm.chat_async(messages, tools=self._get_skill_tools(skill))
-
-        # 5. 处理tool calls（如Python execution）
-        if response.tool_calls:
-            results = await self._execute_tool_calls(response.tool_calls, skill)
-            return AgentResponse(
-                output=results,
-                messages=messages + [response],
-                terminated=True
-            )
-
-        return AgentResponse(
-            output=response.content,
-            messages=messages + [response],
-            terminated=True
-        )
+# Get skill prompt for injection into agent context
+skill = skills.get("data-analysis")
+prompt = skill.get_prompt()  # Returns skill instructions with base directory
 ```
 
 ### 4. Brain Integration (`minion/main/brain.py`)
@@ -225,27 +183,22 @@ class Brain:
     def __init__(self, ...):
         # ... existing code ...
 
-        # Load skills
-        self.skill_loader = SkillLoader()
-        self.skills = self.skill_loader.load_all_skills()
-
-        # Create skill minion
-        self.skill_minion = SkillMinion(
-            llm=self.llm,
-            skills=list(self.skills.values())
-        )
+        # Load skills via SkillRegistry
+        self.skill_registry = SkillRegistry()
+        self.skills = self.skill_registry.get_all_skills()
 
     async def step(self, messages, route: Optional[str] = None, **kwargs):
         # ... existing routing logic ...
 
         if route == 'skill':
-            # Use skill minion
+            # Load skill and inject into context
             skill_name = kwargs.get('skill_name')
-            return await self.skill_minion.execute(
-                task=messages[-1].content,
-                skill_name=skill_name,
-                **kwargs
-            )
+            skill = self.skills.get(skill_name)
+            if skill:
+                # Inject skill prompt into system context
+                skill_prompt = skill.get_prompt()
+                # Continue with normal execution using skill context
+                ...
 
         # ... rest of routing logic ...
 ```
@@ -372,9 +325,9 @@ permissions:
 
 ### Phase 1: Basic Implementation (Current)
 - [x] Design skill format
-- [ ] Implement SkillLoader
-- [ ] Implement SkillTool
-- [ ] Implement SkillMinion
+- [x] Implement SkillLoader
+- [x] Implement Skill data class
+- [x] Implement SkillRegistry
 - [ ] Brain integration
 - [ ] Basic CLI commands
 
