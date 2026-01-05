@@ -38,7 +38,14 @@ dependencies = [
     "astunparse",
     "azure-identity",
     "azure-ai-inference",
-    "mcp"
+    "mcp",
+    "tiktoken",
+    "rpyc",
+    "networkx",
+    "rich",
+    "gymnasium",
+    "pandas",
+    "openai"
 ]
 
 [project.urls]
@@ -49,7 +56,7 @@ Repository = "https://github.com/femto/minion.git"
 minion = "minion.cli:app"
 
 [project.optional-dependencies]
-dev = ["pytest", "black", "ruff", "pytest-asyncio"]
+dev = ["pytest", "black", "ruff", "pytest-asyncio", "httpx>=0.24.0", "beautifulsoup4>=4.12.0"]
 google = ["google-adk", "litellm"]
 browser = ["browser-use>=0.1.0"]
 gradio = ["gradio>=4.0.0"]
