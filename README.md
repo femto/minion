@@ -15,10 +15,49 @@ Minion is Agent's Brain. Minion is designed to execute any type of queries, offe
 
 ## Installation
 
+### Basic Installation
+
 ```bash
-git clone https://github.com/femto/minion.git && cd minion && pip install -r requirements.txt
+git clone https://github.com/femto/minion.git && cd minion
+pip install -e .
 cp config/config.yaml.example config/config.yaml
 cp config/.env.example config/.env
+```
+
+### Optional Dependencies
+
+The project uses optional dependency groups to avoid installing unnecessary packages. Install only what you need:
+
+```bash
+# Development tools (pytest, black, ruff)
+pip install -e ".[dev]"
+
+# Google ADK and LiteLLM support
+pip install -e ".[google]"
+
+# Browser automation (browser-use)
+pip install -e ".[browser]"
+
+# Gradio web UI
+pip install -e ".[gradio]"
+
+# UTCP support
+pip install -e ".[utcp]"
+
+# AWS Bedrock support
+pip install -e ".[bedrock]"
+
+# Anthropic Claude support
+pip install -e ".[anthropic]"
+
+# Web tools (httpx, beautifulsoup4, etc.)
+pip install -e ".[web]"
+
+# Install ALL optional dependencies
+pip install -e ".[all]"
+
+# You can also combine multiple groups:
+pip install -e ".[dev,gradio,anthropic]"
 ```
 
 Edit `config/config.yaml`:
