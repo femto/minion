@@ -7,6 +7,25 @@ from minion.main.worker import (
     OptillmMinion,
 )
 from minion.main.async_python_executor import AsyncPythonExecutor
+from minion.main.tool_hooks import (
+    PermissionDecision,
+    PreToolUseResult,
+    PostToolUseResult,
+    ToolCallInfo,
+    PreToolUseHook,
+    PostToolUseHook,
+    HookMatcher,
+    PostHookMatcher,
+    HookConfig,
+    ToolHooks,
+    NoOpToolHooks,
+    HookedTool,
+    wrap_tools_with_hooks,
+    create_auto_accept_hook,
+    create_auto_deny_hook,
+    create_dangerous_command_check_hook,
+    create_logging_hook,
+)
 
 # LDBMinion is lazily imported to avoid loading transformers/torch at startup
 # Use get_ldb_minion() to access it when needed
@@ -29,5 +48,23 @@ __all__ = [
     'OptillmMinion',
     'AsyncPythonExecutor',
     'get_ldb_minion',
+    # Tool hooks
+    'PermissionDecision',
+    'PreToolUseResult',
+    'PostToolUseResult',
+    'ToolCallInfo',
+    'PreToolUseHook',
+    'PostToolUseHook',
+    'HookMatcher',
+    'PostHookMatcher',
+    'HookConfig',
+    'ToolHooks',
+    'NoOpToolHooks',
+    'HookedTool',
+    'wrap_tools_with_hooks',
+    'create_auto_accept_hook',
+    'create_auto_deny_hook',
+    'create_dangerous_command_check_hook',
+    'create_logging_hook',
 ]
 
