@@ -181,7 +181,13 @@ class CodeAgent(BaseAgent):
         if self.brain and self.python_executor:
             self.brain.python_env = self.python_executor
 
-        self.add_tool(FinalAnswerTool())
+        # Add FinalAnswerTool if not already present (avoid duplicates)
+        has_final_answer = any(
+            getattr(tool, 'name', None) == 'final_answer'
+            for tool in self.tools
+        )
+        if not has_final_answer:
+            self.add_tool(FinalAnswerTool())
 
         # Send tools to the python executor
         self._update_executor_tools()

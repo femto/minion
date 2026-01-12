@@ -28,6 +28,18 @@ from minion.types.agent_response import AgentResponse
 from minion.utils.answer_extraction import extract_python
 
 
+def _deduplicate_tools(tools_list):
+    """Deduplicate tools by name, keeping first occurrence."""
+    seen_names = set()
+    result = []
+    for tool in tools_list:
+        name = getattr(tool, 'name', None) or type(tool).__name__
+        if name not in seen_names:
+            seen_names.add(name)
+            result.append(tool)
+    return result
+
+
 @register_worker_minion
 class PythonMinion(WorkerMinion):
     "This problem requires writing code to solve it, write python code to solve it"
@@ -681,7 +693,7 @@ Please fix the error and try again."""
 
         error = ""
         previous_turns_history = self._get_history()  # From agent.state.history (previous turns)
-        tools = self.brain.tools + self.input.tools
+        tools = _deduplicate_tools(self.brain.tools + self.input.tools)
 
         for iteration in range(self.max_iterations):
             # Construct messages for this iteration including previous turns history
@@ -689,7 +701,7 @@ Please fix the error and try again."""
 
             # Get LLM response
             node = LmpActionNode(llm=self.brain.llm)
-            tools = (self.input.tools or []) + (self.brain.tools or [])
+            tools = _deduplicate_tools((self.input.tools or []) + (self.brain.tools or []))
 
             # Add stop sequences for code execution
             stop_sequences = ["<end_code>"]
@@ -927,7 +939,7 @@ Please fix the error and try again."""
 
         error = ""
         previous_turns_history = self._get_history()
-        tools = self.brain.tools + self.input.tools
+        tools = _deduplicate_tools(self.brain.tools + self.input.tools)
 
         for iteration in range(self.max_iterations):
             # Emit step start event
@@ -942,7 +954,7 @@ Please fix the error and try again."""
 
             # Get LLM response with streaming
             node = LmpActionNode(llm=self.brain.llm)
-            tools = (self.input.tools or []) + (self.brain.tools or [])
+            tools = _deduplicate_tools((self.input.tools or []) + (self.brain.tools or []))
             stop_sequences = ["<end_code>"]
 
             try:
