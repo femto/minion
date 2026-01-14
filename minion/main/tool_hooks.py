@@ -23,6 +23,8 @@ from typing import (
 import fnmatch
 import logging
 
+from minion.tools import AsyncBaseTool
+
 logger = logging.getLogger(__name__)
 
 
@@ -287,12 +289,14 @@ def create_logging_hook() -> PostToolUseHook:
 # Tool Wrapper for Hook Integration
 # ============================================================================
 
-class HookedTool:
+class HookedTool(AsyncBaseTool):
     """
     Wrapper that adds pre/post-tool-use hooks to any tool.
 
     This wrapper intercepts tool calls and runs configured hooks before
     and after executing the actual tool.
+
+    Inherits from AsyncBaseTool so the executor properly awaits tool calls.
     """
 
     def __init__(
@@ -302,13 +306,14 @@ class HookedTool:
         tools_registry: Optional[Dict[str, Any]] = None,
         tool_use_id_generator: Optional[Callable[[], str]] = None,
     ):
+        # Don't call super().__init__() - we manage our own state
         self._tool = tool
         self._hooks = hooks
         self._tools_registry = tools_registry or {}
         self._id_generator = tool_use_id_generator or self._default_id_generator
         self._call_counter = 0
 
-        # Copy tool metadata
+        # Copy tool metadata from wrapped tool
         self.name = getattr(tool, 'name', type(tool).__name__)
         self.description = getattr(tool, 'description', '')
         self.inputs = getattr(tool, 'inputs', {})
@@ -378,24 +383,7 @@ class HookedTool:
 
         return final_result
 
-    def forward(self, *args, **kwargs) -> Any:
-        """Execute the tool with hook checks (sync wrapper)."""
-        import asyncio
-
-        try:
-            loop = asyncio.get_running_loop()
-            try:
-                import nest_asyncio
-                nest_asyncio.apply()
-                return asyncio.get_event_loop().run_until_complete(
-                    self.forward_async(*args, **kwargs)
-                )
-            except ImportError:
-                return self._forward_sync(*args, **kwargs)
-        except RuntimeError:
-            return asyncio.run(self.forward_async(*args, **kwargs))
-
-    async def forward_async(self, *args, **kwargs) -> Any:
+    async def forward(self, *args, **kwargs) -> Any:
         """Execute the tool with async hook checks."""
         import asyncio
 
@@ -445,13 +433,11 @@ class HookedTool:
 
         return result
 
-    def _forward_sync(self, *args, **kwargs) -> Any:
-        """Synchronous forward when async is not available."""
-        logger.warning(f"Running {self.name} without async hook support")
-        return self._tool.forward(*args, **kwargs)
+    # Keep backward compatibility alias
+    forward_async = forward
 
-    def __call__(self, *args, **kwargs) -> Any:
-        return self.forward(*args, **kwargs)
+    async def __call__(self, *args, **kwargs) -> Any:
+        return await self.forward(*args, **kwargs)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._tool, name)
