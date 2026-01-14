@@ -187,6 +187,10 @@ INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
 
 > **Warning**: Be cautious - LLM can generate potentially harmful code.
 
+## Related Projects
+
+- [minion-agent](https://github.com/femto/minion-agent) Production agent system with multi-agent coordination, browser automation, and research capabilities
+
 ## Community and Support
 
 [![Discord](https://dcbadge.limes.pink/api/server/HUC6xEK9aT?style=flat)](https://discord.gg/HUC6xEK9aT)
