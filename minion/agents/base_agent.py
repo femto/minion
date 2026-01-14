@@ -1,5 +1,8 @@
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import Dict, Any, List, Optional, Tuple, Union, TYPE_CHECKING
 from dataclasses import dataclass, field
+
+if TYPE_CHECKING:
+    from ..main.tool_hooks import HookConfig
 import uuid
 import asyncio
 import logging
@@ -27,7 +30,8 @@ class BaseAgent:
     name: str = "base_agent"
     tools: List[BaseTool] = field(default_factory=list)
     brain: Optional[Brain] = None
-    
+    hooks: Optional["HookConfig"] = None  # Pre/post tool use hooks for permission control
+
     # LLM configuration with strong typing support
     llm: Optional[Union[BaseProvider, str, ModelType]] = None  # Primary LLM provider, model name, or ModelType
     llms: Optional[Dict[str, Union[BaseProvider, str, ModelType]]] = None  # Multiple LLMs keyed by string
@@ -157,6 +161,12 @@ class BaseAgent:
         if toolset_tools:
             self.tools.extend(toolset_tools)
             logger.info(f"Added {len(toolset_tools)} toolset tools to agent")
+
+        # Apply hooks to all tools if configured
+        if self.hooks and (self.hooks.pre_tool_use or self.hooks.post_tool_use):
+            from ..main.tool_hooks import wrap_tools_with_hooks
+            logger.info(f"Applying hooks to {len(self.tools)} tools")
+            self.tools = wrap_tools_with_hooks(self.tools, self.hooks)
 
         # Auto-convert raw functions to appropriate tool types
         self._convert_raw_functions_to_tools()
