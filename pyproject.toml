@@ -40,7 +40,8 @@ dependencies = [
     "azure-ai-inference",
     "mcp",
     "tiktoken",
-    "networkx"
+    "networkx",
+    "openai"
 ]
 
 [project.urls]
