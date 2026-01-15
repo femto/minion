@@ -106,3 +106,4 @@ tracing_log
 uploads
 .minion
 .mcp.json
+.zed
