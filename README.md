@@ -24,42 +24,6 @@ cp config/config.yaml.example config/config.yaml
 cp config/.env.example config/.env
 ```
 
-### Optional Dependencies
-
-The project uses optional dependency groups to avoid installing unnecessary packages. Install only what you need:
-
-```bash
-# Development tools (pytest, black, ruff)
-pip install -e ".[dev]"
-
-# Google ADK and LiteLLM support
-pip install -e ".[google]"
-
-# Browser automation (browser-use)
-pip install -e ".[browser]"
-
-# Gradio web UI
-pip install -e ".[gradio]"
-
-# UTCP support
-pip install -e ".[utcp]"
-
-# AWS Bedrock support
-pip install -e ".[bedrock]"
-
-# Anthropic Claude support
-pip install -e ".[anthropic]"
-
-# Web tools (httpx, beautifulsoup4, etc.)
-pip install -e ".[web]"
-
-# Install ALL optional dependencies
-pip install -e ".[all]"
-
-# You can also combine multiple groups:
-pip install -e ".[dev,gradio,anthropic]"
-```
-
 Edit `config/config.yaml`:
 
 ```yaml
@@ -200,3 +164,39 @@ INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
 WeChat Group (minion-agent discussion):
 
 <img src="docs/images/wechat.jpg" alt="WeChat Group" width="300">
+
+## Optional Dependencies
+
+The project uses optional dependency groups to avoid installing unnecessary packages. Install only what you need:
+
+```bash
+# Development tools (pytest, black, ruff)
+pip install -e ".[dev]"
+
+# Google ADK and LiteLLM support
+pip install -e ".[google]"
+
+# Browser automation (browser-use)
+pip install -e ".[browser]"
+
+# Gradio web UI
+pip install -e ".[gradio]"
+
+# UTCP support
+pip install -e ".[utcp]"
+
+# AWS Bedrock support
+pip install -e ".[bedrock]"
+
+# Anthropic Claude support
+pip install -e ".[anthropic]"
+
+# Web tools (httpx, beautifulsoup4, etc.)
+pip install -e ".[web]"
+
+# Install ALL optional dependencies
+pip install -e ".[all]"
+
+# You can also combine multiple groups:
+pip install -e ".[dev,gradio,anthropic]"
+```
