@@ -43,7 +43,7 @@ See [Configuration](#configuration) for more details on configuration options.
 ### Using CodeAgent (Recommended)
 
 ```python
-from minion.main.agent import CodeAgent
+from minion.agents.code_agent import CodeAgent
 
 # Create agent
 agent = await CodeAgent.create(
