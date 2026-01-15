@@ -1,46 +1,120 @@
-# Full Example: https://github.com/geekan/MetaGPT/blob/main/config/config2.example.yaml
-# Reflected Code: https://github.com/geekan/MetaGPT/blob/main/metagpt/config2.py
-# Config Docs: https://docs.deepwisdom.ai/main/en/guide/get_started/configuration.html
+# Minion Configuration Example
+# Copy this file to config.yaml and fill in your credentials
+#
+# Environment variable substitution: Use ${VAR_NAME} syntax
+# The values will be loaded from environment or .env files
 
+# ============================================================
+# Environment Variables (inline definition)
+# ============================================================
 environment:
   ENV1: val1
   ENV2: val2
   ENV3: val3
 
+# ============================================================
+# Load environment variables from .env files
+# Files are loaded in order, later files override earlier ones
+# ============================================================
 env_file:
   - .env
   - .env.local
 
-llm:
-  api_key: "${LLM_API_KEY}"
-  model: "deepseek-chat"
-  base_url: "${LLM_BASE_URL}"
-
+# ============================================================
+# Model Configurations
+# Supported api_type values:
+#   - openai: OpenAI API or compatible endpoints (LocalAI, vLLM, etc.)
+#   - azure: Azure OpenAI Service
+#   - azure_inference: Azure AI Model Inference (DeepSeek, Phi, etc.)
+#   - azure_anthropic: Azure hosted Anthropic models
+#   - bedrock: AWS Bedrock (synchronous)
+#   - bedrock_async: AWS Bedrock (asynchronous, better performance)
+# ============================================================
 models:
+  # Default model - used when no specific model is specified
   "default":
     api_type: "openai"
     base_url: "${DEFAULT_BASE_URL}"
     api_key: "${DEFAULT_API_KEY}"
     model: "${DEFAULT_MODEL}"
     temperature: 0
-  "gpt-4-0125":
-    api_type: "openai"
-    base_url: "https://oneapi.deepwisdom.ai/v1"
-    api_key: "sk-example-key"
-    temperature: 0
-  "claude-3-5-sonnet-20240620":
-    api_type: "openai"
-    base_url: "${CLAUDE_BASE_URL}"
-    api_key: "${CLAUDE_API_KEY}"
-    temperature: 0.7
-  "deepseek-r1":
-   api_type: "azure_inference"  # or azure / ollama / groq etc.
-   api_key: "YOUR_KEY"
-   base_url: "YOUR_URL"
-   model: "DeepSeek-R1"
-   temperature: 0.1
 
-  # AWS Bedrock models (sync version)
+  # --------------------------------------------------------
+  # OpenAI API Examples
+  # --------------------------------------------------------
+  "gpt-4o":
+    api_type: "openai"
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o"
+    temperature: 0
+
+  "gpt-4.1":
+    api_type: "openai"
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4.1"
+    temperature: 0
+
+  # --------------------------------------------------------
+  # Azure OpenAI Examples
+  # --------------------------------------------------------
+  "azure-gpt-4o":
+    api_type: "azure"
+    api_key: "${AZURE_OPENAI_API_KEY}"
+    base_url: "${AZURE_OPENAI_ENDPOINT}"  # e.g., https://your-resource.openai.azure.com/
+    api_version: "2024-06-01"
+    model: "gpt-4o"  # deployment name
+    temperature: 0
+
+  # --------------------------------------------------------
+  # Azure AI Model Inference (DeepSeek, Phi, etc.)
+  # --------------------------------------------------------
+  "deepseek-r1":
+    api_type: "azure_inference"
+    api_key: "${AZURE_AI_API_KEY}"
+    base_url: "${AZURE_AI_ENDPOINT}"  # e.g., https://your-resource.services.ai.azure.com/models
+    model: "DeepSeek-R1"
+    temperature: 0.1
+
+  "phi-4":
+    api_type: "azure_inference"
+    api_key: "${AZURE_AI_API_KEY}"
+    base_url: "${AZURE_AI_ENDPOINT}"
+    model: "Phi-4"
+    api_version: "2024-05-01-preview"
+    temperature: 0.1
+
+  # --------------------------------------------------------
+  # Azure Anthropic (Claude models hosted on Azure)
+  # --------------------------------------------------------
+  "claude-sonnet-4-5":
+    api_type: "azure_anthropic"
+    api_key: "${AZURE_ANTHROPIC_API_KEY}"
+    base_url: "${AZURE_ANTHROPIC_ENDPOINT}"  # e.g., https://your-resource.services.ai.azure.com/anthropic/
+    model: "claude-sonnet-4-5"
+    temperature: 0.1
+
+  "claude-opus-4-5":
+    api_type: "azure_anthropic"
+    api_key: "${AZURE_ANTHROPIC_API_KEY}"
+    base_url: "${AZURE_ANTHROPIC_ENDPOINT}"
+    model: "claude-opus-4-5"
+    temperature: 0.1
+
+  # --------------------------------------------------------
+  # Anthropic Direct API
+  # --------------------------------------------------------
+  "claude-direct":
+    api_type: "openai"
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com/v1/"
+    model: "claude-3-5-sonnet-20241022"
+    temperature: 0.1
+
+  # --------------------------------------------------------
+  # AWS Bedrock (Synchronous)
+  # --------------------------------------------------------
   "claude-3-5-sonnet-bedrock":
     api_type: "bedrock"
     access_key_id: "${AWS_ACCESS_KEY_ID}"
@@ -57,15 +131,9 @@ models:
     model: "anthropic.claude-3-5-haiku-20241022-v1:0"
     temperature: 0.7
 
-  "claude-3-opus-bedrock":
-    api_type: "bedrock"
-    access_key_id: "${AWS_ACCESS_KEY_ID}"
-    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
-    region: "us-east-1"
-    model: "anthropic.claude-3-opus-20240229-v1:0"
-    temperature: 0.7
-
-  # AWS Bedrock models (async version - better performance)
+  # --------------------------------------------------------
+  # AWS Bedrock (Asynchronous - better performance)
+  # --------------------------------------------------------
   "claude-3-5-sonnet-bedrock-async":
     api_type: "bedrock_async"
     access_key_id: "${AWS_ACCESS_KEY_ID}"
@@ -74,25 +142,60 @@ models:
     model: "anthropic.claude-3-5-sonnet-20240620-v1:0"
     temperature: 0.7
 
-  "claude-3-5-haiku-bedrock-async":
+  "haiku":
     api_type: "bedrock_async"
     access_key_id: "${AWS_ACCESS_KEY_ID}"
     secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
     region: "us-east-1"
-    model: "anthropic.claude-3-5-haiku-20241022-v1:0"
-    temperature: 0.7
+    model: "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    temperature: 0.1
 
-  "claude-3-opus-bedrock-async":
+  "sonnet":
     api_type: "bedrock_async"
     access_key_id: "${AWS_ACCESS_KEY_ID}"
     secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
     region: "us-east-1"
-    model: "anthropic.claude-3-opus-20240229-v1:0"
-    temperature: 0.7
+    model: "global.anthropic.claude-sonnet-4-20250514-v1:0"
+    temperature: 0.1
+
+  # --------------------------------------------------------
+  # Local Models (Ollama)
+  # --------------------------------------------------------
+  "llama3.2":
+    api_type: "openai"
+    api_key: "ollama"  # any value works for Ollama
+    base_url: "http://localhost:11434/v1"
+    model: "llama3.2"
+    temperature: 0
+
+  "llama3.1":
+    api_type: "openai"
+    api_key: "ollama"
+    base_url: "http://localhost:11434/v1"
+    model: "llama3.1"
+    temperature: 0
+
+  # --------------------------------------------------------
+  # Google Gemini
+  # --------------------------------------------------------
+  "gemini-2.0-flash-exp":
+    api_type: "openai"
+    api_key: "${GOOGLE_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/"
+    model: "gemini-2.0-flash-exp"
+    temperature: 0.1
+
+# ============================================================
+# ELL Configuration (optional - for logging/tracing)
+# ============================================================
 ell:
-  store: 'logs'
-  autocommit:true
-  verbose:true
+  store: "${ELL_LOG_DIR}"  # or just 'logs'
+  autocommit: true
+  verbose: true
+
+# ============================================================
+# Mem0 Configuration (optional - for memory/RAG features)
+# ============================================================
 mem0:
   version: "v1.1"
   llm:
@@ -118,11 +221,10 @@ mem0:
       on_disk: true
       embedding_model_dims: 768
 
-#  graph_store:
-#    provider: "neo4j"
-#    config:
-#      url: "${NEO4J_URL}"
-#      username: "${NEO4J_USERNAME}"
-#      password: "${NEO4J_PASSWORD}"
-
-
+  # Uncomment to enable graph store
+  # graph_store:
+  #   provider: "neo4j"
+  #   config:
+  #     url: "${NEO4J_URL}"
+  #     username: "${NEO4J_USERNAME}"
+  #     password: "${NEO4J_PASSWORD}"

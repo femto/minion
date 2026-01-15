@@ -131,11 +131,32 @@ models:
 
 ```yaml
 env_file:
-  - .env
-  - .env.local
+  - .env        # loaded first
+  - .env.local  # loaded second, can override values from .env
 ```
 
-Variables defined in these files will be available for `${VAR_NAME}` substitution throughout the configuration.
+**Inline Environment Variables**: Define environment variables directly in config:
+
+```yaml
+environment:
+  MY_VAR: "value"
+  ANOTHER_VAR: "another_value"
+```
+
+Variables from all sources (system environment, `.env` files, inline `environment`) will be available for `${VAR_NAME}` substitution throughout the configuration.
+
+### Supported API Types
+
+| api_type | Description | Required Fields |
+|----------|-------------|-----------------|
+| `openai` | OpenAI API or compatible (Ollama, vLLM, LocalAI) | `api_key`, `base_url`, `model` |
+| `azure` | Azure OpenAI Service | `api_key`, `base_url`, `api_version`, `model` |
+| `azure_inference` | Azure AI Model Inference (DeepSeek, Phi) | `api_key`, `base_url`, `model` |
+| `azure_anthropic` | Azure hosted Anthropic models | `api_key`, `base_url`, `model` |
+| `bedrock` | AWS Bedrock (sync) | `access_key_id`, `secret_access_key`, `region`, `model` |
+| `bedrock_async` | AWS Bedrock (async, better performance) | `access_key_id`, `secret_access_key`, `region`, `model` |
+
+See [config/config.yaml.example](config/config.yaml.example) for complete examples of all supported providers.
 
 ### MINION_ROOT Detection
 
