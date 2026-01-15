@@ -38,7 +38,8 @@ dependencies = [
     "astunparse",
     "azure-identity",
     "azure-ai-inference",
-    "mcp"
+    "mcp",
+    "tiktoken"
 ]
 
 [project.urls]

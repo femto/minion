@@ -22,7 +22,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from minion.agents.minion_tool_calling_agent import create_tool_calling_agent
+from minion.agents.tool_calling_agent import ToolCallingAgent
 from minion.tools.default_tools import FinalAnswerTool
 from minion.tools.base_tool import BaseTool
 
@@ -115,10 +115,10 @@ async def demo_basic_usage():
     final_answer = FinalAnswerTool()
     
     # Create agent
-    agent = create_tool_calling_agent(
+    agent = ToolCallingAgent(
         tools=[calculator, weather, final_answer],
         name="demo_agent",
-        model="gpt-4o-mini"
+        llm="gpt-4o-mini"
     )
     
     try:
@@ -177,11 +177,10 @@ async def demo_streaming():
     final_answer = FinalAnswerTool()
     
     # Create agent
-    agent = create_tool_calling_agent(
+    agent = ToolCallingAgent(
         tools=[calculator, final_answer],
         name="streaming_agent",
-        model="gpt-4o-mini",
-        stream_outputs=True
+        llm="gpt-4o-mini"
     )
     
     try:
@@ -230,10 +229,10 @@ async def demo_without_final_answer():
     
     # Create agent WITHOUT final_answer tool
     calculator = CalculatorTool()
-    agent = create_tool_calling_agent(
+    agent = ToolCallingAgent(
         tools=[calculator],  # No final_answer tool
         name="no_final_agent",
-        model="gpt-4o-mini"
+        llm="gpt-4o-mini"
     )
     
     try:

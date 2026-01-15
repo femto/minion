@@ -7,6 +7,7 @@ This script demonstrates the ConsoleUI for simple terminal-based interaction.
 
 import sys
 import os
+import asyncio
 
 # Add the project root to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -16,15 +17,15 @@ from minion.main.console_ui import ConsoleUI
 from minion.main.brain import Brain
 from minion.tools.default_tools import FinalAnswerTool
 
-def main():
+async def main():
     """Main function to set up and launch the Console UI."""
-    
+
     print("🚀 Starting Minion Console UI Demo...")
-    
+
     try:
         # Create a brain instance
         brain = Brain()
-        
+
         # Create a CodeAgent with basic tools
         agent = CodeAgent(
             name="Minion Code Assistant",
@@ -34,9 +35,10 @@ def main():
             enable_reflection=True,
             use_async_executor=True
         )
-        
+        await agent.setup()
+
         print("✅ Agent created successfully!")
-        
+
         # Create the Console UI
         print("🎨 Creating ConsoleUI...")
         console_ui = ConsoleUI(
@@ -44,13 +46,13 @@ def main():
             reset_agent_memory=True  # Reset memory between conversations
         )
         print("✅ ConsoleUI created successfully!")
-        
+
         print("🖥️ Launching console interface...")
         print()
-        
+
         # Launch the interface
         console_ui.run()
-        
+
     except KeyboardInterrupt:
         print("\n👋 Shutting down gracefully...")
     except Exception as e:
@@ -59,4 +61,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
