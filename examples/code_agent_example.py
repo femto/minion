@@ -43,7 +43,8 @@ async def basic_math_example():
     
     # Create CodeAgent
     code_agent = CodeAgent(brain=brain)
-    
+    await code_agent.setup()
+
     # Solve a math problem
     problem = "Calculate the area of a circle with radius 5, and then find what radius would give double that area."
     
@@ -74,7 +75,8 @@ async def data_analysis_example():
     
     # Create CodeAgent
     code_agent = CodeAgent(brain=brain)
-    
+    await code_agent.setup()
+
     # Sample data
     sales_data = [
         {"month": "Jan", "sales": 1000, "costs": 800},
@@ -121,7 +123,8 @@ async def complex_reasoning_example():
     
     # Create CodeAgent
     code_agent = CodeAgent(brain=brain)
-    
+    await code_agent.setup()
+
     # Complex problem that requires multiple steps
     problem = """
     A company has the following situation:
@@ -166,7 +169,8 @@ async def fibonacci_optimization_example():
     
     # Create CodeAgent
     code_agent = CodeAgent(brain=brain)
-    
+    await code_agent.setup()
+
     # Problem that can be optimized
     problem = """
     Write a function to calculate the 50th Fibonacci number.
@@ -201,7 +205,8 @@ async def circle_area_example():
     
     # Create CodeAgent
     code_agent = CodeAgent(brain=brain)
-    
+    await code_agent.setup()
+
     # Simple problem to test <end_code> functionality
     problem = "Calculate the area of a circle with radius 5. Use the math.pi constant for accuracy."
     
