@@ -5,7 +5,10 @@ import ast
 import re
 from typing import Dict, Tuple
 
-import rpyc
+try:
+    import rpyc
+except ImportError:
+    rpyc = None
 
 from .ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
 

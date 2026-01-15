@@ -11,17 +11,22 @@ from contextlib import redirect_stdout, redirect_stderr
 
 from minion.exceptions import FinalAnswerException
 
-from rich.logging import RichHandler
-
 from .ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
 from minion.utils.utils import extract_id_and_command
 
-# Set up logger
-handler = RichHandler(show_time=False)
-handler.setLevel(logging.DEBUG)
+# Set up logger with optional rich handler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
+try:
+    from rich.logging import RichHandler
+    handler = RichHandler(show_time=False)
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+except ImportError:
+    # Fallback to basic logging if rich is not installed
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
 
 
 class LocalPythonEnv(IntercodeEnv):

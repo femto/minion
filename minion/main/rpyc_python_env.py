@@ -7,9 +7,12 @@ import re
 import traceback
 from typing import Dict, Tuple
 
-import rpyc
+try:
+    import rpyc
+except ImportError:
+    rpyc = None
+
 from intercode.utils import IntercodeDataLoader
-from rich.logging import RichHandler
 
 from .ic_env import ACTION_EXEC, AGENT_OBS, EVAL_OBS, REWARD, IntercodeEnv
 from minion.utils.utils import extract_id_and_command
@@ -17,12 +20,18 @@ from minion.utils.utils import extract_id_and_command
 TIMEOUT_DURATION = 10
 START_UP_DELAY = 3
 
-# Set up logger
-handler = RichHandler(show_time=False)
-handler.setLevel(logging.DEBUG)
+# Set up logger with optional rich handler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
+try:
+    from rich.logging import RichHandler
+    handler = RichHandler(show_time=False)
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+except ImportError:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
 
 HOST_PORT = 3006
 RESET_KEYWORD = "RESET_CONTAINER_SPECIAL_KEYWORD"

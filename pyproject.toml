@@ -59,8 +59,9 @@ utcp = ["utcp", "utcp-http", "utcp-cli","utcp-text","utcp-mcp"]
 bedrock = ["boto3>=1.26.0", "botocore>=1.29.0", "aiobotocore>=2.5.0"]
 anthropic = ["anthropic>=0.70.0"]
 web = ["httpx>=0.24.0", "markdownify>=0.11.0", "beautifulsoup4>=4.12.0", "protego>=0.3.0", "readabilipy>=0.2.0"]
+cli = ["rich>=13.0.0"]
 
-all = ["minionx[dev,google,browser,gradio,utcp,bedrock,anthropic,web]"]
+all = ["minionx[dev,google,browser,gradio,utcp,bedrock,anthropic,web,cli]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["minion"] 

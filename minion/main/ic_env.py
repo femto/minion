@@ -10,7 +10,6 @@ from typing import Dict, List, Tuple
 import gymnasium as gym
 import numpy as np
 from intercode.utils import IntercodeDataLoader
-from rich.logging import RichHandler
 
 import docker
 
@@ -23,12 +22,18 @@ CORRUPT_GOLD = "corrupt_gold"
 ACTION_EXEC = "action_executed"
 REWARD = "reward"
 
-# Set up logger
-handler = RichHandler(show_time=False)
-handler.setLevel(logging.DEBUG)
+# Set up logger with optional rich handler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(handler)
+try:
+    from rich.logging import RichHandler
+    handler = RichHandler(show_time=False)
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+except ImportError:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
 
 
 class IntercodeEnv(ABC, gym.Env):
