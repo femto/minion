@@ -1,8 +1,0 @@
-[
-  {
-    "id": 1,
-    "content": "Implement AgentLLMConfig class in llm_types.py",
-    "status": "in_progress",
-    "priority": "high"
-  }
-]
