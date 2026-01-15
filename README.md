@@ -125,6 +125,13 @@ models:
     api_type: "openai"
     model: "gpt-4.1"
     temperature: 0.3
+  "azure-gpt-4o":
+    api_type: "azure"
+    api_key: "${AZURE_OPENAI_API_KEY}"
+    base_url: "${AZURE_OPENAI_ENDPOINT}"  # e.g., https://your-resource.openai.azure.com/
+    api_version: "2024-06-01"
+    model: "gpt-4o"  # deployment name
+    temperature: 0
 ```
 
 **Loading .env Files**: Use `env_file` to load environment variables from `.env` files (follows Docker `.env` file format):
