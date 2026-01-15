@@ -7,6 +7,9 @@ import sys
 import os
 import pytest
 
+# Skip this test module if rpyc is not installed
+pytest.importorskip("rpyc")
+
 # Add the docker/utils directory to the path
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'docker', 'utils'))
 

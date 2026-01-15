@@ -4,6 +4,10 @@ Pytest tests for LocalPythonEnv assignment handling logic
 """
 
 import pytest
+
+# Skip this test module if gymnasium is not installed
+pytest.importorskip("gymnasium")
+
 from minion.main.local_python_env import LocalPythonEnv
 
 

@@ -1,0 +1,8 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "include": ["minion", "examples", "tests"],
+  "exclude": ["venv", "**/__pycache__"]
+}

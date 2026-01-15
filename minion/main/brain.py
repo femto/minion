@@ -25,7 +25,6 @@ from tenacity import retry, stop_after_attempt, retry_if_exception_type
 from minion import config
 from minion.actions.lmp_action_node import LmpActionNode
 from minion.main.input import Input
-from minion.main.python_env import PythonEnv
 from minion.main.async_python_executor import AsyncPythonExecutor
 from minion.utils.utils import process_image
 from minion.main.worker import ModeratorMinion
