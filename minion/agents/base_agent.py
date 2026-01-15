@@ -51,6 +51,12 @@ class BaseAgent:
     default_context_window: int = 128000        # Default context window size (128K tokens)
     compact_model: Optional[str] = None         # Model for compaction, None uses agent.llm
 
+    # History decay configuration (for large outputs)
+    decay_enabled: bool = True                  # Enable/disable history decay
+    decay_ttl_steps: int = 3                    # Decay large outputs after N steps
+    decay_min_size: int = 100_000               # Min size (bytes) to mark as decayable (100KB)
+    decay_cache_dir: Optional[str] = None       # Cache dir, None uses ~/.minion/decay-cache
+
     # 生命周期管理
     _is_setup: bool = field(default=False, init=False)
     _toolsets: List[Any] = field(default_factory=list, init=False)  # List of toolset instances (MCP, UTCP, etc.)
@@ -798,11 +804,20 @@ Please provide the answer directly, without explaining why you couldn't complete
 
         # Convert result to message format and add to history
         message_dict = self._convert_result_to_message(result)
+
+        # Mark large content as decayable for future decay
+        if self.decay_enabled:
+            message_dict = self._maybe_mark_decayable(message_dict)
+
         self.state.history.append(message_dict)
         self.state.step_count += 1
 
         if isinstance(self.state.input, Input):
             self.state.input.query = f"Continue your task: {self.state.task}"
+
+        # History decay check (decay old large outputs to files)
+        if self.decay_enabled:
+            self._check_and_decay()
 
         # Auto compact check
         if self.auto_compact_enabled and self._should_compact(self.state.history):
@@ -1094,6 +1109,126 @@ Please provide the answer directly, without explaining why you couldn't complete
         if target_state and hasattr(target_state, 'history'):
             target_state.history = await self._compact_history(target_state.history)
             logger.info("Manual compaction completed")
+
+    # ============ History Decay Methods ============
+
+    def _maybe_mark_decayable(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """Mark large content as decayable for future decay.
+
+        Args:
+            message: The message to potentially mark
+
+        Returns:
+            Dict: The message, possibly with _decay_meta added
+        """
+        content = message.get("content", "")
+        if not content or not isinstance(content, str):
+            return message
+
+        content_size = len(content.encode('utf-8'))
+        if content_size >= self.decay_min_size:
+            message["_decay_meta"] = {
+                "step_created": self.state.step_count,
+                "content_size": content_size,
+                "decayable": True
+            }
+            logger.debug(f"Marked message as decayable: {content_size/1024:.0f}KB at step {self.state.step_count}")
+
+        return message
+
+    def _get_decay_cache_dir(self) -> "Path":
+        """Get the cache directory for decayed outputs."""
+        from pathlib import Path
+        if self.decay_cache_dir:
+            cache_dir = Path(self.decay_cache_dir)
+        else:
+            cache_dir = Path.home() / '.minion' / 'decay-cache'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    def _save_decay_content(self, content: str, step_created: int) -> str:
+        """Save content to file and return the file path.
+
+        Args:
+            content: The content to save
+            step_created: The step number when content was created
+
+        Returns:
+            str: Absolute path to the saved file
+        """
+        cache_dir = self._get_decay_cache_dir()
+        file_id = str(uuid.uuid4())[:8]
+        filename = f"decay-step{step_created}-{file_id}.txt"
+        file_path = cache_dir / filename
+        file_path.write_text(content, encoding='utf-8')
+        return str(file_path)
+
+    def _decay_message(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+        """Decay a message by saving content to file and replacing with reference.
+
+        Args:
+            msg: The message to decay (must have _decay_meta)
+
+        Returns:
+            Dict: New message with file reference instead of full content
+        """
+        content = msg.get("content", "")
+        meta = msg.get("_decay_meta", {})
+
+        # Save content to file
+        file_path = self._save_decay_content(content, meta.get("step_created", 0))
+
+        # Build replacement content
+        size_kb = meta.get("content_size", len(content.encode('utf-8'))) / 1024
+        new_content = (
+            f"[Large output ({size_kb:.0f}KB) saved to: {file_path}]\n"
+            f"Use file_read to access full content if needed."
+        )
+
+        logger.info(f"Decayed message from step {meta.get('step_created')}: {size_kb:.0f}KB -> {file_path}")
+
+        return {
+            "role": msg.get("role", "user"),
+            "content": new_content,
+            "_decayed": True,
+            "_decay_file": file_path,
+            "_decay_original_size": meta.get("content_size", 0)
+        }
+
+    def _check_and_decay(self) -> int:
+        """Check and decay expired large outputs in history.
+
+        Returns:
+            int: Number of messages decayed
+        """
+        if not self.decay_enabled:
+            return 0
+
+        if not hasattr(self.state, 'history') or not self.state.history:
+            return 0
+
+        current_step = self.state.step_count
+        decayed_count = 0
+
+        # Iterate through history and decay expired large outputs
+        for i, msg in enumerate(self.state.history):
+            meta = msg.get("_decay_meta")
+            if not meta or not meta.get("decayable"):
+                continue
+
+            # Already decayed
+            if msg.get("_decayed"):
+                continue
+
+            step_age = current_step - meta.get("step_created", 0)
+            if step_age >= self.decay_ttl_steps:
+                self.state.history[i] = self._decay_message(msg)
+                decayed_count += 1
+
+        if decayed_count > 0:
+            logger.info(f"Decayed {decayed_count} large outputs at step {current_step}")
+
+        return decayed_count
 
     def is_done(self, result: Any, state: AgentState) -> bool:
         """
