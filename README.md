@@ -204,6 +204,7 @@ INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
 ## Related Projects
 
 - [minion-agent](https://github.com/femto/minion-agent) Production agent system with multi-agent coordination, browser automation, and research capabilities
+- [minion-code](https://github.com/femto/minion-code) Minion's implementation of Claude Code 
 
 ## Community and Support
 
