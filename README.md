@@ -33,10 +33,16 @@ cp config/config.yaml.example config/config.yaml
 # Set your API key
 export OPENAI_API_KEY=your-api-key
 
-# Run with docker-compose
+# Build and run (basic install)
+docker-compose build
 docker-compose run --rm minion
 
-# Or run a specific example
+# Build with optional dependencies
+docker-compose build --build-arg EXTRAS="gradio,web,anthropic"
+# Or install all extras
+docker-compose build --build-arg EXTRAS="all"
+
+# Run a specific example
 docker-compose run --rm minion python examples/mcp/mcp_agent_example.py
 ```
 

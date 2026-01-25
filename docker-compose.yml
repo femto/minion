@@ -2,7 +2,11 @@ version: '3.8'
 
 services:
   minion:
-    build: .
+    build:
+      context: .
+      args:
+        # Optional: specify extras to install (e.g., "gradio,web,anthropic" or "all")
+        EXTRAS: ""
     volumes:
       # Mount config for API keys
       - ./config:/app/config

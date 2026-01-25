@@ -2,6 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Optional dependencies to install (e.g., "gradio,web,anthropic" or "all")
+ARG EXTRAS=""
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
@@ -12,8 +15,12 @@ COPY pyproject.toml README.md ./
 COPY minion/ ./minion/
 COPY config/ ./config/
 
-# Install package
-RUN pip install --no-cache-dir -e .
+# Install package with optional extras
+RUN if [ -z "$EXTRAS" ]; then \
+        pip install --no-cache-dir -e .; \
+    else \
+        pip install --no-cache-dir -e ".[$EXTRAS]"; \
+    fi
 
 # Create directories for config and cache
 RUN mkdir -p /root/.minion/decay-cache
