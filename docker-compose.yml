@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  minion:
+    build: .
+    volumes:
+      # Mount config for API keys
+      - ./config:/app/config
+      # Mount examples for quick testing
+      - ./examples:/app/examples
+      # Persist decay cache
+      - minion-cache:/root/.minion
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Add your API keys here or use .env file
+      - DEFAULT_API_KEY=${DEFAULT_API_KEY:-}
+      - DEFAULT_BASE_URL=${DEFAULT_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+volumes:
+  minion-cache:

@@ -24,6 +24,22 @@ cp config/config.yaml.example config/config.yaml
 cp config/.env.example config/.env
 ```
 
+### Docker Installation
+
+```bash
+git clone https://github.com/femto/minion.git && cd minion
+cp config/config.yaml.example config/config.yaml
+
+# Set your API key
+export OPENAI_API_KEY=your-api-key
+
+# Run with docker-compose
+docker-compose run --rm minion
+
+# Or run a specific example
+docker-compose run --rm minion python examples/mcp/mcp_agent_example.py
+```
+
 Edit `config/config.yaml`:
 
 ```yaml
