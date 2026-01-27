@@ -15,7 +15,20 @@ Minion is Agent's Brain. Minion is designed to execute any type of queries, offe
 
 ## Installation
 
-### Basic Installation
+### Install from PyPI
+
+```bash
+pip install minionx
+
+# With optional dependencies
+pip install minionx[litellm]      # LiteLLM support (100+ LLM providers)
+pip install minionx[anthropic]   # Anthropic Claude
+pip install minionx[bedrock]     # AWS Bedrock
+pip install minionx[gradio]      # Gradio web UI
+pip install minionx[all]         # All optional dependencies
+```
+
+### Install from Source
 
 ```bash
 git clone https://github.com/femto/minion.git && cd minion
@@ -184,6 +197,9 @@ Variables from all sources (system environment, `.env` files, inline `environmen
 | `azure_anthropic` | Azure hosted Anthropic models | `api_key`, `base_url`, `model` |
 | `bedrock` | AWS Bedrock (sync) | `access_key_id`, `secret_access_key`, `region`, `model` |
 | `bedrock_async` | AWS Bedrock (async, better performance) | `access_key_id`, `secret_access_key`, `region`, `model` |
+| `litellm` | Unified interface for 100+ providers | `api_key`, `model` (with provider prefix) |
+
+**LiteLLM Model Prefixes**: Use `anthropic/claude-3-5-sonnet`, `bedrock/anthropic.claude-3`, `gemini/gemini-1.5-pro`, `ollama/llama3.2`, etc. See [LiteLLM docs](https://docs.litellm.ai/docs/providers) for all supported providers.
 
 See [config/config.yaml.example](config/config.yaml.example) for complete examples of all supported providers.
 
@@ -224,6 +240,9 @@ The project uses optional dependency groups to avoid installing unnecessary pack
 # Development tools (pytest, black, ruff)
 pip install -e ".[dev]"
 
+# LiteLLM - unified interface for 100+ LLM providers
+pip install -e ".[litellm]"
+
 # Google ADK and LiteLLM support
 pip install -e ".[google]"
 
@@ -249,5 +268,5 @@ pip install -e ".[web]"
 pip install -e ".[all]"
 
 # You can also combine multiple groups:
-pip install -e ".[dev,gradio,anthropic]"
+pip install -e ".[dev,gradio,anthropic,litellm]"
 ```
