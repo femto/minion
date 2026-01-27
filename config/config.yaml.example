@@ -29,6 +29,7 @@ env_file:
 #   - azure_anthropic: Azure hosted Anthropic models
 #   - bedrock: AWS Bedrock (synchronous)
 #   - bedrock_async: AWS Bedrock (asynchronous, better performance)
+#   - litellm: Unified interface for 100+ LLM providers (OpenAI, Anthropic, Bedrock, VertexAI, etc.)
 # ============================================================
 models:
   # Default model - used when no specific model is specified
@@ -184,6 +185,44 @@ models:
     base_url: "https://generativelanguage.googleapis.com/v1beta/"
     model: "gemini-2.0-flash-exp"
     temperature: 0.1
+
+  # --------------------------------------------------------
+  # LiteLLM (Unified interface for 100+ LLM providers)
+  # Use model prefixes: openai/, anthropic/, bedrock/, vertex_ai/, etc.
+  # See: https://docs.litellm.ai/docs/providers
+  # --------------------------------------------------------
+  "litellm-gpt4":
+    api_type: "litellm"
+    api_key: "${OPENAI_API_KEY}"
+    model: "gpt-4"
+    temperature: 0.1
+
+  "litellm-claude":
+    api_type: "litellm"
+    api_key: "${ANTHROPIC_API_KEY}"
+    model: "anthropic/claude-3-5-sonnet-20241022"
+    temperature: 0.1
+
+  "litellm-bedrock-claude":
+    api_type: "litellm"
+    access_key_id: "${AWS_ACCESS_KEY_ID}"
+    secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+    region: "us-east-1"
+    model: "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
+    temperature: 0.7
+
+  "litellm-gemini":
+    api_type: "litellm"
+    api_key: "${GOOGLE_API_KEY}"
+    model: "gemini/gemini-1.5-pro"
+    temperature: 0.1
+
+  "litellm-ollama":
+    api_type: "litellm"
+    api_key: "ollama"
+    base_url: "http://localhost:11434"
+    model: "ollama/llama3.2"
+    temperature: 0
 
 # ============================================================
 # ELL Configuration (optional - for logging/tracing)
