@@ -70,6 +70,53 @@ def get_config():
     return load_config()
 
 
+def _get_env_var_config() -> Dict[str, Any]:
+    """Build config from environment variables when no config file exists."""
+    # Check for common API keys in environment
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+
+    models: Dict[str, Any] = {}
+    default_model = None
+
+    # Add OpenAI models if key exists
+    if openai_key:
+        models["gpt-4o"] = {
+            "api_type": "openai",
+            "api_key": openai_key,
+            "model": "gpt-4o",
+        }
+        models["gpt-4o-mini"] = {
+            "api_type": "openai",
+            "api_key": openai_key,
+            "model": "gpt-4o-mini",
+        }
+        default_model = "gpt-4o"
+
+    # Add Anthropic models if key exists (via litellm)
+    if anthropic_key:
+        models["claude-sonnet-4-20250514"] = {
+            "api_type": "litellm",
+            "api_key": anthropic_key,
+            "model": "claude-sonnet-4-20250514",
+        }
+        models["claude-3-5-sonnet"] = {
+            "api_type": "litellm",
+            "api_key": anthropic_key,
+            "model": "claude-3-5-sonnet-20241022",
+        }
+        if not default_model:
+            default_model = "claude-sonnet-4-20250514"
+
+    if not models:
+        return {}
+
+    return {
+        "models": models,
+        "llm": models.get(default_model, next(iter(models.values()))),
+    }
+
+
 def load_config(root_path: Optional[Path] = None, override_env: bool = False):
     root_path = root_path or MINION_ROOT
     base_config_path = root_path / "config/config.yaml"
@@ -80,7 +127,7 @@ def load_config(root_path: Optional[Path] = None, override_env: bool = False):
     # 首先加载用户配置
     if user_config_path.exists():
         with user_config_path.open("r") as f:
-            config_dict = yaml.safe_load(f)
+            config_dict = yaml.safe_load(f) or {}
 
         # 加载用户配置中指定的 env_file
         load_env_files(user_config_path.parent, config_dict.get("env_file", []), override_env)
@@ -88,12 +135,18 @@ def load_config(root_path: Optional[Path] = None, override_env: bool = False):
     # 然后加载基础配置，覆盖用户配置
     if base_config_path.exists():
         with base_config_path.open("r") as f:
-            base_config = yaml.safe_load(f)
+            base_config = yaml.safe_load(f) or {}
 
         # 加载基础配置中指定的 env_file
         load_env_files(base_config_path.parent, base_config.get("env_file", []), override_env)
 
         config_dict.update(base_config)
+
+    # If no config files found, try to build from environment variables
+    if not config_dict or "models" not in config_dict:
+        env_config = _get_env_var_config()
+        if env_config:
+            config_dict.update(env_config)
 
     # 设置 environment 中指定的环境变量
     for key, value in config_dict.get("environment", {}).items():
@@ -109,7 +162,7 @@ def load_config(root_path: Optional[Path] = None, override_env: bool = False):
                 model_config["model"] = key
 
     if "llm" not in config_dict:
-        config_dict["llm"] = config_dict["models"].get("default", next(iter(config_dict["models"].values())))
+        config_dict["llm"] = config_dict.get("models", {}).get("default", next(iter(config_dict.get("models", {}).values()), {}))
 
     # 确保 ell 配置存在，如果不存在则使用默认值
     if "ell" not in config_dict:
