@@ -57,8 +57,8 @@ class EllConfig(BaseModel):
 class Config(BaseModel):
     environment: Dict[str, str] = Field(default_factory=dict)
     env_file: List[str] = Field(default_factory=list)
-    llm: LLMConfig
-    models: Dict[str, LLMConfig]
+    llm: LLMConfig = Field(default_factory=lambda: LLMConfig())
+    models: Dict[str, LLMConfig] = Field(default_factory=dict)
     ell: Dict[str, Any] = Field(default_factory=dict)
     mem0: Dict[str, Any] = Field(default_factory=dict)
 
@@ -113,7 +113,7 @@ def _get_env_var_config() -> Dict[str, Any]:
 
     return {
         "models": models,
-        "llm": models.get(default_model, next(iter(models.values()))),
+        "llm": models.get(default_model or "", next(iter(models.values()))),
     }
 
 
