@@ -136,7 +136,7 @@ The flowchart demonstrates the complete process from query to final result:
 
 ### Configuration File Locations
 
-1. **Project Config**: `MINION_ROOT/config/config.yaml` - Default project configuration
+1. **Project Config**: `MINION_ROOT/config/config.yaml` - Default project configuration (see [MINION_ROOT](#minion_root))
 2. **User Config**: `~/.minion/config.yaml` - User-specific overrides
 
 ### Configuration Priority
@@ -203,19 +203,41 @@ Variables from all sources (system environment, `.env` files, inline `environmen
 
 See [config/config.yaml.example](config/config.yaml.example) for complete examples of all supported providers.
 
-### MINION_ROOT Detection
+> **Warning**: Be cautious - LLM can generate potentially harmful code.
 
-`MINION_ROOT` is determined automatically:
+## MINION_ROOT
+
+`MINION_ROOT` is the base directory for locating configuration files (`MINION_ROOT/config/config.yaml`).
+
+### How MINION_ROOT is Determined
+
 1. Checks `MINION_ROOT` environment variable (if set)
 2. Auto-detects by finding `.git`, `.project_root`, or `.gitignore` in parent directories
 3. Falls back to current working directory
 
-Check the startup log:
+### MINION_ROOT by Installation Method
+
+| Installation Method | MINION_ROOT Value |
+|---------------------|-------------------|
+| `pip install minionx` (PyPI) | Your application's current working directory (cwd) |
+| `pip install -e .` (Source) | The minion source code directory |
+
+**Example:**
+```bash
+# PyPI install - config at /home/user/myproject/config/config.yaml
+cd /home/user/myproject
+python my_app.py  # MINION_ROOT = /home/user/myproject
+
+# Source install from /home/user/minion
+cd /home/user/minion && pip install -e .
+cd /anywhere
+python my_app.py  # MINION_ROOT = /home/user/minion
+```
+
+**Verify MINION_ROOT** - Check the startup log:
 ```
 INFO | minion.const:get_minion_root:44 - MINION_ROOT set to: <some_path>
 ```
-
-> **Warning**: Be cautious - LLM can generate potentially harmful code.
 
 ## Related Projects
 
