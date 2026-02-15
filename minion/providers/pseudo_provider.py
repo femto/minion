@@ -17,21 +17,16 @@ CONFIG_MESSAGE = """I'm sorry, but I'm not properly configured yet.
 
 To use minion-code, you need to set up your LLM configuration:
 
-**Option 1: Set environment variables**
-```bash
-export ANTHROPIC_API_KEY=sk-ant-xxx
-# or
-export OPENAI_API_KEY=sk-xxx
-```
-
-**Option 2: Create a config file**
+**Create a config file**
 Create `~/.minion/config.yaml`:
 ```yaml
 models:
-  default:
-    api_type: openai
-    api_key: ${OPENAI_API_KEY}
-    model: gpt-4o
+  "default":
+    api_type: "openai"
+    base_url: "${DEFAULT_BASE_URL}"
+    api_key: "${DEFAULT_API_KEY}"
+    model: "gpt-5.1"
+    temperature: 0
 ```
 
 For more details, see: https://github.com/femto/minion#configuration
