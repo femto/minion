@@ -130,7 +130,22 @@ Supporting navigation and spatial memory""",
 
         # Process default llm
         if isinstance(llm, str):
-            self.llm = create_llm_provider(config.models.get(llm))
+            model_config = config.models.get(llm)
+            if model_config is None:
+                available_models = list(config.models.keys()) if config.models else []
+                if available_models:
+                    raise ValueError(
+                        f"Model '{llm}' not found in config. "
+                        f"Available models: {available_models}. "
+                        f"See: https://github.com/femto/minion#configuration"
+                    )
+                else:
+                    raise ValueError(
+                        f"No models configured. Please set up ~/.minion/config.yaml "
+                        f"or set ANTHROPIC_API_KEY/OPENAI_API_KEY environment variable. "
+                        f"See: https://github.com/femto/minion#configuration"
+                    )
+            self.llm = create_llm_provider(model_config)
         else:
             self.llm = llm
 
@@ -139,13 +154,28 @@ Supporting navigation and spatial memory""",
         for key, value in llms.items():
             if isinstance(value, str):
                 # Single model name
-                self.llms[key] = create_llm_provider(config.models.get(value))
+                model_cfg = config.models.get(value)
+                if model_cfg is None:
+                    raise ValueError(
+                        f"Model '{value}' not found in config for llms['{key}']. "
+                        f"See: https://github.com/femto/minion#configuration"
+                    )
+                self.llms[key] = create_llm_provider(model_cfg)
             elif isinstance(value, list):
                 # List of model names or providers
-                self.llms[key] = [
-                    item if not isinstance(item, str) else create_llm_provider(config.models.get(item))
-                    for item in value
-                ]
+                providers = []
+                for item in value:
+                    if isinstance(item, str):
+                        item_cfg = config.models.get(item)
+                        if item_cfg is None:
+                            raise ValueError(
+                                f"Model '{item}' not found in config for llms['{key}']. "
+                                f"See: https://github.com/femto/minion#configuration"
+                            )
+                        providers.append(create_llm_provider(item_cfg))
+                    else:
+                        providers.append(item)
+                self.llms[key] = providers
             else:
                 # Assume it's already a provider instance
                 self.llms[key] = value
