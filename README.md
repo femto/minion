@@ -39,7 +39,7 @@ cp config/.env.example config/.env
 
 ### Configure
 
-Edit `config/config.yaml` (applies to all installation methods):
+Edit `config.yaml` (see [Configuration](#configuration) for file location):
 
 ```yaml
 models:
