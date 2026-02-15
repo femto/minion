@@ -37,6 +37,27 @@ cp config/config.yaml.example config/config.yaml
 cp config/.env.example config/.env
 ```
 
+### Configure
+
+Edit `config/config.yaml` (applies to all installation methods):
+
+```yaml
+models:
+  "default":
+    api_type: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key: "${OPENAI_API_KEY}"
+    model: "gpt-4.1"
+    temperature: 0
+```
+
+Set your API key:
+```bash
+export OPENAI_API_KEY=your-api-key
+```
+
+See [Configuration](#configuration) for more details on configuration options.
+
 ### Docker Installation
 
 ```bash
@@ -58,20 +79,6 @@ docker-compose build --build-arg EXTRAS="all"
 # Run a specific example
 docker-compose run --rm minion python examples/mcp/mcp_agent_example.py
 ```
-
-Edit `config/config.yaml`:
-
-```yaml
-models:
-  "default":
-    api_type: "openai"
-    base_url: "https://api.openai.com/v1"
-    api_key: "${OPENAI_API_KEY}"
-    model: "gpt-4.1"
-    temperature: 0
-```
-
-See [Configuration](#configuration) for more details on configuration options.
 
 ## Quick Start
 
