@@ -45,15 +45,16 @@ Edit `config.yaml` (see [Configuration](#configuration) for file location):
 models:
   "default":
     api_type: "openai"
-    base_url: "https://api.openai.com/v1"
-    api_key: "${OPENAI_API_KEY}"
-    model: "gpt-4.1"
+    base_url: "${DEFAULT_BASE_URL}"
+    api_key: "${DEFAULT_API_KEY}"
+    model: "gpt-5.1"
     temperature: 0
 ```
 
 Set your API key:
 ```bash
-export OPENAI_API_KEY=your-api-key
+export DEFAULT_BASE_URL=your-base-url use https://api.openai.com/v1 if openai 
+export DEFAULT_API_KEY=your-api-key
 ```
 
 See [Configuration](#configuration) for more details on configuration options.
@@ -65,7 +66,8 @@ git clone https://github.com/femto/minion.git && cd minion
 cp config/config.yaml.example config/config.yaml
 
 # Set your API key
-export OPENAI_API_KEY=your-api-key
+export DEFAULT_BASE_URL=your-base-url use https://api.openai.com/v1 if openai 
+export DEFAULT_API_KEY=your-api-key
 
 # Build and run (basic install)
 docker-compose build
