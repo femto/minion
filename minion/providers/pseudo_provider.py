@@ -13,24 +13,56 @@ from minion.providers.base_provider import BaseProvider
 from minion.providers.llm_provider_registry import llm_registry
 
 
-CONFIG_MESSAGE = """I'm sorry, but I'm not properly configured yet.
+# Plain text message for non-CodeAgent use
+CONFIG_MESSAGE_TEXT = """Welcome to minion-code! To get started, please configure your LLM.
 
-To use minion-code, you need to set up your LLM configuration:
+**Setup Instructions:**
 
-**Create a config file**
-Create `~/.minion/config.yaml`:
+Create a config file at `~/.minion/config.yaml`:
 ```yaml
 models:
   "default":
     api_type: "openai"
     base_url: "${DEFAULT_BASE_URL}"
     api_key: "${DEFAULT_API_KEY}"
-    model: "gpt-5.1"
+    model: "gpt-4o"
     temperature: 0
 ```
 
+Or set environment variables:
+- `OPENAI_API_KEY` for OpenAI models
+- `ANTHROPIC_API_KEY` for Claude models
+
 For more details, see: https://github.com/femto/minion#configuration
 """
+
+# CodeAgent-compatible format with final_answer() and <end_code>
+CONFIG_MESSAGE = '''**Thought:** I need to inform the user that the LLM is not configured yet.
+
+**Code:**
+```python
+final_answer("""Welcome to minion-code! To get started, please configure your LLM.
+
+**Setup Instructions:**
+
+Create a config file at `~/.minion/config.yaml`:
+```yaml
+models:
+  "default":
+    api_type: "openai"
+    base_url: "${DEFAULT_BASE_URL}"
+    api_key: "${DEFAULT_API_KEY}"
+    model: "gpt-4o"
+    temperature: 0
+```
+
+Or set environment variables:
+- `OPENAI_API_KEY` for OpenAI models
+- `ANTHROPIC_API_KEY` for Claude models
+
+For more details, see: https://github.com/femto/minion#configuration
+""")
+```<end_code>'''
 
 
 @llm_registry.register("pseudo")
@@ -67,17 +99,37 @@ class PseudoProvider(BaseProvider):
         """Return configuration message."""
         return CONFIG_MESSAGE
 
-    async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Any:
+    async def generate_stream(self, messages: List[Message], temperature: Optional[float] = None, **kwargs):
         """Yield configuration message as a stream."""
-        async def stream():
-            yield CONFIG_MESSAGE
-        return stream()
+        # Import StreamChunk to match other providers' format
+        from minion.main.action_step import StreamChunk
+        yield StreamChunk(content=CONFIG_MESSAGE, chunk_type="text")
 
     async def generate_stream_response(self, messages: List[Message], temperature: Optional[float] = None, **kwargs) -> Any:
-        """Return configuration message as stream response."""
-        async def stream_generator():
-            yield CONFIG_MESSAGE
-        return stream_generator()
+        """Return configuration message as a complete response (not streaming)."""
+        from openai.types.chat import ChatCompletion
+
+        # Return OpenAI ChatCompletion format
+        response = {
+            "id": "pseudo-response",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "pseudo",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": CONFIG_MESSAGE
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+        }
+        return ChatCompletion(**response)
 
 
 # Create a singleton pseudo provider instance

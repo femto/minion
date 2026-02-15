@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "minionx"
-version = "0.1.11"
+version = "0.1.19"
 authors = [
     {name = "femto", email = "femtowin@gmail.com"},
 ]
