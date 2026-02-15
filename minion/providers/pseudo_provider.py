@@ -37,28 +37,28 @@ For more details, see: https://github.com/femto/minion#configuration
 """
 
 # CodeAgent-compatible format with final_answer() and <end_code>
+# Note: Avoid nested ``` blocks which cause parsing issues
 CONFIG_MESSAGE = '''**Thought:** I need to inform the user that the LLM is not configured yet.
 
 **Code:**
 ```python
 final_answer("""Welcome to minion-code! To get started, please configure your LLM.
 
-**Setup Instructions:**
+Setup Instructions:
 
-Create a config file at `~/.minion/config.yaml`:
-```yaml
-models:
-  "default":
-    api_type: "openai"
-    base_url: "${DEFAULT_BASE_URL}"
-    api_key: "${DEFAULT_API_KEY}"
-    model: "gpt-4o"
-    temperature: 0
-```
+1. Create a config file at ~/.minion/config.yaml with:
 
-Or set environment variables:
-- `OPENAI_API_KEY` for OpenAI models
-- `ANTHROPIC_API_KEY` for Claude models
+   models:
+     "default":
+       api_type: "openai"
+       base_url: "your-base-url"
+       api_key: "your-api-key"
+       model: "gpt-4o"
+       temperature: 0
+
+2. Or set environment variables:
+   - OPENAI_API_KEY for OpenAI models
+   - ANTHROPIC_API_KEY for Claude models
 
 For more details, see: https://github.com/femto/minion#configuration
 """)
