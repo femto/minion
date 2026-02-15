@@ -65,8 +65,8 @@ Edit `config/config.yaml`:
 models:
   "default":
     api_type: "openai"
-    base_url: "${DEFAULT_BASE_URL}"
-    api_key: "${DEFAULT_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    api_key: "${OPENAI_API_KEY}"
     model: "gpt-4.1"
     temperature: 0
 ```
