@@ -47,5 +47,8 @@ llm_registry = LLMRegistry()
 
 
 def create_llm_provider(config: LLMConfig) -> BaseProvider:
+    if config is None:
+        from minion.providers.pseudo_provider import get_pseudo_provider
+        return get_pseudo_provider()
     provider_cls = llm_registry.get_provider(config.api_type)
     return provider_cls(config)
