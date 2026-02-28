@@ -16,12 +16,12 @@ High performance agent framework that can do everything. Minion is designed to e
 ## Features
 
 - **CodeAgent** - Python code execution agent with tool calling support
-- **Skills** - Modular capabilities to extend agent functionality ([docs](docs/skills.md))
 - **Tool Search Tool (TST)** - Dynamic tool discovery, 85% token reduction ([docs](docs/tool_search.md))
 - **Auto-compact** - Automatic context window management via history summarization ([docs](docs/auto_compact.md))
 - **Auto-decay** - Large tool response management, saves to files after TTL ([docs](docs/auto_decay.md))
 - **Multi-provider Support** - OpenAI, Azure, Bedrock, Anthropic, LiteLLM (100+ providers)
 - **MCP Integration** - Model Context Protocol tool support
+- **Skills** - Modular capabilities to extend agent functionality ([docs](docs/skills.md))
 - **Streaming** - Real-time streaming responses with structured chunks
 
 ## Installation
