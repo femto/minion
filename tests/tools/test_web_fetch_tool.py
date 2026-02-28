@@ -31,6 +31,7 @@ class TestWebFetchTool:
         assert tool.timeout == 60
 
     @pytest.mark.asyncio
+    @pytest.mark.network
     async def test_fetch_simple_url(self):
         """Test fetching a simple URL"""
         tool = WebFetchTool()
@@ -43,6 +44,7 @@ class TestWebFetchTool:
         assert "Example Domain" in result or "example" in result.lower()
 
     @pytest.mark.asyncio
+    @pytest.mark.network
     async def test_fetch_with_max_length(self):
         """Test fetching with max_length limit"""
         tool = WebFetchTool()
@@ -52,6 +54,7 @@ class TestWebFetchTool:
         assert len(result) <= 200  # Some buffer for truncation message
 
     @pytest.mark.asyncio
+    @pytest.mark.network
     async def test_fetch_with_pagination(self):
         """Test fetching with start_index"""
         tool = WebFetchTool()
@@ -70,6 +73,7 @@ class TestWebFetchTool:
         assert len(partial_result) < len(full_result)
 
     @pytest.mark.asyncio
+    @pytest.mark.network
     async def test_fetch_raw_html(self):
         """Test fetching raw HTML"""
         tool = WebFetchTool()
@@ -79,6 +83,7 @@ class TestWebFetchTool:
         assert "<" in result and ">" in result
 
     @pytest.mark.asyncio
+    @pytest.mark.network
     async def test_fetch_invalid_url(self):
         """Test fetching invalid URL returns error"""
         tool = WebFetchTool()

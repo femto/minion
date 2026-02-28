@@ -47,7 +47,7 @@ jobs:
         DEFAULT_MODEL=gpt-3.5-turbo" > config/.env
     - name: Run tests without LLM integration
       run: |
-        PYTHONPATH=$PYTHONPATH:$(pwd) pytest -v -m "not llm_integration"
+        PYTHONPATH=$PYTHONPATH:$(pwd) pytest -v -m "not llm_integration and not network"
 #    - name: Run all tests including LLM integration
 #      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 #      env:
