@@ -13,6 +13,16 @@ Minion is Agent's Brain. Minion is designed to execute any type of queries, offe
 
 <img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
+## Features
+
+- **CodeAgent** - Python code execution agent with tool calling support
+- **Tool Search Tool (TST)** - Dynamic tool discovery, 85% token reduction ([docs](docs/tool_search.md))
+- **Auto-compact** - Automatic context window management via history summarization ([docs](docs/auto_compact.md))
+- **Auto-decay** - Large tool response management, saves to files after TTL ([docs](docs/auto_decay.md))
+- **Multi-provider Support** - OpenAI, Azure, Bedrock, Anthropic, LiteLLM (100+ providers)
+- **MCP Integration** - Model Context Protocol tool support
+- **Streaming** - Real-time streaming responses with structured chunks
+
 ## Installation
 
 ### Install from PyPI
