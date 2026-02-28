@@ -107,3 +107,6 @@ uploads
 .minion
 .mcp.json
 .zed
+
+# Claude Code local settings (skills can be committed)
+.claude/settings.local.json
