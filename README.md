@@ -9,13 +9,14 @@
 [![Run in Smithery](https://smithery.ai/badge/skills/femto)](https://smithery.ai/skills?ns=femto&utm_source=github&utm_medium=badge)
 
 
-**High performance agent framework that can do everything.** Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence.
+High performance agent framework that can do everything. Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence.
 
 <img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
 ## Features
 
 - **CodeAgent** - Python code execution agent with tool calling support
+- **Skills** - Modular capabilities to extend agent functionality ([docs](docs/skills.md))
 - **Tool Search Tool (TST)** - Dynamic tool discovery, 85% token reduction ([docs](docs/tool_search.md))
 - **Auto-compact** - Automatic context window management via history summarization ([docs](docs/auto_compact.md))
 - **Auto-decay** - Large tool response management, saves to files after TTL ([docs](docs/auto_decay.md))
