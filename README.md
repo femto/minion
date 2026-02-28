@@ -139,6 +139,8 @@ The flowchart demonstrates the complete process from query to final result:
 - [Skills Guide](docs/skills.md) - Extend agent capabilities with modular skills
 - [Benchmarks](docs/benchmarks.md) - Performance results on GSM8K, Game of 24, AIME, Humaneval
 - [Route Parameter Guide](docs/agent_route_parameter_guide.md) - Route options for different reasoning strategies
+- [Tool Search Tool (TST)](docs/tool_search.md) - Dynamic tool discovery for large tool libraries (85% token reduction)
+- [Auto-compact Guide](docs/auto_compact.md) - Automatic context window management via history summarization
 - [Auto-decay Guide](docs/auto_decay.md) - Automatic context management for large tool responses (Experimental) 
 
 ## Configuration
