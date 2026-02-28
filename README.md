@@ -9,7 +9,7 @@
 [![Run in Smithery](https://smithery.ai/badge/skills/femto)](https://smithery.ai/skills?ns=femto&utm_source=github&utm_medium=badge)
 
 
-Minion is Agent's Brain. Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence.
+**High performance agent framework that can do everything.** Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence.
 
 <img src="assets/minion1.webp" alt="Minion" width="200" align="right">
 
