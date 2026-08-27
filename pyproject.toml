@@ -10,14 +10,12 @@ authors = [
 ]
 description = "👷‍♂️Minion is Agent's Brain. Minion is designed to execute any type of queries, offering a variety of features that demonstrate its flexibility and intelligence."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "MIT"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
@@ -55,7 +53,7 @@ minion = "minion.cli:app"
 dev = ["pytest", "black", "ruff", "pytest-asyncio"]
 litellm = ["litellm>=1.0.0"]
 google = ["google-adk", "litellm"]
-browser = ["browser-use>=0.1.0"]
+browser = ["browser-use>=0.1.0; python_version >= '3.11'"]
 gradio = ["gradio>=4.0.0"]
 utcp = ["utcp", "utcp-http", "utcp-cli","utcp-text","utcp-mcp"]
 bedrock = ["boto3>=1.26.0", "botocore>=1.29.0", "aiobotocore>=2.5.0"]
@@ -63,7 +61,7 @@ anthropic = ["anthropic>=0.70.0"]
 web = ["httpx>=0.24.0", "markdownify>=0.11.0", "beautifulsoup4>=4.12.0", "protego>=0.3.0", "readabilipy>=0.2.0"]
 cli = ["rich>=13.0.0"]
 
-all = ["minionx[dev,litellm,google,browser,gradio,utcp,bedrock,anthropic,web,cli]"]
+all = ["minionx[dev,litellm,google,gradio,utcp,bedrock,anthropic,web,cli]"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["minion"] 
