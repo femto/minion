@@ -21,11 +21,14 @@ import inspect
 import logging
 import math
 import re
+import string
 from collections.abc import Callable, Mapping
 from functools import wraps
 from importlib import import_module
 from types import BuiltinFunctionType, FunctionType, ModuleType
 from typing import Any
+
+import _string
 
 from ..exceptions import FinalAnswerException
 
@@ -85,7 +88,80 @@ def custom_print(*args):
 def nodunder_getattr(obj, name, default=None):
     if name.startswith("__") and name.endswith("__"):
         raise InterpreterError(f"Forbidden access to dunder attribute: {name}")
-    return getattr(obj, name, default)
+    try:
+        return safe_getattr(obj, name)
+    except AttributeError:
+        return default
+
+
+def _is_dunder(name) -> bool:
+    return isinstance(name, str) and name.startswith("__") and name.endswith("__")
+
+
+def check_format_string(format_string) -> None:
+    """Reject format strings whose replacement fields reach dunder attributes.
+
+    str.format resolves "{0.attr}" via native getattr, bypassing the AST-level
+    dunder check, so field names must be validated before formatting.
+    """
+    if not isinstance(format_string, str):
+        return
+    for _, field_name, format_spec, _ in string.Formatter().parse(format_string):
+        if field_name is not None:
+            first, rest = _string.formatter_field_name_split(field_name)
+            if _is_dunder(first):
+                raise InterpreterError(f"Forbidden access to dunder attribute in format string: {first}")
+            for is_attr, key in rest:
+                if is_attr and _is_dunder(key):
+                    raise InterpreterError(f"Forbidden access to dunder attribute in format string: {key}")
+        if format_spec:
+            check_format_string(format_spec)
+
+
+def _wrap_format_method(method: Callable, format_arg_index: int) -> Callable:
+    @wraps(method)
+    def safe_format(*args, **kwargs):
+        if len(args) > format_arg_index:
+            check_format_string(args[format_arg_index])
+        elif "format_string" in kwargs:
+            check_format_string(kwargs["format_string"])
+        return method(*args, **kwargs)
+
+    return safe_format
+
+
+_STR_FORMAT_METHODS = ("format", "format_map")
+_UNBOUND_FORMAT_METHODS = {
+    str.format: 0,
+    str.format_map: 0,
+    string.Formatter.format: 1,
+    string.Formatter.vformat: 1,
+}
+
+
+def _guard_format_method(value):
+    """Validate format strings passed to native formatting methods (str.format & co)."""
+    try:
+        format_arg_index = _UNBOUND_FORMAT_METHODS.get(value)
+    except TypeError:  # unhashable value
+        format_arg_index = None
+    if format_arg_index is not None:
+        return _wrap_format_method(value, format_arg_index)
+    receiver = getattr(value, "__self__", None)
+    method_name = getattr(value, "__name__", None)
+    if isinstance(receiver, str) and method_name in _STR_FORMAT_METHODS:
+        # Bound method: the receiver itself is the format string
+        check_format_string(receiver)
+    elif isinstance(receiver, string.Formatter) and method_name in ("format", "vformat"):
+        return _wrap_format_method(value, 0)
+    return value
+
+
+def safe_getattr(obj, name: str):
+    """getattr used by the sandbox: forbids dunders and guards native formatting methods."""
+    if _is_dunder(name):
+        raise InterpreterError(f"Forbidden access to dunder attribute: {name}")
+    return _guard_format_method(getattr(obj, name))
 
 
 BASE_PYTHON_TOOLS = {
@@ -359,10 +435,10 @@ def evaluate_attribute(
     custom_tools: dict[str, Callable],
     authorized_imports: list[str],
 ) -> Any:
-    if expression.attr.startswith("__") and expression.attr.endswith("__"):
+    if _is_dunder(expression.attr):
         raise InterpreterError(f"Forbidden access to dunder attribute: {expression.attr}")
     value = evaluate_ast(expression.value, state, static_tools, custom_tools, authorized_imports)
-    return getattr(value, expression.attr)
+    return safe_getattr(value, expression.attr)
 
 
 def evaluate_unaryop(
@@ -801,7 +877,7 @@ def evaluate_call(
         func_name = call.func.attr
         if not hasattr(obj, func_name):
             raise InterpreterError(f"Object {obj} has no attribute {func_name}")
-        func = getattr(obj, func_name)
+        func = safe_getattr(obj, func_name)
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
         if func_name in state:

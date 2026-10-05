@@ -55,6 +55,7 @@ from .local_python_executor import (
     get_safe_module,
     custom_print,
     nodunder_getattr,
+    safe_getattr,
 )
 from ..tools.async_base_tool import AsyncBaseTool, SyncToAsyncToolAdapter
 
@@ -200,7 +201,7 @@ async def evaluate_async_call(
         func_name = call.func.attr
         if not hasattr(obj, func_name):
             raise InterpreterError(f"Object {obj} has no attribute {func_name}")
-        func = getattr(obj, func_name)
+        func = safe_getattr(obj, func_name)
     elif isinstance(call.func, ast.Name):
         func_name = call.func.id
         if func_name in state:
@@ -279,7 +280,7 @@ async def evaluate_async_attribute(
     if expression.attr.startswith("__") and expression.attr.endswith("__"):
         raise InterpreterError(f"Forbidden access to dunder attribute: {expression.attr}")
     value = await evaluate_async_ast(expression.value, state, static_tools, custom_tools, authorized_imports)
-    return getattr(value, expression.attr)
+    return safe_getattr(value, expression.attr)
 
 
 async def evaluate_async_subscript(
