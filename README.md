@@ -146,6 +146,7 @@ The flowchart demonstrates the complete process from query to final result:
 ## Documentation
 
 - [CodeAgent Documentation](docs/merged_code_agent.md) - Powerful Python code execution agent
+- [Parallel Search MCP Example](docs/parallel_search_mcp.md) - Keyless web search and page fetching
 - [Brain Usage Guide](docs/brain_usage.md) - Using brain.step() for various tasks
 - [Skills Guide](docs/skills.md) - Extend agent capabilities with modular skills
 - [Benchmarks](docs/benchmarks.md) - Performance results on GSM8K, Game of 24, AIME, Humaneval
