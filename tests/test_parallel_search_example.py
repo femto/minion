@@ -1,7 +1,7 @@
 """Offline checks for example cleanup and transport error reporting."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -23,7 +23,8 @@ def toolset(monkeypatch):
         search=search,
         fetch=fetch,
     )
-    monkeypatch.setattr(example, "MCPToolset", lambda **kwargs: toolset)
+    toolset.constructor = Mock(return_value=toolset)
+    monkeypatch.setattr(example, "MCPToolset", toolset.constructor)
     return toolset
 
 
@@ -32,6 +33,16 @@ async def test_related_calls_share_session_and_close(toolset):
         "Find docs", ["Python asyncio docs"], ["https://docs.python.org"]
     )
     assert result == {"search": "sources", "fetch": "excerpts"}
+    toolset.constructor.assert_called_once()
+    constructor_args = toolset.constructor.call_args.kwargs
+    assert constructor_args["name"] == "parallel_search"
+    params = constructor_args["connection_params"]
+    assert isinstance(params, example.StreamableHTTPServerParameters)
+    assert params.url == "https://search.parallel.ai/mcp"
+    assert params.headers == {
+        "User-Agent": "minion/parallel-search-example (https://github.com/femto/minion)"
+    }
+    assert params.auth is None
     search_args = toolset.search.forward.call_args.kwargs
     fetch_args = toolset.fetch.forward.call_args.kwargs
     assert search_args["session_id"] == fetch_args["session_id"]
