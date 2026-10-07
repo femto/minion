@@ -8,12 +8,9 @@ LLM configuration or model API key.
 From a source checkout:
 
 ```bash
-pip install -e . "mcp>=1.10,<2"
+pip install -e .
 python -m examples.mcp.parallel_search_example
 ```
-
-Minion's current HTTP adapter uses the MCP 1.x client API. The install command
-selects that compatible SDK series; MCP 2.x removed this transport entry point.
 
 Supply an objective, keyword queries, and optional URLs to read:
 
