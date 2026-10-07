@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union, ove
 from typing_extensions import NotRequired, TypeAlias, TypedDict, Unpack
 
 from minion.tools import BaseTool
+from minion.tools.mcp._compat import get_field, open_streamable_http
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -207,15 +208,16 @@ class MCPBrainClient:
             read, write = await self.exit_stack.enter_async_context(sse_client(**client_kwargs))
         elif type == "http":
             # Handle StreamableHTTP server
-            from mcp.client.streamable_http import streamablehttp_client
-
             logger.info(f"Connecting to StreamableHTTP MCP server at: {params['url']}")
 
-            client_kwargs = {"url": params["url"]}
-            for key in ["headers", "timeout", "sse_read_timeout", "terminate_on_close"]:
-                if params.get(key) is not None:
-                    client_kwargs[key] = params[key]
-            read, write, _ = await self.exit_stack.enter_async_context(streamablehttp_client(**client_kwargs))
+            read, write = await open_streamable_http(
+                self.exit_stack,
+                url=params["url"],
+                headers=params.get("headers"),
+                timeout=params.get("timeout"),
+                sse_read_timeout=params.get("sse_read_timeout"),
+                terminate_on_close=params.get("terminate_on_close"),
+            )
         else:
             raise ValueError(f"Unsupported server type: {type}")
 
@@ -249,7 +251,7 @@ class MCPBrainClient:
             brain_tool = BrainTool(
                 name=tool.name,
                 description=tool.description,
-                parameters=tool.inputSchema,
+                parameters=get_field(tool, "input_schema", "inputSchema"),
                 session=session
             )
             

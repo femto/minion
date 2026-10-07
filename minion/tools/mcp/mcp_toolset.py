@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from minion.tools import AsyncBaseTool
 from minion.tools.base_tool import Toolset
-from minion.tools.base_tool import Toolset
+from minion.tools.mcp._compat import get_field, open_streamable_http, session_read_timeout
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -77,11 +77,9 @@ def format_mcp_result_new(mcp_output, structured_output: bool = True) -> str:
     # Handle structured features if enabled
     if structured_output:
         # Prioritize structuredContent if available
-        if (
-            hasattr(mcp_output, "structuredContent")
-            and mcp_output.structuredContent is not None
-        ):
-            return mcp_output.structuredContent
+        structured_content = get_field(mcp_output, "structured_content", "structuredContent")
+        if structured_content is not None:
+            return structured_content
 
     
     # Handle multiple content warning (unified for both modes)
@@ -129,7 +127,7 @@ def format_mcp_result_new(mcp_output, structured_output: bool = True) -> str:
                     image = Image.open(BytesIO(image_data))
                     return image
                 except ImportError:
-                    return f"[ImageContent: {getattr(content_item, 'mimeType', 'unknown')} - PIL not available]"
+                    return f"[ImageContent: {get_field(content_item, 'mime_type', 'mimeType', 'unknown')} - PIL not available]"
                 except Exception as e:
                     return f"[ImageContent: Error processing image - {str(e)}]"
             
@@ -139,7 +137,7 @@ def format_mcp_result_new(mcp_output, structured_output: bool = True) -> str:
                     try:
                         import torchaudio
                     except ImportError:
-                        return f"[AudioContent: {getattr(content_item, 'mimeType', 'unknown')} - torchaudio not available， please install torchaudio package]"
+                        return f"[AudioContent: {get_field(content_item, 'mime_type', 'mimeType', 'unknown')} - torchaudio not available， please install torchaudio package]"
                     
                     import base64
                     from io import BytesIO
@@ -162,7 +160,7 @@ def format_mcp_result_new(mcp_output, structured_output: bool = True) -> str:
             # If mcp.types is not available, fall back to attribute checking
             if hasattr(content_item, 'data'):  # ImageContent or AudioContent
                 content_type = type(content_item).__name__
-                return f"[{content_type}: {getattr(content_item, 'mimeType', 'unknown')}]"
+                return f"[{content_type}: {get_field(content_item, 'mime_type', 'mimeType', 'unknown')}]"
             else:
                 return str(content_item)
 
@@ -287,7 +285,7 @@ class StreamableHTTPServerParameters:
         timeout: Optional[Union[float, timedelta]] = 30,
         sse_read_timeout: Optional[Union[float, timedelta]] = 300,  # 5 minutes
         terminate_on_close: bool = True,
-        auth: Optional[Any] = None  # httpx.Auth type
+        auth: Optional[Any] = None  # httpx.Auth (MCP 1.x) or httpx2.Auth (MCP 2.x)
     ):
         self.url = url
         self.headers = headers or {}
@@ -396,27 +394,21 @@ class MCPToolset(Toolset):
             read, write = await self._exit_stack.enter_async_context(sse_client(**client_kwargs))
             
         elif isinstance(self.connection_params, StreamableHTTPServerParameters):
+            logger.info(f"Connecting to StreamableHTTP MCP server: {self.connection_params.url}")
+            
             try:
-                from mcp.client.streamable_http import streamablehttp_client  # type: ignore
+                read, write = await open_streamable_http(
+                    self._exit_stack,
+                    url=self.connection_params.url,
+                    headers=self.connection_params.headers,
+                    timeout=self.connection_params.timeout,
+                    sse_read_timeout=self.connection_params.sse_read_timeout,
+                    terminate_on_close=getattr(self.connection_params, 'terminate_on_close', None),
+                    auth=getattr(self.connection_params, 'auth', None),
+                )
             except ImportError as e:
                 logger.error(f"MCP streamable HTTP client not available: {e}")
                 raise RuntimeError(f"MCP streamable HTTP client not available: {e}")
-            
-            logger.info(f"Connecting to StreamableHTTP MCP server: {self.connection_params.url}")
-            
-            client_kwargs = {"url": self.connection_params.url}
-            if self.connection_params.headers:
-                client_kwargs["headers"] = self.connection_params.headers
-            if self.connection_params.timeout is not None:
-                client_kwargs["timeout"] = self.connection_params.timeout
-            if self.connection_params.sse_read_timeout is not None:
-                client_kwargs["sse_read_timeout"] = self.connection_params.sse_read_timeout
-            if hasattr(self.connection_params, 'terminate_on_close'):
-                client_kwargs["terminate_on_close"] = self.connection_params.terminate_on_close
-            if hasattr(self.connection_params, 'auth') and self.connection_params.auth is not None:
-                client_kwargs["auth"] = self.connection_params.auth
-            
-            read, write, get_session_id = await self._exit_stack.enter_async_context(streamablehttp_client(**client_kwargs))
             
         else:
             raise ValueError(f"Unsupported connection parameters type: {type(self.connection_params)}")
@@ -426,7 +418,7 @@ class MCPToolset(Toolset):
             ClientSession(
                 read_stream=read, 
                 write_stream=write,
-                read_timeout_seconds=self._session_timeout  # Now it's a timedelta
+                read_timeout_seconds=session_read_timeout(self._session_timeout)
             )
         )
         
@@ -443,7 +435,7 @@ class MCPToolset(Toolset):
             mcp_tool = AsyncMcpTool(
                 name=tool.name,
                 description=tool.description,
-                inputs=tool.inputSchema,
+                inputs=get_field(tool, "input_schema", "inputSchema"),
                 session=session,
                 structured_output=self.structured_output
             )
