@@ -6,6 +6,8 @@ Usage: python mcp_compat_server.py stdio
 
 import sys
 
+import anyio
+
 try:
     from mcp.server.mcpserver import MCPServer  # MCP 2.x
 
@@ -41,6 +43,13 @@ def echo(text: str) -> str:
 def add(a: int, b: int) -> dict:
     """Add two integers."""
     return {"sum": a + b}
+
+
+@server.tool()
+async def sleep(seconds: float) -> str:
+    """Sleep for the given number of seconds."""
+    await anyio.sleep(seconds)
+    return "done"
 
 
 if __name__ == "__main__":

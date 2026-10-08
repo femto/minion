@@ -103,3 +103,32 @@ async def test_brain_client_streamable_http(http_server_url):
         assert {"echo", "add"} <= set(tools)
         assert tools["echo"].parameters["properties"]["text"]["type"] == "string"
         assert "hello" in await tools["echo"].forward(text="hello")
+
+
+async def test_toolset_session_timeout_applies_to_tool_calls(http_server_url):
+    toolset = MCPToolset(
+        StdioServerParameters(command=sys.executable, args=[SERVER, "stdio"]),
+        setup_timeout=30,
+        session_timeout=30,
+    )
+    try:
+        await toolset.ensure_setup()
+        tools = {tool.name: tool for tool in toolset.get_tools()}
+        # AsyncMcpTool previously ignored session_timeout and capped every call at 10s
+        assert tools["sleep"].timeout == 30
+    finally:
+        await toolset.close()
+
+    # Use the already-running HTTP server so a short timeout doesn't hit server startup
+    toolset = MCPToolset(
+        StreamableHTTPServerParameters(url=http_server_url),
+        setup_timeout=30,
+        session_timeout=1,
+    )
+    try:
+        await toolset.ensure_setup()
+        tools = {tool.name: tool for tool in toolset.get_tools()}
+        assert (await tools["sleep"].forward(seconds=3)).startswith("Error:")
+        assert await tools["sleep"].forward(seconds=0) == {"result": "done"}
+    finally:
+        await toolset.close()
