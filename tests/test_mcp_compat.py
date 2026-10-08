@@ -150,3 +150,14 @@ async def test_tool_execution_error_is_reported(http_server_url):
         result = await client.get_tool_functions()["fail"].forward(reason="Request limit reached")
         assert result.startswith("Error: MCP tool fail failed: ")
         assert "Request limit reached" in result
+
+
+async def test_hyphenated_tool_is_called_by_original_name(http_server_url):
+    toolset = MCPToolset(StreamableHTTPServerParameters(url=http_server_url), setup_timeout=30)
+    try:
+        await toolset.ensure_setup()
+        tools = {tool.name: tool for tool in toolset.get_tools()}
+        # Exposed under a Python-safe name, but the server must be called with "echo-hyphen"
+        assert await tools["echo_hyphen"].forward(text="hello") == {"result": "hello"}
+    finally:
+        await toolset.close()

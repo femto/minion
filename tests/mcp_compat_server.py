@@ -47,6 +47,12 @@ def add(a: int, b: int) -> dict:
     return {"sum": a + b}
 
 
+@server.tool(name="echo-hyphen")
+def echo_hyphen(text: str) -> str:
+    """Echo tool whose name is not a valid Python identifier."""
+    return text
+
+
 @server.tool()
 def fail(reason: str) -> str:
     """Always fail, so the client gets an isError result."""

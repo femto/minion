@@ -245,7 +245,8 @@ class AsyncMcpTool(AsyncBaseTool):
                     logger.warning(f"Tool {self.name} received multiple positional args, may not work correctly")
             
             async with asyncio.timeout(self.timeout):
-                result = await self.session.call_tool(self.name, kwargs)
+                # self.name is sanitized for Python; the server only knows the original name
+                result = await self.session.call_tool(self.tool_name, kwargs)
             error_text = call_tool_error_text(result)
             if error_text is not None:
                 logger.warning(f"MCP tool {self.tool_name} returned an error: {error_text}")
