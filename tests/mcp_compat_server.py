@@ -10,6 +10,7 @@ import anyio
 
 try:
     from mcp.server.mcpserver import MCPServer  # MCP 2.x
+    from mcp.server.mcpserver.exceptions import ToolError
 
     server = MCPServer("minion-compat-test")
 
@@ -21,6 +22,7 @@ try:
 
 except ImportError:
     from mcp.server.fastmcp import FastMCP  # MCP 1.x
+    from mcp.server.fastmcp.exceptions import ToolError
 
     server = FastMCP("minion-compat-test")
 
@@ -43,6 +45,13 @@ def echo(text: str) -> str:
 def add(a: int, b: int) -> dict:
     """Add two integers."""
     return {"sum": a + b}
+
+
+@server.tool()
+def fail(reason: str) -> str:
+    """Always fail, so the client gets an isError result."""
+    # ToolError, unlike other exceptions, reaches the client with its message on 2.x
+    raise ToolError(reason)
 
 
 @server.tool()

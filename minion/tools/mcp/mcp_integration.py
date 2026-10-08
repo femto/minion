@@ -9,6 +9,7 @@ from typing_extensions import NotRequired, TypeAlias, TypedDict, Unpack
 
 from minion.tools import BaseTool
 from minion.tools.mcp._compat import get_field, open_streamable_http
+from minion.tools.mcp._errors import call_tool_error_text, format_mcp_tool_error
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -93,10 +94,14 @@ class BrainTool(BaseTool):
         """Execute the tool with given parameters"""
         try:
             result = await self.session.call_tool(self.name, kwargs)
+            error_text = call_tool_error_text(result)
+            if error_text is not None:
+                logger.warning(f"MCP tool {self.name} returned an error: {error_text}")
+                return format_mcp_tool_error(self.name, error_text)
             return format_mcp_result(result)
         except Exception as e:
             logger.error(f"Error executing tool {self.name}: {e}")
-            return f"Error: {str(e)}"
+            return format_mcp_tool_error(self.name, e)
     
     def to_function_spec(self) -> Dict[str, Any]:
         """Convert to function specification format for brain.step"""

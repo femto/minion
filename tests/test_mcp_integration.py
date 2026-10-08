@@ -90,7 +90,7 @@ class TestBrainTool:
         
         result = await brain_tool.forward(input="test input")
         
-        assert "Error: Test error" in result
+        assert result == "Error: MCP tool test_tool failed: Test error"
     
     def test_to_function_spec(self, brain_tool):
         """Test to_function_spec method"""

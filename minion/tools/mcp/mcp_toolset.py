@@ -9,6 +9,7 @@ from datetime import timedelta
 from minion.tools import AsyncBaseTool
 from minion.tools.base_tool import Toolset
 from minion.tools.mcp._compat import get_field, open_streamable_http, session_read_timeout
+from minion.tools.mcp._errors import call_tool_error_text, format_mcp_tool_error
 
 if TYPE_CHECKING:
     from mcp import ClientSession
@@ -245,16 +246,20 @@ class AsyncMcpTool(AsyncBaseTool):
             
             async with asyncio.timeout(self.timeout):
                 result = await self.session.call_tool(self.name, kwargs)
-                # Use the new format function based on structured_output setting
-                return format_mcp_result_new(result, self.structured_output)
-                    
+            error_text = call_tool_error_text(result)
+            if error_text is not None:
+                logger.warning(f"MCP tool {self.tool_name} returned an error: {error_text}")
+                return format_mcp_tool_error(self.tool_name, error_text)
+            # Use the new format function based on structured_output setting
+            return format_mcp_result_new(result, self.structured_output)
+
         except asyncio.TimeoutError:
-            error_msg = f"Tool {self.name} execution timed out after {self.timeout} seconds"
-            logger.error(error_msg)
-            return f"Error: {error_msg}"
+            error_msg = f"timed out after {self.timeout} seconds"
+            logger.error(f"MCP tool {self.tool_name} {error_msg}")
+            return format_mcp_tool_error(self.tool_name, error_msg)
         except Exception as e:
-            logger.error(f"Error executing tool {self.name}: {e}")
-            return f"Error: {str(e)}"
+            logger.error(f"Error executing tool {self.tool_name}: {e}")
+            return format_mcp_tool_error(self.tool_name, e)
 
 
 class StdioServerParameters:
