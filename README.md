@@ -114,6 +114,8 @@ async for event in await agent.run_async("your task here"):
 
 See [examples/mcp/mcp_agent_example.py](examples/mcp/mcp_agent_example.py) for a complete example with MCP tools.
 
+For local code lookup without model credentials, see the [Sem MCP example](docs/sem_code_mcp.md).
+
 ### Using Brain
 
 ```python
