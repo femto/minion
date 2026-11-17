@@ -1,6 +1,8 @@
 import json
 from typing import Optional, Dict, Any
 
+import llm_prices
+
 from minion.const import MODEL_PRICES_PATH
 
 # Default context window size (128K tokens)
@@ -28,6 +30,13 @@ def get_model_price(model_name: str) -> Optional[Dict[str, float]]:
     Returns:
         Dictionary with "prompt" and "completion" costs per token, or None if not found.
     """
+    # Bare provider ids (gpt-4o, claude-opus-4-6, ...) use llm-prices' current list prices;
+    # the bundled JSON predates GPT-5 / Claude 4.5 and has old rows (gpt-4o at $5/$15).
+    # Reseller ids (azure/, openrouter/, vertex_ai/, ...) keep the bundled rows first.
+    if "/" not in model_name:
+        listed = _llm_prices(model_name)
+        if listed:
+            return listed
     model_prices = _load_model_prices()
     model_info = model_prices.get(model_name)
     if model_info:
@@ -35,7 +44,14 @@ def get_model_price(model_name: str) -> Optional[Dict[str, float]]:
             "prompt": model_info.get("input_cost_per_token", 0),
             "completion": model_info.get("output_cost_per_token", 0),
         }
-    return None
+    return _llm_prices(model_name)
+
+
+def _llm_prices(model_name: str) -> Optional[Dict[str, float]]:
+    price = llm_prices.lookup(model_name)
+    if price is None or price.input_per_token is None or price.output_per_token is None:
+        return None
+    return {"prompt": price.input_per_token, "completion": price.output_per_token}
 
 
 def get_model_context_window(model_name: str) -> Dict[str, int]:

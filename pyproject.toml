@@ -39,7 +39,8 @@ dependencies = [
     "mcp",
     "tiktoken",
     "networkx",
-    "openai"
+    "openai",
+    "llm-prices>=1.4.0"
 ]
 
 [project.urls]
